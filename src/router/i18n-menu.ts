@@ -45,6 +45,24 @@ export function getNavMenus(t: Composer['t']) {
       permission: 'discovery',
     },
     {
+      title: t('navItems.collect'),
+      icon: 'mdi-play-box-multiple-outline',
+      to: '/collect',
+      header: t('menu.discovery'),
+      admin: false,
+      footer: true,
+      permission: 'discovery',
+    },
+    {
+      title: t('navItems.task'),
+      icon: 'mdi-arrow-down-bold-hexagon-outline',
+      to: '/task',
+      header: t('menu.discovery'),
+      admin: false,
+      footer: true,
+      permission: 'discovery',
+    },
+    {
       title: t('navItems.movie'),
       full_title: t('navItems.movieSubscribe'),
       icon: 'mdi-movie-open-outline',
@@ -156,6 +174,12 @@ export function getSettingTabs(t: Composer['t']) {
       description: t('settingTabs.system.description'),
     },
     {
+      title: t('settingTabs.collect.title'),
+      icon: 'mdi-video',
+      tab: 'collect',
+      description: t('settingTabs.collect.description'),
+    },
+    {
       title: t('settingTabs.directory.title'),
       icon: 'mdi-folder',
       tab: 'directory',
@@ -192,10 +216,28 @@ export function getSettingTabs(t: Composer['t']) {
       description: t('settingTabs.scheduler.description'),
     },
     {
+      title: t('settingTabs.cache.title'),
+      icon: 'mdi-database',
+      tab: 'cache',
+      description: t('settingTabs.cache.description'),
+    },
+    {
       title: t('settingTabs.notification.title'),
       icon: 'mdi-bell',
       tab: 'notification',
       description: t('settingTabs.notification.description'),
+    },
+    {
+      title: t('settingTabs.words.title'),
+      icon: 'mdi-file-word-box',
+      tab: 'words',
+      description: t('settingTabs.words.description'),
+    },
+    {
+      title: t('settingTabs.about.title'),
+      icon: 'mdi-information',
+      tab: 'about',
+      description: t('settingTabs.about.description'),
     },
   ]
 }

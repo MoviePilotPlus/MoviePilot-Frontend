@@ -188,7 +188,6 @@ export function useSetupWizard() {
       'jellyfin': 'JellyfinModule',
       'plex': 'PlexModule',
       'trimemedia': 'TrimeMediaModule',
-      'ugreen': 'UgreenModule',
     },
     // 通知映射
     notification: {
@@ -406,7 +405,7 @@ export function useSetupWizard() {
         errors.push(t('mediaserver.tokenRequired'))
         validationErrors.value.mediaServer.token = true
       }
-    } else if (wizardData.value.mediaServer.type === 'trimemedia' || wizardData.value.mediaServer.type === 'ugreen') {
+    } else if (wizardData.value.mediaServer.type === 'trimemedia') {
       if (!wizardData.value.mediaServer.config?.username?.trim()) {
         errors.push(t('mediaserver.usernameRequired'))
         validationErrors.value.mediaServer.username = true

@@ -11,7 +11,6 @@ import embyLogo from '@/assets/images/logos/emby.png'
 import jellyfinLogo from '@/assets/images/logos/jellyfin.png'
 import plexLogo from '@/assets/images/logos/plex.png'
 import trimemediaLogo from '@/assets/images/logos/trimemedia.png'
-import ugreenLogo from '@/assets/images/logos/ugreen.jpg'
 import wechatLogo from '@/assets/images/logos/wechat.png'
 import telegramLogo from '@/assets/images/logos/telegram.webp'
 import slackLogo from '@/assets/images/logos/slack.webp'
@@ -41,7 +40,6 @@ const logoMap: Record<string, string> = {
   jellyfin: jellyfinLogo,
   plex: plexLogo,
   trimemedia: trimemediaLogo,
-  ugreen: ugreenLogo,
   wechat: wechatLogo,
   telegram: telegramLogo,
   slack: slackLogo,

@@ -6,6 +6,19 @@ import { setNavigatingState as setRequestNavigatingState } from '@/utils/request
 // Nprogress
 configureNProgress()
 
+const abortControllers = new Set<AbortController>()
+
+export function registerAbortController(controller: AbortController) {
+  abortControllers.add(controller)
+}
+
+function abortAllControllers() {
+  for (const controller of abortControllers) {
+    controller.abort()
+  }
+  abortControllers.clear()
+}
+
 // Router
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -41,6 +54,49 @@ const router = createRouter({
           component: () => import('../pages/discover.vue'),
           meta: {
             keepAlive: true,
+            requiresAuth: true,
+          },
+        },
+        {
+          path: '/collect',
+          component: () => import('../pages/collect.vue'),
+          meta: {
+            keepAlive: true,
+            requiresAuth: true,
+          },
+        },
+        {
+          path: '/collect/video',
+          component: () => import('../pages/collect-video.vue'),
+          meta: {
+            requiresAuth: true,
+          },
+        },
+        {
+          path: '/video',
+          component: () => import('../pages/video.vue'),
+          meta: {
+            requiresAuth: true,
+          },
+        },
+        {
+          path: '/task',
+          component: () => import('../pages/task.vue'),
+          meta: {
+            requiresAuth: true,
+          },
+        },
+        {
+          path: '/cdetail',
+          component: () => import('../pages/cdetail.vue'),
+          meta: {
+            requiresAuth: true,
+          },
+        },
+        {
+          path: '/downloadtask',
+          component: () => import('../pages/downloadtask.vue'),
+          meta: {
             requiresAuth: true,
           },
         },
@@ -228,6 +284,7 @@ const router = createRouter({
 router.beforeEach(async (to: any, from: any, next: any) => {
   // 设置导航状态 - 同时中断API请求
   setRequestNavigatingState(true)
+  abortAllControllers()
 
   // 认证 Store
   const authStore = useAuthStore()

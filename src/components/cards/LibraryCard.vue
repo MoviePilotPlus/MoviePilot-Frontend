@@ -33,7 +33,6 @@ function imageLoadHandler() {
 // 图片加载错误
 function imageErrorHandler() {
   imageError.value = true
-  imgUrl.value = getDefaultImage()
 }
 
 // 默认图片
@@ -42,7 +41,6 @@ function getDefaultImage() {
   else if (props.media?.server_type === 'emby') return emby
   else if (props.media?.server_type === 'jellyfin') return jellyfin
   else if (props.media?.server_type === 'trimemedia') return getLogoUrl('trimemedia')
-  else if (props.media?.server_type === 'ugreen') return getLogoUrl('ugreen')
   else return plex
 }
 
@@ -55,7 +53,7 @@ async function goPlay() {
 
 // 生成图片代理路径
 function getImgUrl(url: string, use_cookies?: boolean) {
-  if (!url || imageError.value) return getDefaultImage()
+  if (!url) return getDefaultImage()
   let imgurl = `${import.meta.env.VITE_API_BASE_URL}system/img/0?imgurl=${encodeURIComponent(url)}`
   if (use_cookies) {
     imgurl += `&use_cookies=${encodeURIComponent(use_cookies)}`
@@ -66,7 +64,7 @@ function getImgUrl(url: string, use_cookies?: boolean) {
 // 根据多张图片生成媒体库封面
 async function drawImages(imageList: string[], use_cookies?: boolean) {
   // 图片
-  const IMAGES = [...imageList]
+  const IMAGES = imageList
   if (IMAGES.length === 0) return getDefaultImage()
 
   // 为所有图片添加system/img前缀

@@ -20,12 +20,32 @@ const userPermissions = computed(() => ({
 // 应用分组（以header分组）
 const appGroups = ref<Record<string, NavMenu[]>>({})
 
+function getVisibleFooterMenus(menus: NavMenu[]): NavMenu[] {
+  const footerMenusWithProperty = menus.filter((menu: NavMenu) => menu.footer === true)
+  const expectedFooterMenuCount = 3
+
+  if (footerMenusWithProperty.length >= expectedFooterMenuCount)
+    return footerMenusWithProperty.slice(0, expectedFooterMenuCount)
+
+  const nonFooterMenus = menus.filter(
+    (menu: NavMenu) =>
+      menu.footer !== true &&
+      !footerMenusWithProperty.some(footerMenu => footerMenu.to === menu.to),
+  )
+
+  const needCount = expectedFooterMenuCount - footerMenusWithProperty.length
+  return [...footerMenusWithProperty, ...nonFooterMenus.slice(0, needCount)]
+}
+
 // 根据header属性对应用进行分类
 function categorizeApps() {
   // 获取所有菜单并根据权限过滤
   const allMenus = getNavMenus(t)
   const filteredMenus = filterMenusByPermission(allMenus, userPermissions.value)
-  const menus = filteredMenus.filter((item: NavMenu) => !item.footer)
+  const visibleFooterMenus = getVisibleFooterMenus(filteredMenus)
+  const menus = filteredMenus.filter(
+    (item: NavMenu) => !visibleFooterMenus.some(footerMenu => footerMenu.to === item.to),
+  )
 
   // 按header属性分组
   const groupedMenus: Record<string, NavMenu[]> = {}

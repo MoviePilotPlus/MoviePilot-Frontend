@@ -3,12 +3,16 @@ import { useRoute } from 'vue-router'
 import router from '@/router'
 import AccountSettingNotification from '@/views/setting/AccountSettingNotification.vue'
 import AccountSettingSite from '@/views/setting/AccountSettingSite.vue'
+import AccountSettingWords from '@/views/setting/AccountSettingWords.vue'
+import AccountSettingAbout from '@/views/setting/AccountSettingAbout.vue'
 import AccountSettingSearch from '@/views/setting/AccountSettingSearch.vue'
 import AccountSettingSubscribe from '@/views/setting/AccountSettingSubscribe.vue'
+import AccountSettingCollect from '@/views/setting/AccountSettingCollect.vue'
 import AccountSettingSystem from '@/views/setting/AccountSettingSystem.vue'
 import AccountSettingService from '@/views/setting/AccountSettingService.vue'
 import AccountSettingDirectory from '@/views/setting/AccountSettingDirectory.vue'
 import AccountSettingRule from '@/views/setting/AccountSettingRule.vue'
+import AccountSettingCache from '@/views/setting/AccountSettingCache.vue'
 import { getSettingTabs } from '@/router/i18n-menu'
 import { useDynamicHeaderTab } from '@/composables/useDynamicHeaderTab'
 
@@ -44,6 +48,15 @@ onMounted(() => {
         <transition name="fade-slide" appear>
           <div>
             <AccountSettingSystem />
+          </div>
+        </transition>
+      </VWindowItem>
+
+      <!-- 采集 -->
+      <VWindowItem value="collect">
+        <transition name="fade-slide" appear>
+          <div>
+            <AccountSettingCollect />
           </div>
         </transition>
       </VWindowItem>
@@ -102,11 +115,38 @@ onMounted(() => {
         </transition>
       </VWindowItem>
 
+      <!-- 缓存 -->
+      <VWindowItem value="cache">
+        <transition name="fade-slide" appear>
+          <div>
+            <AccountSettingCache />
+          </div>
+        </transition>
+      </VWindowItem>
+
       <!-- 通知 -->
       <VWindowItem value="notification">
         <transition name="fade-slide" appear>
           <div>
             <AccountSettingNotification />
+          </div>
+        </transition>
+      </VWindowItem>
+
+      <!-- 词表 -->
+      <VWindowItem value="words">
+        <transition name="fade-slide" appear>
+          <div>
+            <AccountSettingWords />
+          </div>
+        </transition>
+      </VWindowItem>
+
+      <!-- 关于 -->
+      <VWindowItem value="about">
+        <transition name="fade-slide" appear>
+          <div>
+            <AccountSettingAbout />
           </div>
         </transition>
       </VWindowItem>

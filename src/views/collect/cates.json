@@ -1,0 +1,849 @@
+[
+    {
+        "level": "1",
+        "option_value": "24",
+        "option_name": "综合",
+        "filter_key": "mode",
+        "index_name": "排序"
+    },
+    {
+        "level": "1",
+        "option_value": "11",
+        "option_name": "最热",
+        "filter_key": "mode",
+        "index_name": "排序"
+    },
+    {
+        "level": "1",
+        "option_value": "4",
+        "option_name": "最新",
+        "filter_key": "mode",
+        "index_name": "排序"
+    },
+    {
+        "level": "1",
+        "option_value": "8",
+        "option_name": "高分",
+        "filter_key": "mode",
+        "index_name": "排序"
+    },
+    {
+        "level": "1",
+        "option_value": "",
+        "option_name": "全部",
+        "filter_key": "",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "2289882683101933",
+        "option_name": "古装",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "8732878771828133",
+        "option_name": "爱情",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "4705204050526533",
+        "option_name": "战争",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "3986463450987233",
+        "option_name": "谍战",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "2378923092196533",
+        "option_name": "言情",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "7045121828267433",
+        "option_name": "武侠",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "2902737390744633",
+        "option_name": "罪案",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "5836257895783433",
+        "option_name": "悬疑",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "2643637821937533",
+        "option_name": "网剧",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "2375714428805633",
+        "option_name": "家庭",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "3596610849005133",
+        "option_name": "军旅",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "8014138172289033",
+        "option_name": "都市",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "4069086533300333",
+        "option_name": "偶像",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "3842875764248933",
+        "option_name": "喜剧",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "8902937931540733",
+        "option_name": "青春",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "1279153714999733",
+        "option_name": "自制",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "2771984357569433",
+        "option_name": "科幻",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "7146194725077733",
+        "option_name": "农村",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "1466860523361833",
+        "option_name": "穿越",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "8035796650176933",
+        "option_name": "奇幻",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "7174270529747133",
+        "option_name": "历史",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "4087536347797533",
+        "option_name": "年代",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "5550686854002233",
+        "option_name": "短剧",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "3196330091002833",
+        "option_name": "生活",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "3797954476777933",
+        "option_name": "剧情",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "2971723653646733",
+        "option_name": "励志",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "7399679132950733",
+        "option_name": "婚姻",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "7245663290192433",
+        "option_name": "警匪",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "7655570038367133",
+        "option_name": "犯罪",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "7174270529747233",
+        "option_name": "推理",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "3228416724910933",
+        "option_name": "商战",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "1708312443519433",
+        "option_name": "搞笑",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "6147498244691133",
+        "option_name": "宫廷",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "2702998094667233",
+        "option_name": "仙侠",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "2835355459537833",
+        "option_name": "神话",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "7086834452347833",
+        "option_name": "动作",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "2681339616779433",
+        "option_name": "复仇",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "6292690263124733",
+        "option_name": "美食",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "8391958286555633",
+        "option_name": "惊悚",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "2535330033",
+        "option_name": "其他",
+        "filter_key": "three_category_id_v2",
+        "index_name": "类型"
+    },
+    {
+        "level": "1",
+        "option_value": "",
+        "option_name": "全部",
+        "filter_key": "",
+        "index_name": "地区"
+    },
+    {
+        "level": "1",
+        "option_value": "8052642132978633",
+        "option_name": "内地",
+        "filter_key": "three_category_id_v2",
+        "index_name": "地区"
+    },
+    {
+        "level": "1",
+        "option_value": "6679334201716133",
+        "option_name": "中国香港",
+        "filter_key": "three_category_id_v2",
+        "index_name": "地区"
+    },
+    {
+        "level": "1",
+        "option_value": "5724756842953133",
+        "option_name": "中国台湾",
+        "filter_key": "three_category_id_v2",
+        "index_name": "地区"
+    },
+    {
+        "level": "1",
+        "option_value": "4017747919047533",
+        "option_name": "韩国",
+        "filter_key": "three_category_id_v2",
+        "index_name": "地区"
+    },
+    {
+        "level": "1",
+        "option_value": "7671613355321033",
+        "option_name": "泰国",
+        "filter_key": "three_category_id_v2",
+        "index_name": "地区"
+    },
+    {
+        "level": "1",
+        "option_value": "8097563420449933",
+        "option_name": "美国",
+        "filter_key": "three_category_id_v2",
+        "index_name": "地区"
+    },
+    {
+        "level": "1",
+        "option_value": "6234934322090433",
+        "option_name": "日本",
+        "filter_key": "three_category_id_v2",
+        "index_name": "地区"
+    },
+    {
+        "level": "1",
+        "option_value": "6993783214014833",
+        "option_name": "英国",
+        "filter_key": "three_category_id_v2",
+        "index_name": "地区"
+    },
+    {
+        "level": "1",
+        "option_value": "2283850033",
+        "option_name": "其他",
+        "filter_key": "three_category_id_v2",
+        "index_name": "地区"
+    },
+    {
+        "level": "1",
+        "option_value": "",
+        "option_name": "全部",
+        "filter_key": "",
+        "index_name": "时间"
+    },
+    {
+        "level": "1",
+        "option_value": "即将上线",
+        "option_name": "即将上线",
+        "filter_key": "market_release_date_level",
+        "index_name": "时间"
+    },
+    {
+        "level": "1",
+        "option_value": "近一周上新",
+        "option_name": "近一周上新",
+        "filter_key": "smart_tag_v2",
+        "index_name": "时间"
+    },
+    {
+        "level": "1",
+        "option_value": "近一月上新",
+        "option_name": "近一月上新",
+        "filter_key": "smart_tag_v2",
+        "index_name": "时间"
+    },
+    {
+        "level": "1",
+        "option_value": "2025",
+        "option_name": "2025",
+        "filter_key": "market_release_date_level",
+        "index_name": "时间"
+    },
+    {
+        "level": "1",
+        "option_value": "2024",
+        "option_name": "2024",
+        "filter_key": "market_release_date_level",
+        "index_name": "时间"
+    },
+    {
+        "level": "1",
+        "option_value": "2023",
+        "option_name": "2023",
+        "filter_key": "market_release_date_level",
+        "index_name": "时间"
+    },
+    {
+        "level": "1",
+        "option_value": "2022",
+        "option_name": "2022",
+        "filter_key": "market_release_date_level",
+        "index_name": "时间"
+    },
+    {
+        "level": "1",
+        "option_value": "2021",
+        "option_name": "2021",
+        "filter_key": "market_release_date_level",
+        "index_name": "时间"
+    },
+    {
+        "level": "1",
+        "option_value": "2020",
+        "option_name": "2020",
+        "filter_key": "market_release_date_level",
+        "index_name": "时间"
+    },
+    {
+        "level": "1",
+        "option_value": "2010-2019",
+        "option_name": "10年代",
+        "filter_key": "market_release_date_level",
+        "index_name": "时间"
+    },
+    {
+        "level": "1",
+        "option_value": "2000-2009",
+        "option_name": "00年代",
+        "filter_key": "market_release_date_level",
+        "index_name": "时间"
+    },
+    {
+        "level": "1",
+        "option_value": "1990-1999",
+        "option_name": "90年代",
+        "filter_key": "market_release_date_level",
+        "index_name": "时间"
+    },
+    {
+        "level": "1",
+        "option_value": "1980-1989",
+        "option_name": "80年代",
+        "filter_key": "market_release_date_level",
+        "index_name": "时间"
+    },
+    {
+        "level": "1",
+        "option_value": "",
+        "option_name": "全部",
+        "filter_key": "",
+        "index_name": "付费"
+    },
+    {
+        "level": "1",
+        "option_value": "近期转免",
+        "option_name": "近期转免",
+        "filter_key": "smart_tag",
+        "index_name": "付费"
+    },
+    {
+        "level": "1",
+        "option_value": "0",
+        "option_name": "免费",
+        "filter_key": "is_purchase",
+        "index_name": "付费"
+    },
+    {
+        "level": "1",
+        "option_value": "1",
+        "option_name": "限免",
+        "filter_key": "is_limit_free",
+        "index_name": "付费"
+    },
+    {
+        "level": "1",
+        "option_value": "1",
+        "option_name": "独播",
+        "filter_key": "is_exclusive",
+        "index_name": "付费"
+    },
+    {
+        "level": "1",
+        "option_value": "1",
+        "option_name": "自制",
+        "filter_key": "is_qiyi_produced",
+        "index_name": "付费"
+    },
+    {
+        "level": "1",
+        "option_value": "1_1_1,is_purchase=1",
+        "option_name": "VIP",
+        "filter_key": "charge_control_paymark",
+        "index_name": "付费"
+    },
+    {
+        "level": "1",
+        "option_value": "",
+        "option_name": "全部",
+        "filter_key": "",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "蒋欣",
+        "option_name": "蒋欣",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "李小冉",
+        "option_name": "李小冉",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "张嘉益",
+        "option_name": "张嘉益",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "聂远",
+        "option_name": "聂远",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "张国立",
+        "option_name": "张国立",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "林永健",
+        "option_name": "林永健",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "李光洁",
+        "option_name": "李光洁",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "杜淳",
+        "option_name": "杜淳",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "刘涛",
+        "option_name": "刘涛",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "佟丽娅",
+        "option_name": "佟丽娅",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "贾乃亮",
+        "option_name": "贾乃亮",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "韩雪",
+        "option_name": "韩雪",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "赵丽颖",
+        "option_name": "赵丽颖",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "吴奇隆",
+        "option_name": "吴奇隆",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "宋佳",
+        "option_name": "宋佳",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "胡军",
+        "option_name": "胡军",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "关晓彤",
+        "option_name": "关晓彤",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "王鸥",
+        "option_name": "王鸥",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "刘敏涛",
+        "option_name": "刘敏涛",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "袁弘",
+        "option_name": "袁弘",
+        "filter_key": "smart_tag_v2",
+        "index_name": "演员"
+    },
+    {
+        "level": "1",
+        "option_value": "",
+        "option_name": "全部",
+        "filter_key": "",
+        "index_name": "奖项"
+    },
+    {
+        "level": "1",
+        "option_value": "95be70850d6d967f_2_9",
+        "option_name": "白玉兰奖",
+        "filter_key": "structure_id",
+        "index_name": "奖项"
+    },
+    {
+        "level": "1",
+        "option_value": "25e3cb1182fe4d8e_2_9",
+        "option_name": "飞天奖",
+        "filter_key": "structure_id",
+        "index_name": "奖项"
+    },
+    {
+        "level": "1",
+        "option_value": "73c6eb6653d2771c_2_9",
+        "option_name": "金鹰奖",
+        "filter_key": "structure_id",
+        "index_name": "奖项"
+    },
+    {
+        "level": "1",
+        "option_value": "",
+        "option_name": "全部",
+        "filter_key": "",
+        "index_name": "剧场"
+    },
+    {
+        "level": "1",
+        "option_value": "恋恋剧场",
+        "option_name": "恋恋剧场",
+        "filter_key": "smart_tag_v2",
+        "index_name": "剧场"
+    },
+    {
+        "level": "1",
+        "option_value": "迷雾剧场",
+        "option_name": "迷雾剧场",
+        "filter_key": "smart_tag_v2",
+        "index_name": "剧场"
+    },
+    {
+        "level": "1",
+        "option_value": "小逗剧场",
+        "option_name": "小逗剧场",
+        "filter_key": "smart_tag_v2",
+        "index_name": "剧场"
+    },
+    {
+        "level": "1",
+        "option_value": "短剧场",
+        "option_name": "短剧场",
+        "filter_key": "smart_tag_v2",
+        "index_name": "剧场"
+    },
+    {
+        "level": "1",
+        "option_value": "大家剧场",
+        "option_name": "大家剧场",
+        "filter_key": "smart_tag_v2",
+        "index_name": "剧场"
+    },
+    {
+        "level": "1",
+        "option_value": "微尘剧场",
+        "option_name": "微尘剧场",
+        "filter_key": "smart_tag_v2",
+        "index_name": "剧场"
+    },
+    {
+        "level": "1",
+        "option_value": "",
+        "option_name": "全部",
+        "filter_key": "",
+        "index_name": "殿堂"
+    },
+    {
+        "level": "1",
+        "option_value": "荣誉殿堂",
+        "option_name": "荣誉殿堂",
+        "filter_key": "smart_tag_v2",
+        "index_name": "殿堂"
+    },
+    {
+        "level": "1",
+        "option_value": "国民殿堂",
+        "option_name": "国民殿堂",
+        "filter_key": "smart_tag_v2",
+        "index_name": "殿堂"
+    },
+    {
+        "level": "1",
+        "option_value": "人气殿堂",
+        "option_name": "人气殿堂",
+        "filter_key": "smart_tag_v2",
+        "index_name": "殿堂"
+    },
+    {
+        "level": "1",
+        "option_value": "佳片殿堂",
+        "option_name": "佳片殿堂",
+        "filter_key": "smart_tag_v2",
+        "index_name": "殿堂"
+    },
+    {
+        "level": "1",
+        "option_value": "",
+        "option_name": "全部",
+        "filter_key": "",
+        "index_name": "推荐"
+    },
+    {
+        "level": "1",
+        "option_value": "812b38302498d408_2_7",
+        "option_name": "豆瓣高分",
+        "filter_key": "structure_id",
+        "index_name": "推荐"
+    },
+    {
+        "level": "1",
+        "option_value": "高收视",
+        "option_name": "高收视",
+        "filter_key": "smart_tag_v2",
+        "index_name": "推荐"
+    },
+    {
+        "level": "1",
+        "option_value": "热度破10000",
+        "option_name": "热度破10000",
+        "filter_key": "smart_tag_v2",
+        "index_name": "推荐"
+    },
+    {
+        "level": "1",
+        "option_value": "经典必看",
+        "option_name": "经典必看",
+        "filter_key": "smart_tag_v2",
+        "index_name": "推荐"
+    },
+    {
+        "level": "1",
+        "option_value": "近期热门",
+        "option_name": "近期热门",
+        "filter_key": "smart_tag_v2",
+        "index_name": "推荐"
+    },
+    {
+        "level": "1",
+        "option_value": "评论破1000万",
+        "option_name": "评论破1000万",
+        "filter_key": "smart_tag_v2",
+        "index_name": "推荐"
+    },
+    {
+        "level": "1",
+        "option_value": "弹幕破1000万",
+        "option_name": "弹幕破1000万",
+        "filter_key": "smart_tag_v2",
+        "index_name": "推荐"
+    }
+]

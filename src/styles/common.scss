@@ -102,6 +102,17 @@ html.v-overlay-scroll-blocked body {
   grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
 }
 
+// For landscape covers (e.g. MGTV/Youku), show fewer cards per row on larger screens.
+.grid-media-card--landscape {
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+}
+
+@media (min-width: 960px) {
+  .grid-media-card--landscape {
+    grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+  }
+}
+
 .grid-backdrop-card {
   grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
 }
