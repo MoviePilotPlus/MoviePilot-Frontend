@@ -22,6 +22,10 @@ const hiddenFilterCount = computed(() => Math.max(cateEntries.value.length - 3, 
 const searchWord = ref<string | null>(null)
 const isSearch = ref(false)
 
+// 根据当前分类类型动态计算网格布局类
+const gridClass = computed(() => {
+  return type.value === '1' ? 'grid-media-card--landscape' : ''
+})
 
 // 过滤参数
 const defaultType = '1'
@@ -29,35 +33,34 @@ const defaultSort = 'c2'
 const cate = ref('TV')
 
 const filterParams = reactive({
-  "kind": '',
-  "chargeInfo": '',
-  "area": '',
-  "feature": '',
-  "year": '',
-  "fitAge": '',
-  "edition": '',
+  'kind': '',
+  'chargeInfo': '',
+  'area': '',
+  'feature': '',
+  'year': '',
+  'fitAge': '',
+  'edition': '',
   'type': defaultType,
   'sort': defaultSort,
-
 })
 
 // 分类字典
 const cateDictArray: CategoryItem[] = [
-  { "key": "1", "value": "综艺", "cate": "Show" },
-  { "key": "2", "value": "电视剧", "cate": "TV" },
-  { "key": "3", "value": "电影", "cate": "Movie" },
-  { "key": "10", "value": "少儿", "cate": "TV" },
-  { "key": "51", "value": "纪录片", "cate": "Documentary" },
-  { "key": "50", "value": "动漫", "cate": "Comic" },
-  { "key": "115", "value": "教育", "cate": "Others" }
+  { 'key': '1', 'value': '综艺', 'cate': 'Show' },
+  { 'key': '2', 'value': '电视剧', 'cate': 'TV' },
+  { 'key': '3', 'value': '电影', 'cate': 'Movie' },
+  { 'key': '10', 'value': '少儿', 'cate': 'TV' },
+  { 'key': '51', 'value': '纪录片', 'cate': 'Documentary' },
+  { 'key': '50', 'value': '动漫', 'cate': 'Comic' },
+  { 'key': '115', 'value': '教育', 'cate': 'Others' },
 ]
 // 分类信息
 async function queryCate(type: string) {
   try {
     const data: CategoryInfo[] = await api.get('mgtv/category', {
       params: {
-        type: type
-      }
+        type: type,
+      },
     })
     cateDictArray.forEach(item => {
       if (item.key == type) {
@@ -65,16 +68,16 @@ async function queryCate(type: string) {
       }
     })
 
-    const groupedData: Record<string, CategoryInfo[]> = {};
+    const groupedData: Record<string, CategoryInfo[]> = {}
     data.forEach((item: CategoryInfo) => {
-      const filter_key = item.filter_key;
+      const filter_key = item.filter_key
       if (!groupedData[filter_key]) {
-        groupedData[filter_key] = [];
+        groupedData[filter_key] = []
       }
-      groupedData[filter_key].push(item);
-    });
+      groupedData[filter_key].push(item)
+    })
 
-    cates.value = groupedData;
+    cates.value = groupedData
   } catch (error) {
     console.log(error)
   }
@@ -112,24 +115,57 @@ watch(filterParams, () => {
 <template>
   <div class="collect-source-view">
     <div class="collect-toolbar px-3 flex justify-start align-center">
-      <VCombobox ref="searchWordInput" v-model="searchWord" density="comfortable" variant="outlined"
-        class="search-input" prepend-inner-icon="mdi-magnify" append-inner-icon="mdi-close"
-        @click:append-inner="searchClear()" placeholder="搜索芒果TV视频" @keydown.enter="searchMedia()" hide-details />
+      <VCombobox
+        ref="searchWordInput"
+        v-model="searchWord"
+        density="comfortable"
+        variant="outlined"
+        class="search-input"
+        prepend-inner-icon="mdi-magnify"
+        append-inner-icon="mdi-close"
+        @click:append-inner="searchClear()"
+        placeholder="搜索芒果TV视频"
+        @keydown.enter="searchMedia()"
+        hide-details
+      />
     </div>
     <div class="collect-filter-panel px-3" v-show="!isSearch">
       <div class="collect-chip-row flex justify-start align-center">
         <VChipGroup v-model="type" column mandatory class="collect-chip-group">
           <!-- 遍历数组 -->
-          <VChip :color="type == item.key ? 'primary' : ''" class="collect-filter-chip" tile :value="item.key" size="small"
-            v-for="item in cateDictArray" :key="item.key">
+          <VChip
+            :color="type == item.key ? 'primary' : ''"
+            class="collect-filter-chip"
+            tile
+            :value="item.key"
+            size="small"
+            v-for="item in cateDictArray"
+            :key="item.key"
+          >
             {{ item.value }}
           </VChip>
         </VChipGroup>
       </div>
-      <div class="collect-chip-row flex justify-start align-center" v-for="[key, item] in visibleCateEntries" :key="key">
-        <VChipGroup v-model="filterParams[key as keyof typeof filterParams]" column mandatory class="collect-chip-group">
-          <VChip :color="filterParams[key as keyof typeof filterParams] == option.option_value ? 'primary' : ''" class="collect-filter-chip" tile
-            :value="option.option_value" v-for="option in item" :key="option.option_value" size="small">
+      <div
+        class="collect-chip-row flex justify-start align-center"
+        v-for="[key, item] in visibleCateEntries"
+        :key="key"
+      >
+        <VChipGroup
+          v-model="filterParams[key as keyof typeof filterParams]"
+          column
+          mandatory
+          class="collect-chip-group"
+        >
+          <VChip
+            :color="filterParams[key as keyof typeof filterParams] == option.option_value ? 'primary' : ''"
+            class="collect-filter-chip"
+            tile
+            :value="option.option_value"
+            v-for="option in item"
+            :key="option.option_value"
+            size="small"
+          >
             {{ option.option_name }}
           </VChip>
         </VChipGroup>
@@ -141,29 +177,43 @@ watch(filterParams, () => {
       </div>
     </div>
 
-
     <div class="pt-3">
-      <MediaSearchView v-if="isSearch" :key="currentKey" :apipath="`mgtv/search`" :keyword="searchWord || ''"
-        :cate="cate" grid-class="grid-media-card--landscape" />
-      <MediaCardListView v-show="!isSearch" :key="currentKey" :apipath="`mgtv/page_data`" :params="filterParams"
-        :cate="cate" :firstPage="1" grid-class="grid-media-card--landscape" />
+      <MediaSearchView
+        v-if="isSearch"
+        :key="currentKey"
+        :apipath="`mgtv/search`"
+        :keyword="searchWord || ''"
+        :cate="cate"
+        :grid-class="gridClass"
+      />
+      <MediaCardListView
+        v-show="!isSearch"
+        :key="currentKey"
+        :apipath="`mgtv/page_data`"
+        :params="filterParams"
+        :cate="cate"
+        :first-page="1"
+        :grid-class="gridClass"
+      />
     </div>
   </div>
 </template>
 <style scoped>
 .collect-toolbar {
-  margin-bottom: 10px;
+  margin-block-end: 10px;
 }
 
 .search-input {
-  width: 100%;
-  max-width: 560px;
+  inline-size: 100%;
+  max-inline-size: 560px;
 }
 
 :deep(.search-input .v-field) {
   border-radius: 12px;
   background: rgba(var(--v-theme-surface), 0.94);
-  transition: box-shadow 0.2s ease, background-color 0.2s ease;
+  transition:
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
 }
 
 :deep(.search-input .v-field .v-field__outline) {
@@ -187,8 +237,8 @@ watch(filterParams, () => {
 }
 
 :deep(.search-input .v-field__input) {
-  min-height: 40px;
   font-size: 14px;
+  min-block-size: 40px;
 }
 
 .collect-filter-panel {
@@ -199,19 +249,18 @@ watch(filterParams, () => {
 }
 
 .collect-chip-row + .collect-chip-row {
-  margin-top: 6px;
+  margin-block-start: 6px;
 }
 
 .collect-filter-toggle-row {
-  margin-top: 4px;
-  margin-bottom: 2px;
+  margin-block: 4px 2px;
 }
 
 .collect-filter-toggle {
+  color: rgba(var(--v-theme-primary), 0.85);
+  font-size: 12px;
   padding-inline: 4px;
   text-transform: none;
-  font-size: 12px;
-  color: rgba(var(--v-theme-primary), 0.85);
 }
 
 .collect-chip-group {

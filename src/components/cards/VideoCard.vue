@@ -85,7 +85,12 @@ const topBadgeText = computed(() => {
 
 const isLandscapeCover = computed(() => {
   const source = String(props.media?.source || '').toLowerCase()
-  return source.includes('youku') || source.includes('mgtv')
+  // 芒果TV只有综艺分类使用横版封面，其他分类使用竖版
+  if (source.includes('mgtv')) {
+    return props.cate === 'Show'
+  }
+  // 优酷全部使用横版封面
+  return source.includes('youku')
 })
 
 const coverWrapClasses = computed(() => ({

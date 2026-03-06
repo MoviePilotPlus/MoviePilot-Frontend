@@ -13,12 +13,12 @@ const emit = defineEmits(['remove'])
 const props = defineProps({
   info: {
     type: Object as PropType<DownloadTask>,
-    default: () => { },
+    default: () => {},
     required: true,
   },
   progress: {
     type: Object as PropType<Progress>,
-    default: () => { },
+    default: () => {},
   },
   width: String,
   height: String,
@@ -34,7 +34,7 @@ function getPercentage() {
 }
 // 来源角标字典
 const siteIconDict: { [key: string]: any } = {
-  Tencent: tencentImage
+  Tencent: tencentImage,
 }
 function showProgressInfoDialog() {
   showProgressInfo.value = true
@@ -149,26 +149,39 @@ async function deleteDownload() {
   }
 }
 const taskCardRef = ref<HTMLElement | null>(null)
-
 </script>
 
 <template>
   <VHover>
-
     <template #default="hover">
       <div ref="taskCardRef">
-        <VCard :key="props.info?.id" class="glass-card" v-bind="hover.props" :height="props.height" :width="props.width"
-          @click.stop="showProgressInfoDialog">
-          <VChip variant="elevated" size="small" :class="getChipColor()"
-            class="absolute right-2 top-2 bg-opacity-50 shadow-md text-white font-bold">
+        <VCard
+          :key="props.info?.id"
+          class="glass-card"
+          v-bind="hover.props"
+          :height="props.height"
+          :width="props.width"
+          @click.stop="showProgressInfoDialog"
+        >
+          <VChip
+            variant="elevated"
+            size="small"
+            :class="getChipColor()"
+            class="absolute right-2 top-2 bg-opacity-50 shadow-md text-white font-bold"
+          >
             {{ getSatus() }}
           </VChip>
           <VAvatar size="24" density="compact" class="absolute top-1 left-4" tile v-show="hover.isHovering">
             <VImg cover :src="siteIconDict[props.info.site]" class="shadow-lg" />
           </VAvatar>
           <template #image>
-            <VImg :src="props.info?.poster" aspect-ratio="2/3" cover class="brightness-50 card-bg"
-              @load="imageLoadHandler" />
+            <VImg
+              :src="props.info?.poster"
+              aspect-ratio="2/3"
+              cover
+              class="brightness-50 card-bg"
+              @load="imageLoadHandler"
+            />
           </template>
           <VCardItem class="card-content pt-7">
             <VCardTitle class="truncate text-base font-bold" :class="getTextClass()">
@@ -184,29 +197,68 @@ const taskCardRef = ref<HTMLElement | null>(null)
           {{ props.info?.name }}
         </VCardSubtitle> -->
             <template v-if="downloading()">
-              <VCardItem class="text-subtitle-2 pt-3 pb-1 pl-0 pr-0" :class="getTextClass()">
+              <VCardItem class="text-subtitle-2 pt-4 pb-1 pl-0 pr-0" :class="getTextClass()">
                 {{ getSpeedText() }}
                 <VProgressLinear :model-value="getPercentage()" />
               </VCardItem>
             </template>
             <template v-else>
-              <VCardItem class="text-subtitle-2 pt-4 pb-1 pl-0 pr-0" :class="getTextClass()">
-                <VChip variant="outlined" size="x-small" label class="mr-1 text-white font-bold"
-                  v-if="props.info.resolution">{{ props.info.resolution }}</VChip>
-                <VChip variant="outlined" size="x-small" label class="mr-1 text-white font-bold"
-                  v-if="props.info.total_size">{{ formatFileSize(props.info?.total_size || 0) }}</VChip>
-                <VChip variant="outlined" size="x-small" label class="mr-1 text-white font-bold"
-                  v-if="props.info.video_codec">{{ props.info.video_codec }}</VChip>
-                <VChip variant="outlined" size="x-small" label class="mr-1 text-white font-bold"
-                  v-if="props.info.hdr_format">{{ props.info.hdr_format }}</VChip>
-                <VChip variant="outlined" size="x-small" label class="mr-1 text-white font-bold"
-                  v-if="props.info.audio_codec">{{ props.info.audio_codec }}</VChip>
-                <!-- <VChip variant="outlined" size="x-small" label class="mr-1 text-white font-bold"
-                  v-if="props.info.bit_depth">{{ props.info.bit_depth }}bits</VChip> -->
-
+              <VCardItem class="text-subtitle-2 pt-2 pb-1 pl-0 pr-0 task-info-chips" :class="getTextClass()">
+                <div class="task-info-chips-content">
+                  <VChip
+                    variant="outlined"
+                    size="x-small"
+                    label
+                    class="mr-1 text-white font-bold"
+                    v-if="props.info.resolution"
+                    >{{ props.info.resolution }}</VChip
+                  >
+                  <VChip
+                    variant="outlined"
+                    size="x-small"
+                    label
+                    class="mr-1 text-white font-bold"
+                    v-if="props.info.total_size"
+                    >{{ formatFileSize(props.info?.total_size || 0) }}</VChip
+                  >
+                  <VChip
+                    variant="outlined"
+                    size="x-small"
+                    label
+                    class="mr-1 text-white font-bold"
+                    v-if="props.info.video_codec"
+                    >{{ props.info.video_codec }}</VChip
+                  >
+                  <VChip
+                    variant="outlined"
+                    size="x-small"
+                    label
+                    class="mr-1 text-white font-bold"
+                    v-if="props.info.hdr_format"
+                    >{{ props.info.hdr_format }}</VChip
+                  >
+                  <VChip
+                    variant="outlined"
+                    size="x-small"
+                    label
+                    class="mr-1 text-white font-bold"
+                    v-if="props.info.audio_codec"
+                    >{{ props.info.audio_codec }}</VChip
+                  >
+                  <span
+                    v-if="
+                      !props.info.resolution &&
+                      !props.info.total_size &&
+                      !props.info.video_codec &&
+                      !props.info.hdr_format &&
+                      !props.info.audio_codec
+                    "
+                    class="text-medium-emphasis text-caption"
+                    >等待中...</span
+                  >
+                </div>
               </VCardItem>
             </template>
-
 
             <!-- <VCardItem v-if="getPercentage() > 0" class="text-subtitle-2 pt-0 pb-0 pl-0 pr-0" :class="getTextClass()">
           <VProgressLinear :model-value="getPercentage()" />
@@ -215,18 +267,22 @@ const taskCardRef = ref<HTMLElement | null>(null)
           <VProgressLinear :model-value="getPercentage()" />
         </VCardText> -->
 
-            <VCardActions class="justify-space-between  pt-2 pb-0 pl-0 pr-0">
+            <VCardActions class="justify-space-between pt-2 pb-0 pl-0 pr-0">
               <VBtn :readonly="!showToggleBtn()" :icon="downloadBtnIcon()" @click.stop="toggleDownload" />
               <VBtn color="error" icon="mdi-trash-can-outline" @click.stop="deleteDownload" />
             </VCardActions>
           </VCardItem>
-
         </VCard>
-        <DownloadTaskInfoDialog v-if="showProgressInfo" v-model="showProgressInfo" type="task" :id="props.info.id"
-          :name="props.info.name" @close="showProgressInfo = false" />
+        <DownloadTaskInfoDialog
+          v-if="showProgressInfo"
+          v-model="showProgressInfo"
+          type="task"
+          :id="props.info.id"
+          :name="props.info.name"
+          @close="showProgressInfo = false"
+        />
       </div>
     </template>
-
   </VHover>
 </template>
 <style scoped>
@@ -238,7 +294,9 @@ const taskCardRef = ref<HTMLElement | null>(null)
   border-radius: 14px;
   background-color: rgb(var(--v-theme-surface));
   box-shadow: 0 1px 6px rgba(0, 0, 0, 4%);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .glass-card:hover {
@@ -249,10 +307,11 @@ const taskCardRef = ref<HTMLElement | null>(null)
 /* 卡片背景图处理 */
 .card-bg {
   position: absolute;
-  width: 100%;
-  height: 100%;
+  block-size: 100%;
   filter: brightness(0.6);
+  inline-size: 100%;
   transform: scale(1.02);
+
   /* 防止模糊边缘漏出 */
 
   /* 覆盖 Vuetify 图片容器样式 */
@@ -265,22 +324,44 @@ const taskCardRef = ref<HTMLElement | null>(null)
 .card-content {
   position: relative;
   z-index: 2;
-  height: 100%;
   background: linear-gradient(to top, rgba(0, 0, 0, 55%), rgba(0, 0, 0, 18%));
+  block-size: 100%;
+  min-block-size: 140px;
+
   /* display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center; */
+
   /* color: white; */
+
   /* text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); */
+}
+
+/* 任务信息标签区域固定高度 */
+.task-info-chips {
+  min-block-size: 32px !important;
+}
+
+.task-info-chips :deep(.v-card-item__content) {
+  min-block-size: 24px;
+}
+
+.task-info-chips-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-block-size: 24px;
 }
 
 /* 按钮样式增强 */
 :deep(.v-btn) {
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 28%);
+  background: rgba(255, 255, 255, 8%) !important;
+
   &:hover {
-    background: rgba(255, 255, 255, 0.16) !important;
+    background: rgba(255, 255, 255, 16%) !important;
   }
 }
 </style>
