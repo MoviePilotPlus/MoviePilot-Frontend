@@ -34,10 +34,10 @@ const display = useDisplay()
 const props = defineProps({
   site: {
     type: Object as () => Site,
-    required: true
-  }
+    required: true,
+  },
 })
-const oper = computed(() => siteForm.value?.id ? 'edit' : 'add')
+const oper = computed(() => (siteForm.value?.id ? 'edit' : 'add'))
 
 // 注册事件
 const emit = defineEmits(['save', 'remove', 'close'])
@@ -84,104 +84,104 @@ const teamOptions = ref<TeamOption[]>([])
 // 解析模板数据
 const templateData = ref<TemplateDataType>({
   type: {
-    Movie: "",
-    TV: "",
-    Documentary: "",
-    Comic: "",
-    Show: "",
-    Music: "",
-    Sports: "",
-    Game: "",
-    Short: "",
-    Other: ""
+    Movie: '',
+    TV: '',
+    Documentary: '',
+    Comic: '',
+    Show: '',
+    Music: '',
+    Sports: '',
+    Game: '',
+    Short: '',
+    Other: '',
   },
   source: {
-    UHD_BLURAY: "",
-    BLURAY: "",
-    THREE_D_BLURAY: "",
-    REMUX: "",
-    ENCODE: "",
-    TRACK: "",
-    WEB_DL: "",
-    CD: "",
-    DVDR: "",
-    HDTV: "",
-    MINIBD: "",
-    HD_DVD: "",
-    SACD: ""
+    UHD_BLURAY: '',
+    BLURAY: '',
+    THREE_D_BLURAY: '',
+    REMUX: '',
+    ENCODE: '',
+    TRACK: '',
+    WEB_DL: '',
+    CD: '',
+    DVDR: '',
+    HDTV: '',
+    MINIBD: '',
+    HD_DVD: '',
+    SACD: '',
   },
   resolution: {
-    UHD: "",
-    SHD: "",
-    FHD: "",
-    HD: "",
-    SD: ""
+    UHD: '',
+    SHD: '',
+    FHD: '',
+    HD: '',
+    SD: '',
   },
   video_codec: {
-    H265: "",
-    H264: "",
-    VP8: "",
-    VP9: "",
-    VC1: "",
-    AV1: "",
-    XVID: "",
-    MPEG2: "",
-    MPEG4: "",
-    OTHER: ""
+    H265: '',
+    H264: '',
+    VP8: '',
+    VP9: '',
+    VC1: '',
+    AV1: '',
+    XVID: '',
+    MPEG2: '',
+    MPEG4: '',
+    OTHER: '',
   },
   audio_codec: {
-    DTS_HDMAX: "",
-    DTS_HDMA: "",
-    DTS_HDHR: "",
-    DTS_HD: "",
-    DTS_X: "",
-    DTS: "",
-    LPCM: "",
-    DDP: "",
-    DD: "",
-    ATMOS: "",
-    AAC: "",
-    AV3A: "",
-    TrueHD: "",
-    FLAC: "",
-    APE: "",
-    MP3: "",
-    WAV: "",
-    OPUS: "",
-    OGG: "",
-    MP2: "",
-    OTHER: ""
+    DTS_HDMAX: '',
+    DTS_HDMA: '',
+    DTS_HDHR: '',
+    DTS_HD: '',
+    DTS_X: '',
+    DTS: '',
+    LPCM: '',
+    DDP: '',
+    DD: '',
+    ATMOS: '',
+    AAC: '',
+    AV3A: '',
+    TrueHD: '',
+    FLAC: '',
+    APE: '',
+    MP3: '',
+    WAV: '',
+    OPUS: '',
+    OGG: '',
+    MP2: '',
+    OTHER: '',
   },
   area: {
-    CHN: "",
-    EU: "",
-    US: "",
-    HK: "",
-    TW: "",
-    JPN: "",
-    KOR: "",
-    IND: "",
-    SEA: "",
-    OTHER: ""
+    CHN: '',
+    EU: '',
+    US: '',
+    HK: '',
+    TW: '',
+    JPN: '',
+    KOR: '',
+    IND: '',
+    SEA: '',
+    OTHER: '',
   },
   team: {},
   tags: {
-    Children: "",
-    Comedy: "",
-    Official: "",
-    Mandarin: "",
-    Cantonese: "",
-    ChineseSubtitles: "",
-    DolbyVision: "",
-    HDRVivid: "",
-    HDR10_PLUS: "",
-    HDR10: "",
-    Completed: "",
-    Original: "",
-    HighBitrateHighFrameRate: "",
-    ThreeD: "",
-    Collection: ""
-  }
+    Children: '',
+    Comedy: '',
+    Official: '',
+    Mandarin: '',
+    Cantonese: '',
+    ChineseSubtitles: '',
+    DolbyVision: '',
+    HDRVivid: '',
+    HDR10_PLUS: '',
+    HDR10: '',
+    Completed: '',
+    Original: '',
+    HighBitrateHighFrameRate: '',
+    ThreeD: '',
+    Collection: '',
+  },
 })
 
 // 更新模板数据到表单
@@ -191,27 +191,36 @@ function updateTemplateForm() {
     const parsed = JSON.parse(templateStr) as Record<string, any>
 
     // 确保parsed是对象类型
-    if (typeof parsed !== 'object' || parsed === null) return;
+    if (typeof parsed !== 'object' || parsed === null) return
 
     // 安全地更新每个类别的数据
-    const categories: (keyof TemplateDataType)[] = ['type', 'source', 'resolution', 'video_codec', 'audio_codec', 'area', 'team', 'tags'];
+    const categories: (keyof TemplateDataType)[] = [
+      'type',
+      'source',
+      'resolution',
+      'video_codec',
+      'audio_codec',
+      'area',
+      'team',
+      'tags',
+    ]
 
     categories.forEach(category => {
       if (parsed[category] && typeof parsed[category] === 'object') {
-        const categoryData = parsed[category] as Record<string, any>;
-        const templateCategory = templateData.value[category] as Record<string, string>;
+        const categoryData = parsed[category] as Record<string, any>
+        const templateCategory = templateData.value[category] as Record<string, string>
 
         if (templateCategory && typeof templateCategory === 'object') {
           Object.keys(templateCategory).forEach(key => {
             if (categoryData[key] !== undefined) {
-              templateCategory[key] = String(categoryData[key]);
+              templateCategory[key] = String(categoryData[key])
             }
-          });
+          })
         }
       }
-    });
+    })
   } catch (error) {
-    console.error('解析模板数据失败:', error);
+    console.error('解析模板数据失败:', error)
   }
 }
 
@@ -246,7 +255,7 @@ async function fetchTeamData() {
     }
   } catch (error) {
     console.error('获取团队数据失败:', error)
-    teamOptions.value = [];
+    teamOptions.value = []
   }
 }
 
@@ -293,14 +302,15 @@ async function fetchSiteInfo() {
 async function addSite() {
   startNProgress()
   try {
-    // 将对象转换为JSON字符串
-    const templateJson = JSON.stringify(templateData.value)
-    const formData = { ...siteForm.value, template: templateJson }
+    // 将对象转换为JSON字符串，移除id字段（新增场景不需要id）
+    const { id, ...siteFormWithoutId } = siteForm.value
+    const formData = { ...siteFormWithoutId, template: templateData.value }
     const result = await api.post('siteschema/', formData)
-
+    console.log('添加站点result:', result)
     // 安全地处理API响应
-    if (result && result.data && typeof result.data === 'object') {
-      const resultData = result.data as { success?: boolean; message?: string }
+    if (result && typeof result === 'object') {
+      const resultData = result as { success?: boolean; message?: string }
+      console.log('添加站点响应:', resultData)
       if (resultData.success) {
         $toast.success(t('siteshema.messages.addSuccess'))
         emit('save')
@@ -326,7 +336,9 @@ async function updateSiteInfo() {
       $toast.success(`${siteForm.value?.name || ''} ${t('siteshema.messages.updateSuccess')}`)
       emit('save')
     } else {
-      $toast.error(`${siteForm.value?.name || ''} ${t('siteshema.messages.updateFailed')}：${result.message || '未知错误'}`)
+      $toast.error(
+        `${siteForm.value?.name || ''} ${t('siteshema.messages.updateFailed')}：${result.message || '未知错误'}`,
+      )
     }
   } catch (error) {
     $toast.error(`${siteForm.value?.name || ''} ${t('siteshema.messages.updateFailed')}！`)
@@ -359,11 +371,17 @@ onMounted(async () => {
       <VDialogCloseBtn @click="emit('close')" />
       <VDivider />
       <VCardText>
-        <VForm @submit.prevent="() => { }">
+        <VForm @submit.prevent="() => {}">
           <VRow>
             <VCol cols="12" md="6">
-              <VTextField v-model="siteForm.name" :label="t('siteshema.fields.name')" :rules="[requiredValidator]"
-                :hint="t('siteshema.hints.name')" persistent-hint prepend-inner-icon="mdi-account" />
+              <VTextField
+                v-model="siteForm.name"
+                :label="t('siteshema.fields.name')"
+                :rules="[requiredValidator]"
+                :hint="t('siteshema.hints.name')"
+                persistent-hint
+                prepend-inner-icon="mdi-account"
+              />
             </VCol>
             <VCol cols="6" md="3">
               <VSwitch v-model="siteForm.cookie_required" :label="t('siteshema.fields.cookie_required')" />
@@ -374,36 +392,63 @@ onMounted(async () => {
           </VRow>
           <VRow>
             <VCol cols="12" md="6">
-              <VTextField v-model="siteForm.domain" :label="t('siteshema.fields.domain')"
-                :hint="t('siteshema.hints.domain')" persistent-hint prepend-inner-icon="mdi-web" />
+              <VTextField
+                v-model="siteForm.domain"
+                :label="t('siteshema.fields.domain')"
+                :hint="t('siteshema.hints.domain')"
+                persistent-hint
+                prepend-inner-icon="mdi-web"
+              />
             </VCol>
             <VCol cols="12" md="6">
-              <VTextField v-model="siteForm.upload_api" :label="t('siteshema.fields.upload_api')"
-                :hint="t('siteshema.hints.upload_api')" persistent-hint prepend-inner-icon="mdi-upload" />
+              <VTextField
+                v-model="siteForm.upload_api"
+                :label="t('siteshema.fields.upload_api')"
+                :hint="t('siteshema.hints.upload_api')"
+                persistent-hint
+                prepend-inner-icon="mdi-upload"
+              />
             </VCol>
-
           </VRow>
           <VRow>
             <VCol cols="12" md="6">
-              <VTextField v-model="siteForm.update_api" :label="t('siteshema.fields.update_api')"
-                :hint="t('siteshema.hints.update_api')" persistent-hint prepend-inner-icon="mdi-pencil-box-outline" />
+              <VTextField
+                v-model="siteForm.update_api"
+                :label="t('siteshema.fields.update_api')"
+                :hint="t('siteshema.hints.update_api')"
+                persistent-hint
+                prepend-inner-icon="mdi-pencil-box-outline"
+              />
             </VCol>
             <VCol cols="12" md="6">
-              <VTextField v-model="siteForm.download_page" :label="t('siteshema.fields.download_page')"
-                :hint="t('siteshema.hints.download_page')" persistent-hint prepend-inner-icon="mdi-download" />
+              <VTextField
+                v-model="siteForm.download_page"
+                :label="t('siteshema.fields.download_page')"
+                :hint="t('siteshema.hints.download_page')"
+                persistent-hint
+                prepend-inner-icon="mdi-download"
+              />
             </VCol>
-
           </VRow>
           <VRow>
             <VCol cols="12" md="6">
-              <VTextField v-model="siteForm.detail_page" :label="t('siteshema.fields.detail_page')"
-                :hint="t('siteshema.hints.detail_page')" persistent-hint prepend-inner-icon="mdi-information-variant" />
+              <VTextField
+                v-model="siteForm.detail_page"
+                :label="t('siteshema.fields.detail_page')"
+                :hint="t('siteshema.hints.detail_page')"
+                persistent-hint
+                prepend-inner-icon="mdi-information-variant"
+              />
             </VCol>
             <VCol cols="12" md="6">
-              <VTextField v-model="siteForm.tracker_api" :label="t('siteshema.fields.tracker_api')"
-                :hint="t('siteshema.hints.tracker_api')" persistent-hint prepend-inner-icon="mdi-incognito" />
+              <VTextField
+                v-model="siteForm.tracker_api"
+                :label="t('siteshema.fields.tracker_api')"
+                :hint="t('siteshema.hints.tracker_api')"
+                persistent-hint
+                prepend-inner-icon="mdi-incognito"
+              />
             </VCol>
-
           </VRow>
           <!-- 可视化模板编辑器 -->
           <VDivider class="my-4" />
@@ -421,11 +466,21 @@ onMounted(async () => {
                 <VCardTitle class="text-lg font-medium">类型配置</VCardTitle>
                 <VCardText>
                   <VRow>
-                    <VCol v-for="key in Object.keys(categoryOptions)" :key="`type-${key}`" cols="12" sm="6" md="4"
-                      lg="3">
-                      <VTextField v-model="templateData.type[key]"
-                        :label="(categoryOptions as Record<string, string>)[key]" type="number" :hint="key"
-                        persistent-hint />
+                    <VCol
+                      v-for="key in Object.keys(categoryOptions)"
+                      :key="`type-${key}`"
+                      cols="12"
+                      sm="6"
+                      md="4"
+                      lg="3"
+                    >
+                      <VTextField
+                        v-model="templateData.type[key]"
+                        :label="(categoryOptions as Record<string, string>)[key]"
+                        type="number"
+                        :hint="key"
+                        persistent-hint
+                      />
                     </VCol>
                   </VRow>
                 </VCardText>
@@ -563,13 +618,22 @@ onMounted(async () => {
                 <VCardTitle class="text-lg font-medium">标签配置</VCardTitle>
                 <VCardText>
                   <VRow>
-                    <VCol v-for="key in Object.keys(tagOptions)" :key="`tag-${String(key)}`" cols="12" sm="6" md="4"
-                      lg="3">
-                      <VTextField v-model="templateData.tags[String(key)]"
-                        :label="String((tagOptions as Record<string, string>)[key])" type="number" :hint="String(key)"
-                        persistent-hint />
+                    <VCol
+                      v-for="key in Object.keys(tagOptions)"
+                      :key="`tag-${String(key)}`"
+                      cols="12"
+                      sm="6"
+                      md="4"
+                      lg="3"
+                    >
+                      <VTextField
+                        v-model="templateData.tags[String(key)]"
+                        :label="String((tagOptions as Record<string, string>)[key])"
+                        type="number"
+                        :hint="String(key)"
+                        persistent-hint
+                      />
                     </VCol>
-
                   </VRow>
                 </VCardText>
               </VCard>
@@ -583,11 +647,21 @@ onMounted(async () => {
                 <VCardTitle class="text-lg font-medium">团队配置</VCardTitle>
                 <VCardText>
                   <VRow>
-                    <VCol v-for="team in teamOptions" :key="`team-${String(team?.team || 'unknown')}`" cols="12" sm="6"
-                      md="4" lg="3">
-                      <VTextField v-model="templateData.team[String(team?.team || '')]"
-                        :label="String(team?.copyright || team?.team || '未知团队')" type="number"
-                        :hint="String(team?.team || '')" persistent-hint />
+                    <VCol
+                      v-for="team in teamOptions"
+                      :key="`team-${String(team?.team || 'unknown')}`"
+                      cols="12"
+                      sm="6"
+                      md="4"
+                      lg="3"
+                    >
+                      <VTextField
+                        v-model="templateData.team[String(team?.team || '')]"
+                        :label="String(team?.copyright || team?.team || '未知团队')"
+                        type="number"
+                        :hint="String(team?.team || '')"
+                        persistent-hint
+                      />
                     </VCol>
                   </VRow>
                 </VCardText>
@@ -646,8 +720,11 @@ onMounted(async () => {
                 <VCardText>
                   <VRow>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.audio_codec.DTS_HDMAX" label="DTS-HD Master Audio"
-                        type="number" />
+                      <VTextField
+                        v-model="templateData.audio_codec.DTS_HDMAX"
+                        label="DTS-HD Master Audio"
+                        type="number"
+                      />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
                       <VTextField v-model="templateData.audio_codec.DTS_HDMA" label="DTS-HD MA" type="number" />

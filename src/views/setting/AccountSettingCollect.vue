@@ -257,7 +257,8 @@ async function loadImageHostingSetting() {
   }
   try {
     const result: { [key: string]: any } = await api.get('system/setting/ImageHostingParams')
-    CollectSettings.value.ImageHosting = result.data?.value ?? defaultImageHostingSettings
+    CollectSettings.value.ImageHosting =
+      Object.keys(result.data?.value || {}).length === 0 ? defaultImageHostingSettings : result.data?.value
   } catch (error) {
     console.log(error)
   }
