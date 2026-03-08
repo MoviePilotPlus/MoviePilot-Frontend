@@ -477,7 +477,7 @@ onMounted(async () => {
                       <VTextField
                         v-model="templateData.type[key]"
                         :label="(categoryOptions as Record<string, string>)[key]"
-                        type="number"
+                        type="text"
                         :hint="key"
                         persistent-hint
                       />
@@ -496,43 +496,43 @@ onMounted(async () => {
                 <VCardText>
                   <VRow>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.source.UHD_BLURAY" label="UHD蓝光" type="number" />
+                      <VTextField v-model="templateData.source.UHD_BLURAY" label="UHD蓝光" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.source.BLURAY" label="蓝光" type="number" />
+                      <VTextField v-model="templateData.source.BLURAY" label="蓝光" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.source.THREE_D_BLURAY" label="3D蓝光" type="number" />
+                      <VTextField v-model="templateData.source.THREE_D_BLURAY" label="3D蓝光" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.source.REMUX" label="REMUX" type="number" />
+                      <VTextField v-model="templateData.source.REMUX" label="REMUX" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.source.ENCODE" label="编码" type="number" />
+                      <VTextField v-model="templateData.source.ENCODE" label="ENCODE" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.source.TRACK" label="音轨" type="number" />
+                      <VTextField v-model="templateData.source.TRACK" label="TRACK" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.source.WEB_DL" label="WEB-DL" type="number" />
+                      <VTextField v-model="templateData.source.WEB_DL" label="WEB-DL" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.source.CD" label="CD" type="number" />
+                      <VTextField v-model="templateData.source.CD" label="CD" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.source.DVDR" label="DVD" type="number" />
+                      <VTextField v-model="templateData.source.DVDR" label="DVD" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.source.HDTV" label="HDTV" type="number" />
+                      <VTextField v-model="templateData.source.HDTV" label="HDTV" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.source.MINIBD" label="MINIBD" type="number" />
+                      <VTextField v-model="templateData.source.MINIBD" label="MINIBD" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.source.HD_DVD" label="HD DVD" type="number" />
+                      <VTextField v-model="templateData.source.HD_DVD" label="HD DVD" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.source.SACD" label="SACD" type="number" />
+                      <VTextField v-model="templateData.source.SACD" label="SACD" type="text" />
                     </VCol>
                   </VRow>
                 </VCardText>
@@ -548,19 +548,19 @@ onMounted(async () => {
                 <VCardText>
                   <VRow>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.resolution.UHD" label="4K (UHD)" type="number" />
+                      <VTextField v-model="templateData.resolution.UHD" label="8K (UHD)" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.resolution.SHD" label="准4K (SHD)" type="number" />
+                      <VTextField v-model="templateData.resolution.SHD" label="4K (SHD)" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.resolution.FHD" label="1080p (FHD)" type="number" />
+                      <VTextField v-model="templateData.resolution.FHD" label="1080p (FHD)" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.resolution.HD" label="720p (HD)" type="number" />
+                      <VTextField v-model="templateData.resolution.HD" label="720p (HD)" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.resolution.SD" label="标清 (SD)" type="number" />
+                      <VTextField v-model="templateData.resolution.SD" label="标清 (SD)" type="text" />
                     </VCol>
                   </VRow>
                 </VCardText>
@@ -576,34 +576,34 @@ onMounted(async () => {
                 <VCardText>
                   <VRow>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.video_codec.H265" label="H.265/HEVC" type="number" />
+                      <VTextField v-model="templateData.video_codec.H265" label="H.265/HEVC" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.video_codec.H264" label="H.264/AVC" type="number" />
+                      <VTextField v-model="templateData.video_codec.H264" label="H.264/AVC" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.video_codec.VP8" label="VP8" type="number" />
+                      <VTextField v-model="templateData.video_codec.VP8" label="VP8" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.video_codec.VP9" label="VP9" type="number" />
+                      <VTextField v-model="templateData.video_codec.VP9" label="VP9" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.video_codec.VC1" label="VC-1" type="number" />
+                      <VTextField v-model="templateData.video_codec.VC1" label="VC-1" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.video_codec.AV1" label="AV1" type="number" />
+                      <VTextField v-model="templateData.video_codec.AV1" label="AV1" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.video_codec.XVID" label="XVID" type="number" />
+                      <VTextField v-model="templateData.video_codec.XVID" label="XVID" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.video_codec.MPEG2" label="MPEG-2" type="number" />
+                      <VTextField v-model="templateData.video_codec.MPEG2" label="MPEG-2" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.video_codec.MPEG4" label="MPEG-4" type="number" />
+                      <VTextField v-model="templateData.video_codec.MPEG4" label="MPEG-4" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.video_codec.OTHER" label="其他" type="number" />
+                      <VTextField v-model="templateData.video_codec.OTHER" label="其他" type="text" />
                     </VCol>
                   </VRow>
                 </VCardText>
@@ -629,7 +629,7 @@ onMounted(async () => {
                       <VTextField
                         v-model="templateData.tags[String(key)]"
                         :label="String((tagOptions as Record<string, string>)[key])"
-                        type="number"
+                        type="text"
                         :hint="String(key)"
                         persistent-hint
                       />
@@ -658,7 +658,7 @@ onMounted(async () => {
                       <VTextField
                         v-model="templateData.team[String(team?.team || '')]"
                         :label="String(team?.copyright || team?.team || '未知团队')"
-                        type="number"
+                        type="text"
                         :hint="String(team?.team || '')"
                         persistent-hint
                       />
@@ -677,34 +677,34 @@ onMounted(async () => {
                 <VCardText>
                   <VRow>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.area.CHN" label="中国大陆" type="number" />
+                      <VTextField v-model="templateData.area.CHN" label="中国大陆" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.area.EU" label="欧洲" type="number" />
+                      <VTextField v-model="templateData.area.EU" label="欧洲" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.area.US" label="美国" type="number" />
+                      <VTextField v-model="templateData.area.US" label="美国" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.area.HK" label="香港" type="number" />
+                      <VTextField v-model="templateData.area.HK" label="香港" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.area.TW" label="台湾" type="number" />
+                      <VTextField v-model="templateData.area.TW" label="台湾" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.area.JPN" label="日本" type="number" />
+                      <VTextField v-model="templateData.area.JPN" label="日本" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.area.KOR" label="韩国" type="number" />
+                      <VTextField v-model="templateData.area.KOR" label="韩国" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.area.IND" label="印度" type="number" />
+                      <VTextField v-model="templateData.area.IND" label="印度" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.area.SEA" label="东南亚" type="number" />
+                      <VTextField v-model="templateData.area.SEA" label="东南亚" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.area.OTHER" label="其他" type="number" />
+                      <VTextField v-model="templateData.area.OTHER" label="其他" type="text" />
                     </VCol>
                   </VRow>
                 </VCardText>
@@ -723,50 +723,50 @@ onMounted(async () => {
                       <VTextField
                         v-model="templateData.audio_codec.DTS_HDMAX"
                         label="DTS-HD Master Audio"
-                        type="number"
+                        type="text"
                       />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.audio_codec.DTS_HDMA" label="DTS-HD MA" type="number" />
+                      <VTextField v-model="templateData.audio_codec.DTS_HDMA" label="DTS-HD MA" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.audio_codec.DTS_HDHR" label="DTS-HD HR" type="number" />
+                      <VTextField v-model="templateData.audio_codec.DTS_HDHR" label="DTS-HD HR" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.audio_codec.DTS_X" label="DTS:X" type="number" />
+                      <VTextField v-model="templateData.audio_codec.DTS_X" label="DTS:X" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.audio_codec.DTS" label="DTS" type="number" />
+                      <VTextField v-model="templateData.audio_codec.DTS" label="DTS" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.audio_codec.LPCM" label="LPCM" type="number" />
+                      <VTextField v-model="templateData.audio_codec.LPCM" label="LPCM" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.audio_codec.DDP" label="Dolby Digital Plus" type="number" />
+                      <VTextField v-model="templateData.audio_codec.DDP" label="Dolby Digital Plus" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.audio_codec.DD" label="Dolby Digital" type="number" />
+                      <VTextField v-model="templateData.audio_codec.DD" label="Dolby Digital" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.audio_codec.ATMOS" label="Dolby Atmos" type="number" />
+                      <VTextField v-model="templateData.audio_codec.ATMOS" label="Dolby Atmos" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.audio_codec.AAC" label="AAC" type="number" />
+                      <VTextField v-model="templateData.audio_codec.AAC" label="AAC" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.audio_codec.TrueHD" label="TrueHD" type="number" />
+                      <VTextField v-model="templateData.audio_codec.TrueHD" label="TrueHD" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.audio_codec.FLAC" label="FLAC" type="number" />
+                      <VTextField v-model="templateData.audio_codec.FLAC" label="FLAC" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.audio_codec.APE" label="APE" type="number" />
+                      <VTextField v-model="templateData.audio_codec.APE" label="APE" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.audio_codec.MP3" label="MP3" type="number" />
+                      <VTextField v-model="templateData.audio_codec.MP3" label="MP3" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.audio_codec.WAV" label="WAV" type="number" />
+                      <VTextField v-model="templateData.audio_codec.WAV" label="WAV" type="text" />
                     </VCol>
                   </VRow>
                 </VCardText>

@@ -32,7 +32,7 @@ export function getNavMenus(t: Composer['t']) {
       to: '/recommend',
       header: t('menu.discovery'),
       admin: false,
-      footer: true,
+      footer: false,
       permission: 'discovery',
     },
     {
@@ -41,7 +41,7 @@ export function getNavMenus(t: Composer['t']) {
       to: '/discover',
       header: t('menu.discovery'),
       admin: false,
-      footer: true,
+      footer: false,
       permission: 'discovery',
     },
     {
