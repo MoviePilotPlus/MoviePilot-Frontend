@@ -48,14 +48,13 @@ function stopLoadingProgress() {
 async function fetchData() {
   try {
     if (viewType.value == 'row') {
-      collectList.value = await api.get('collect/') ?? []
-      isRefreshed.value = true
-      taskList.value = await api.get('task/') ?? []
+      collectList.value = (await api.get('collect/')) ?? []
+      taskList.value = (await api.get('task/')) ?? []
     } else {
-      taskList.value = await api.get('task/') ?? []
-      isRefreshed.value = true
-      collectList.value = await api.get('collect/') ?? []
+      taskList.value = (await api.get('task/')) ?? []
+      collectList.value = (await api.get('collect/')) ?? []
     }
+    isRefreshed.value = true
   } catch (error) {
     isRefreshed.value = true
     return Promise.reject(error)
@@ -143,25 +142,34 @@ onUnmounted(() => {
       </div>
     </VFadeTransition>
     <!-- 搜索结果 -->
-    <div v-if="isRefreshed && (taskList.length > 0 || collectList.length > 0) && !isViewChanging"
-      class="search-results-container">
+    <div
+      v-if="
+        isRefreshed &&
+        ((viewType === 'card' && taskList.length > 0) || (viewType === 'row' && collectList.length > 0)) &&
+        !isViewChanging
+      "
+      class="search-results-container"
+    >
       <!-- 卡片视图模式 -->
       <VFadeTransition>
-        <div>
-          <TaskCardListView v-if="viewType === 'card'" :items="taskList" />
+        <div v-if="viewType === 'card'">
+          <TaskCardListView :items="taskList" />
         </div>
       </VFadeTransition>
 
       <!-- 列表视图模式 -->
       <VFadeTransition>
-        <div>
-          <TaskRowListView v-if="viewType === 'row'" :items="collectList" />
+        <div v-if="viewType === 'row'">
+          <TaskRowListView :items="collectList" />
         </div>
       </VFadeTransition>
     </div>
 
     <!-- 无数据显示 -->
-    <div v-else-if="isRefreshed && !isViewChanging" class="d-flex flex-column align-center justify-center py-8">
+    <div
+      v-else-if="isRefreshed && !isViewChanging && taskList.length === 0 && collectList.length === 0"
+      class="d-flex flex-column align-center justify-center py-8"
+    >
       <NoDataFound :errorTitle="errorTitle" :errorDescription="errorDescription" />
       <VBtn class="mt-4" color="primary" prepend-icon="mdi-magnify" to="/">{{ t('resource.backToHome') }}</VBtn>
     </div>
@@ -171,9 +179,6 @@ onUnmounted(() => {
     <!-- 滚动到顶部按钮 -->
     <VScrollToTopBtn />
   </div>
-
-
-
 </template>
 <style scoped>
 .search-progress-container {
@@ -224,8 +229,8 @@ onUnmounted(() => {
 
 /* 精简标题栏样式 */
 .search-header {
-  border-radius: 14px;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 14px;
   background: rgb(var(--v-theme-surface));
   box-shadow: 0 1px 6px rgba(0, 0, 0, 3%);
   padding-block: 12px;
@@ -262,11 +267,11 @@ onUnmounted(() => {
 
 .view-toggle-buttons {
   display: flex;
-  gap: 4px;
+  padding: 4px;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   border-radius: 10px;
   background-color: rgba(var(--v-theme-surface-variant), 0.08);
-  padding: 4px;
+  gap: 4px;
 }
 
 .view-toggle-btn {
@@ -331,7 +336,6 @@ onUnmounted(() => {
 }
 
 @keyframes pulse {
-
   0%,
   100% {
     opacity: 0.5;
