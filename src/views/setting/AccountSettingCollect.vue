@@ -7,11 +7,15 @@ import api from '@/api'
 import { MediaServerConf, Site } from '@/api/types'
 import SiteSchemaCard from '@/components/cards/SiteSchemaCard.vue'
 import ProgressDialog from '@/components/dialog/ProgressDialog.vue'
+import SiteSchemaImportDialog from '@/components/dialog/SiteSchemaImportDialog.vue'
 import { useI18n } from 'vue-i18n'
 import { mediaServerOptions } from '@/api/constants'
 
 // 国际化
 const { t } = useI18n()
+
+// 导入对话框
+const siteImportDialog = ref(false)
 
 // 采集器设置项
 const CollectSettings = ref<any>({
@@ -271,6 +275,46 @@ async function loadSiteList() {
     console.log(error)
   }
 }
+
+// 导出站点模板
+async function exportSiteSchemas() {
+  try {
+    // 获取所有站点模板数据
+    const siteSchemas = await api.get('siteschema/')
+
+    // 创建导出数据，只包含必要的字段，排除id
+    const exportData = siteSchemas.map((schema: any) => {
+      const { id, ...rest } = schema
+      return rest
+    })
+
+    // 创建Blob对象
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+
+    // 创建下载链接
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `site_schemas_export_${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    // 显示成功提示
+    $toast.success(t('setting.collect.siteSchemaExportSuccess'))
+  } catch (error) {
+    console.error('导出站点模板失败:', error)
+    $toast.error(t('setting.collect.siteSchemaExportFailed'))
+  }
+}
+
+// 处理导入成功
+function handleImportSuccess() {
+  // 重新获取站点模板数据
+  loadSiteList()
+  $toast.success(t('setting.collect.siteSchemaImportSuccess'))
+}
 // 调用API保存下载器设置
 async function saveImageHostingSetting() {
   try {
@@ -362,20 +406,6 @@ async function saveBasicSettings() {
   if (await saveSystemSetting(CollectSettings.value.Basic)) {
     $toast.success(t('setting.collect.basicSaveSuccess'))
   }
-}
-
-// 添加媒体服务器
-function addMediaServer(mediaserver: string) {
-  let name = `服务器${mediaServers.value.length + 1}`
-  while (mediaServers.value.some(item => item.name === name)) {
-    name = `服务器${parseInt(name.split('服务器')[1]) + 1}`
-  }
-  mediaServers.value.push({
-    name: name,
-    type: mediaserver,
-    enabled: false,
-    config: {},
-  })
 }
 
 // 添加制作组配置
@@ -900,18 +930,13 @@ onDeactivated(() => {
               <VBtn type="submit" @click="saveMediaServerSetting" prepend-icon="mdi-content-save">
                 {{ t('common.save') }}
               </VBtn>
-              <VBtn color="success" variant="tonal">
-                <VIcon icon="mdi-plus" />
-                <VMenu activator="parent" close-on-content-click>
-                  <VList>
-                    <VListItem v-for="item in mediaServerOptions" @click="addMediaServer(item.value)">
-                      <VListItemTitle>{{ item.title }}</VListItemTitle>
-                    </VListItem>
-                    <VListItem @click="addMediaServer('custom')">
-                      <VListItemTitle>{{ t('setting.collect.custom') }}</VListItemTitle>
-                    </VListItem>
-                  </VList>
-                </VMenu>
+              <!-- 导入按钮 -->
+              <VBtn color="primary" variant="tonal" @click="siteImportDialog = true" prepend-icon="mdi-import">
+                {{ t('site.actions.import') }}
+              </VBtn>
+              <!-- 导出按钮 -->
+              <VBtn color="warning" variant="tonal" @click="exportSiteSchemas" prepend-icon="mdi-export">
+                {{ t('site.actions.export') }}
               </VBtn>
             </div>
           </VForm>
@@ -1197,4 +1222,7 @@ onDeactivated(() => {
       </VCard>
     </VCol>
   </VRow>
+
+  <!-- 导入站点模板弹窗 -->
+  <SiteSchemaImportDialog v-if="siteImportDialog" v-model="siteImportDialog" @import-success="handleImportSuccess" />
 </template>
