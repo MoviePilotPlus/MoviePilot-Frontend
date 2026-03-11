@@ -361,7 +361,7 @@ async function updateSiteInfo() {
   startNProgress()
   try {
     const formData = { ...siteForm.value, template: templateData.value }
-    const result: { [key: string]: string } = await api.put('siteschema/', formData)
+    const result: { [key: string]: string } = await api.post('siteschema/', formData)
     if (result.success) {
       $toast.success(`${siteForm.value?.name || ''} ${t('siteshema.messages.updateSuccess')}`)
       emit('save')

@@ -355,19 +355,6 @@ async function loadMediaServerSetting() {
   }
 }
 
-// 调用API保存媒体服务器设置
-async function saveMediaServerSetting() {
-  try {
-    const result: { [key: string]: any } = await api.post('system/setting/MediaServers', mediaServers.value)
-    if (result.success) $toast.success(t('setting.collect.mediaServerSaveSuccess'))
-    else $toast.error(t('setting.collect.mediaServerSaveFailed'))
-
-    await loadMediaServerSetting()
-  } catch (error) {
-    console.log(error)
-  }
-}
-
 // 加载系统设置
 async function loadSystemSettings() {
   try {
@@ -927,9 +914,6 @@ onDeactivated(() => {
         <VCardText>
           <VForm @submit.prevent="() => {}">
             <div class="d-flex flex-wrap gap-4 mt-4">
-              <VBtn type="submit" @click="saveMediaServerSetting" prepend-icon="mdi-content-save">
-                {{ t('common.save') }}
-              </VBtn>
               <!-- 导入按钮 -->
               <VBtn color="primary" variant="tonal" @click="siteImportDialog = true" prepend-icon="mdi-import">
                 {{ t('site.actions.import') }}
