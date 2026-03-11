@@ -153,15 +153,45 @@ const templateData = ref<TemplateDataType>({
     OTHER: '',
   },
   area: {
+    // 中国大陆
     CHN: '',
-    EU: '',
+    // 美国
     US: '',
+    // 英国
+    GB: '',
+    // 德国
+    DE: '',
+    // 法国
+    FR: '',
+    // 西班牙
+    ES: '',
+    // 意大利
+    IT: '',
+    // 中国香港
     HK: '',
+    // 中国澳门
+    MO: '',
+    // 中国台湾
     TW: '',
+    // 日本
     JPN: '',
+    // 韩国
     KOR: '',
+    // 印度
     IND: '',
-    SEA: '',
+    //马来西亚
+    MYS: '',
+    //缅甸
+    MMR: '',
+    //菲律宾
+    PHL: '',
+    //新加坡
+    SGP: '',
+    //泰国
+    THA: '',
+    //越南
+    VNM: '',
+    // 其它
     OTHER: '',
   },
   team: {},
@@ -680,16 +710,31 @@ onMounted(async () => {
                       <VTextField v-model="templateData.area.CHN" label="中国大陆" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.area.EU" label="欧洲" type="text" />
+                      <VTextField v-model="templateData.area.GB" label="英国" type="text" />
+                    </VCol>
+                    <VCol cols="12" sm="6" md="4" lg="3">
+                      <VTextField v-model="templateData.area.DE" label="德国" type="text" />
+                    </VCol>
+                    <VCol cols="12" sm="6" md="4" lg="3">
+                      <VTextField v-model="templateData.area.FR" label="法国" type="text" />
+                    </VCol>
+                    <VCol cols="12" sm="6" md="4" lg="3">
+                      <VTextField v-model="templateData.area.ES" label="西班牙" type="text" />
+                    </VCol>
+                    <VCol cols="12" sm="6" md="4" lg="3">
+                      <VTextField v-model="templateData.area.IT" label="意大利" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
                       <VTextField v-model="templateData.area.US" label="美国" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.area.HK" label="香港" type="text" />
+                      <VTextField v-model="templateData.area.HK" label="中国香港" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.area.TW" label="台湾" type="text" />
+                      <VTextField v-model="templateData.area.MO" label="中国澳门" type="text" />
+                    </VCol>
+                    <VCol cols="12" sm="6" md="4" lg="3">
+                      <VTextField v-model="templateData.area.TW" label="中国台湾" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
                       <VTextField v-model="templateData.area.JPN" label="日本" type="text" />
@@ -701,7 +746,22 @@ onMounted(async () => {
                       <VTextField v-model="templateData.area.IND" label="印度" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
-                      <VTextField v-model="templateData.area.SEA" label="东南亚" type="text" />
+                      <VTextField v-model="templateData.area.MYS" label="马来西亚" type="text" />
+                    </VCol>
+                    <VCol cols="12" sm="6" md="4" lg="3">
+                      <VTextField v-model="templateData.area.MMR" label="缅甸" type="text" />
+                    </VCol>
+                    <VCol cols="12" sm="6" md="4" lg="3">
+                      <VTextField v-model="templateData.area.PHL" label="菲律宾" type="text" />
+                    </VCol>
+                    <VCol cols="12" sm="6" md="4" lg="3">
+                      <VTextField v-model="templateData.area.SGP" label="新加坡" type="text" />
+                    </VCol>
+                    <VCol cols="12" sm="6" md="4" lg="3">
+                      <VTextField v-model="templateData.area.THA" label="泰国" type="text" />
+                    </VCol>
+                    <VCol cols="12" sm="6" md="4" lg="3">
+                      <VTextField v-model="templateData.area.VNM" label="越南" type="text" />
                     </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
                       <VTextField v-model="templateData.area.OTHER" label="其他" type="text" />
