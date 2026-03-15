@@ -5,8 +5,12 @@ import MgtvView from '@/views/collect/MgtvView.vue'
 import YoukuView from '@/views/collect/YoukuView.vue'
 import IQiyiView from '@/views/collect/IQiyiView.vue'
 import BilibiliView from '@/views/collect/BilibiliView.vue'
+import YspView from '@/views/collect/YspView.vue'
 import ExtraSourceView from '@/views/collect/ExtraSourceView.vue'
 import type { DiscoverSource } from '@/api/types'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
@@ -15,11 +19,12 @@ const activeTab = ref((route.query.tab as string) || 'tencent')
 const extraDiscoverSources = ref<DiscoverSource[]>([])
 
 const baseTabs = [
-  { tab: 'tencent', title: '腾讯视频' },
-  { tab: 'mgtv', title: '芒果TV' },
-  { tab: 'iqiyi', title: '爱奇艺' },
-  { tab: 'youku', title: '优酷' },
-  { tab: 'bilibili', title: '哔哩哔哩' },
+  { tab: 'tencent', title: t('collect.tencentTab') },
+  { tab: 'mgtv', title: t('collect.mgtvTab') },
+  { tab: 'iqiyi', title: t('collect.iqiyiTab') },
+  { tab: 'youku', title: t('collect.youkuTab') },
+  { tab: 'bilibili', title: t('collect.bilibiliTab') },
+  { tab: 'ysp', title: t('collect.yspTab') },
 ]
 
 function jumpTab(tab: string) {
@@ -57,29 +62,29 @@ onActivated(loadExtraDiscoverSources)
   <div class="collect-page">
     <div class="collect-main-tabs-wrap">
       <VTabs v-model="activeTab" show-arrows hide-slider class="collect-main-tabs">
-      <VTab
-        v-for="item in baseTabs"
-        :key="item.tab"
-        :value="item.tab"
-        class="collect-main-tab"
-        @click="jumpTab(item.tab)"
-      >
-        <span class="collect-main-tab-text">
-          {{ item.title }}
-        </span>
-      </VTab>
+        <VTab
+          v-for="item in baseTabs"
+          :key="item.tab"
+          :value="item.tab"
+          class="collect-main-tab"
+          @click="jumpTab(item.tab)"
+        >
+          <span class="collect-main-tab-text">
+            {{ item.title }}
+          </span>
+        </VTab>
 
-      <VTab
-        v-for="item in extraDiscoverSources"
-        :key="item.mediaid_prefix"
-        :value="item.mediaid_prefix"
-        class="collect-main-tab"
-        @click="jumpTab(item.mediaid_prefix)"
-      >
-        <span class="collect-main-tab-text">
-          {{ item.name }}
-        </span>
-      </VTab>
+        <VTab
+          v-for="item in extraDiscoverSources"
+          :key="item.mediaid_prefix"
+          :value="item.mediaid_prefix"
+          class="collect-main-tab"
+          @click="jumpTab(item.mediaid_prefix)"
+        >
+          <span class="collect-main-tab-text">
+            {{ item.name }}
+          </span>
+        </VTab>
       </VTabs>
     </div>
 
@@ -109,11 +114,12 @@ onActivated(loadExtraDiscoverSources)
           <div><BilibiliView /></div>
         </transition>
       </VWindowItem>
-      <VWindowItem
-        v-for="item in extraDiscoverSources"
-        :key="item.mediaid_prefix"
-        :value="item.mediaid_prefix"
-      >
+      <VWindowItem value="ysp">
+        <transition name="fade-slide" appear>
+          <div><YspView /></div>
+        </transition>
+      </VWindowItem>
+      <VWindowItem v-for="item in extraDiscoverSources" :key="item.mediaid_prefix" :value="item.mediaid_prefix">
         <transition name="fade-slide" appear>
           <div><ExtraSourceView :source="item" /></div>
         </transition>
@@ -125,23 +131,23 @@ onActivated(loadExtraDiscoverSources)
 .collect-main-tabs-wrap {
   position: sticky;
   z-index: 5;
-  inset-block-start: 0;
-  padding-top: 8px;
-  padding-bottom: 2px;
   backdrop-filter: blur(6px);
+  inset-block-start: 0;
+  padding-block: 8px 2px;
 }
 
 .collect-main-tabs {
   border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   border-radius: 14px;
   background: rgba(var(--v-theme-surface), 0.94);
-  min-height: 56px;
-  padding: 8px 10px;
+  min-block-size: 56px;
+  padding-block: 8px;
+  padding-inline: 10px;
 }
 
 :deep(.collect-main-tab) {
   border-radius: 12px;
-  min-height: 42px;
+  min-block-size: 42px;
   padding-inline: 16px;
   transition: all 0.2s ease;
 }
@@ -162,7 +168,7 @@ onActivated(loadExtraDiscoverSources)
 }
 
 .collect-main-tab-text {
-  min-width: 72px;
+  min-inline-size: 72px;
   text-align: center;
 }
 </style>

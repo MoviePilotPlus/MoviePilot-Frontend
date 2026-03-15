@@ -970,6 +970,8 @@ export default {
     mgtvTab: '芒果TV',
     youkuTab: '優酷',
     iqiyiTab: '愛奇藝',
+    bilibiliTab: '嗶哩嗶哩',
+    yspTab: '央視頻電視',
     keyword: '關鍵詞',
     siteInclude: '包含站點',
     siteNotInclude: '排除站點',

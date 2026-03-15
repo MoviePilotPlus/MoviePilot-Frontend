@@ -30,7 +30,6 @@ const showProgressInfo = ref(false)
 function getPercentage() {
   if (!props.progress) return 0
   return props.progress.percent ?? 0
-  return 0
 }
 // 来源角标字典
 const siteIconDict: { [key: string]: any } = {
@@ -42,9 +41,9 @@ function showProgressInfoDialog() {
 // 速度
 function getSpeedText() {
   if (props.progress) {
-    return `${formatFileSize(props.progress?.downloaded_size || 0)} / ${formatFileSize(props.progress?.total_size || 0)}  ↓ ${formatFileSize(props.progress?.speed)}/s`
+    return `${formatFileSize(props.progress?.downloaded_size || 0)} / ${formatFileSize(props.progress?.total_size || 0)}  ↓ ${formatFileSize(props.progress?.speed || 0)}/s`
   }
-  return `${formatFileSize(props.info?.downloaded_size || 0)} / ${formatFileSize(props.info?.total_size || 0)}  ↓ ${formatFileSize(props.info?.speed)}/s`
+  return `${formatFileSize(props.info?.downloaded_size || 0)} / ${formatFileSize(props.info?.total_size || 0)}  ↓ ${formatFileSize(props.info?.speed || 0)}/s`
 }
 function getFormatedTitle() {
   // 由于 padStart 是字符串方法，需要将 number 类型的 season 转换为字符串
@@ -69,8 +68,21 @@ function getChipColor() {
 function getSatus() {
   console.log('props.progress: ', props.progress)
   if (props.progress) {
-    console.log('downloadStatus:', downloadStatus[props.progress.state as keyof typeof downloadStatus])
-    return downloadStatus[props.progress.state as keyof typeof downloadStatus]
+    // 后端返回的是英文状态值，需要映射到中文
+    const statusMap: Record<string, string> = {
+      'Init': '初始化',
+      'DownloadCreated': '创建完成',
+      'DownloadPending': '等待下载',
+      'Downloading': '正在下载',
+      'DownloadError': '下载出错',
+      'DownloadDone': '下载完成',
+      'DownloadStop': '下载停止',
+      'InfoCollected': '信息采集',
+      'Renamed': '重命名',
+      'Moved': '已转移',
+      'Finished': '完成'
+    }
+    return statusMap[props.progress.state] || props.progress.state
   }
   return downloadStatus[props.info.status as keyof typeof downloadStatus]
 }

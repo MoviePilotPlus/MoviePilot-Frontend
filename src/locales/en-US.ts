@@ -974,6 +974,8 @@ export default {
     mgtvTab: 'MGTV',
     youkuTab: 'Youku',
     iqiyiTab: 'iQiyi',
+    bilibiliTab: 'Bilibili',
+    yspTab: 'CCTV Video',
     keyword: 'Keyword',
     siteInclude: 'Included Sites',
     siteNotInclude: 'Excluded Sites',
