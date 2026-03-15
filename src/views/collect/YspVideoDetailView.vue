@@ -47,10 +47,9 @@ const teamList = ref<any[]>([])
 
 // 清晰度选项
 const definitionOptions = ref<any[]>([
-  { name: 'sd', display_name: '标清' },
-  { name: 'hd', display_name: '高清' },
-  { name: 'fhd', display_name: '超清' },
-  { name: '4k', display_name: '4K' }
+  { fn: 'hd', fnname: '高清', defnname: '高清', defnrate: '540P', encrypt: 0 },
+  { fn: 'shd', fnname: '超清', defnname: '超清', defnrate: '720P', encrypt: 0 },
+  { fn: 'fhd', fnname: '蓝光', defnname: '蓝光', defnrate: '1080P', encrypt: 0 }
 ])
 
 // ptgen信息
@@ -312,6 +311,11 @@ async function getPtgen(url: string) {
     // 处理可能为 null 的情况，确保赋值给 addForm.value.overview 的是 string 类型
     addForm.value.overview = ptgen.value.description || addForm.value.overview || ''
     addForm.value.year = ptgen.value.year || addForm.value.year || ''
+    // 更新封面和海报
+    if (ptgen.value.poster) {
+      addForm.value.cover = ptgen.value.poster
+      addForm.value.poster = ptgen.value.poster
+    }
     isLoading.value = false
     update_subtitle()
   } catch (error) {
@@ -426,13 +430,23 @@ async function getLiveProgramDoubanInfo(parsedYear?: string) {
 
     // 处理清晰度列表
     if (result.definition_list && result.definition_list.length > 0) {
-      definitionOptions.value = result.definition_list.map((d: any) => ({
-        name: d.name,
-        display_name: d.display_name || d.name
-      }))
-      // 默认选择第一个清晰度
-      if (definitionOptions.value.length > 0) {
-        addForm.value.defn = definitionOptions.value[0].name
+      definitionOptions.value = result.definition_list
+      // 按优先级选择默认清晰度：sfhd > fhd > shd > hd
+      const priorityOrder = ['sfhd', 'fhd', 'shd', 'hd']
+      let selectedDefn = null
+      for (const priority of priorityOrder) {
+        const found = definitionOptions.value.find(d => d.fn === priority)
+        if (found) {
+          selectedDefn = found.fn
+          break
+        }
+      }
+      // 如果都没找到，选择第一个
+      if (!selectedDefn && definitionOptions.value.length > 0) {
+        selectedDefn = definitionOptions.value[0].fn
+      }
+      if (selectedDefn) {
+        addForm.value.defn = selectedDefn
       }
     }
 
@@ -811,6 +825,20 @@ const goBack = () => {
 
           <div class="form-row">
             <div class="form-item full-width">
+              <label>清晰度</label>
+              <div class="definition-selector">
+                <label v-for="defn in definitionOptions" :key="defn.fn" class="definition-radio">
+                  <input type="radio" :value="defn.fn" v-model="addForm.defn" />
+                  <span class="definition-name">{{ defn.fnname }}</span>
+                  <span v-if="defn.defnrate" class="definition-rate">({{ defn.defnrate }})</span>
+                  <span v-if="defn.encrypt === 1" class="encrypt-tag">加密</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-item full-width">
               <label>下载站点</label>
               <div class="site-selector">
                 <label v-for="site in siteList" :key="site.id" class="site-checkbox">
@@ -818,17 +846,6 @@ const goBack = () => {
                   <span>{{ site.name }}</span>
                 </label>
               </div>
-            </div>
-          </div>
-          
-          <div class="form-row">
-            <div class="form-item">
-              <label>清晰度</label>
-              <select v-model="addForm.defn" class="form-select">
-                <option v-for="defn in definitionOptions" :key="defn.name" :value="defn.name">
-                  {{ defn.display_name || defn.name }}
-                </option>
-              </select>
             </div>
           </div>
 
@@ -1153,6 +1170,64 @@ const goBack = () => {
   block-size: 16px;
   inline-size: 16px;
   cursor: pointer;
+  color-scheme: light;
+}
+
+/* 清晰度选择器样式 */
+.definition-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.definition-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 6px 12px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 6px;
+  background: rgba(var(--v-theme-surface), 1);
+  transition: all 0.2s ease;
+}
+
+.definition-radio:hover {
+  background: rgba(var(--v-theme-primary), 0.05);
+  border-color: rgba(var(--v-theme-primary), 0.3);
+}
+
+.definition-radio:has(input:checked) {
+  background: rgba(var(--v-theme-primary), 0.1);
+  border-color: rgba(var(--v-theme-primary), 0.5);
+  color: rgb(var(--v-theme-primary));
+}
+
+.definition-radio input[type="radio"] {
+  accent-color: rgb(var(--v-theme-primary));
+  block-size: 16px;
+  inline-size: 16px;
+  cursor: pointer;
+  color-scheme: light;
+}
+
+.definition-name {
+  font-weight: 500;
+}
+
+.definition-rate {
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 14px;
+}
+
+.encrypt-tag {
+  background: rgba(255, 107, 107, 0.1);
+  color: #ff6b6b;
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
 }
 
 /* 标签选择器样式 */
@@ -1191,6 +1266,7 @@ const goBack = () => {
   block-size: 16px;
   inline-size: 16px;
   cursor: pointer;
+  color-scheme: light;
 }
 
 /* 带图标的输入框 */

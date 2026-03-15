@@ -117,9 +117,14 @@ const fetchChannels = async () => {
       selectedChannel.value = channels.value[0]
       fetchPrograms(selectedChannel.value.livepid)
     }
-  } catch (err) {
-    console.error('获取频道列表失败:', err)
-    error.value = '获取频道列表失败'
+  } catch (err: any) {
+    // 如果是请求被取消，不显示错误
+    if (err.message === 'Request cancelled' || err.message === 'canceled') {
+      console.log('请求被取消，忽略')
+    } else {
+      console.error('获取频道列表失败:', err)
+      error.value = '获取频道列表失败'
+    }
   } finally {
     loading.value = false
   }
@@ -133,8 +138,13 @@ const fetchPrograms = async (channelId: string) => {
   try {
     const date = currentDate.value.format('YYYYMMDD')
     programList.value = await api.get(`ysp/get_epg?channel_id=${channelId}&date=${date}`)
-  } catch (err) {
-    console.error('获取节目单失败:', err)
+  } catch (err: any) {
+    // 如果是请求被取消，不显示错误
+    if (err.message === 'Request cancelled' || err.message === 'canceled') {
+      console.log('请求被取消，忽略')
+    } else {
+      console.error('获取节目单失败:', err)
+    }
   } finally {
     programLoading.value = false
   }
