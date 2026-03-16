@@ -141,7 +141,7 @@ export const tagOptions = {
 }
 
 export const mediaCateOptions = {
-  Movie: '电影',
+  Movie: '单片',
   TV: '剧集',
 }
 

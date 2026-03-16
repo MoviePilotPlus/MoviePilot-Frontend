@@ -345,22 +345,53 @@ function openImdbDetail(imdbId: string) {
   window.open(`https://www.imdb.com/title/${imdbId}/`, '_blank')
 }
 
+// 格式化日期为中文格式
+function formatDateToChinese(dateStr: string): string {
+  if (!dateStr) return ''
+  try {
+    let date: Date
+    if (dateStr.includes(' ')) {
+      const [datePart] = dateStr.split(' ')
+      date = new Date(datePart)
+    } else if (dateStr.includes('T')) {
+      date = new Date(dateStr)
+    } else {
+      date = new Date(dateStr)
+    }
+    
+    if (isNaN(date.getTime())) return ''
+    
+    const year = date.getFullYear()
+    const month = date.getMonth() + 1
+    const day = date.getDate()
+    return `${year}年${month}月${day}日`
+  } catch (e) {
+    console.error('日期格式化错误:', e)
+    return ''
+  }
+}
+
 // 更新副标题
 function update_subtitle() {
   let additionalInfo = ''
   
   // 构建补充的副标题信息
-  if (addForm.value.year) {
-    additionalInfo = `${addForm.value.year}年`
+  if (addForm.value.episode) {
+    // 存在集数
+    const season = addForm.value.season || '1'
+    additionalInfo = `第${season}季第${addForm.value.episode}集`
+  } else if (addForm.value.issue) {
+    // 不存在集数，存在期数
+    additionalInfo = `${addForm.value.year}年第${addForm.value.issue}期`
+  } else if (addForm.value.type === 'TV') {
+    // 期数和集数都不存在，使用节目开始日期
+    const dateStr = mediaProps.startTime || liveParams.startTime
+    const formattedDate = formatDateToChinese(dateStr)
+    if (formattedDate) {
+      additionalInfo = formattedDate
+    }
   }
-  
-  if (addForm.value.issue) {
-    const issueNum = addForm.value.issue.padStart(3, '0')
-    additionalInfo += ` 第${issueNum}期`
-  } else if (addForm.value.episode) {
-    const epNum = addForm.value.episode.padStart(2, '0')
-    additionalInfo += ` 第${epNum}集`
-  }
+  // 单片类型不需要补充副标题信息
   
   // 如果有补充信息，在原有基础上添加
   if (additionalInfo) {
