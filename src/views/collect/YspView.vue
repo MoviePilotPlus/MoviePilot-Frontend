@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, onActivated } from 'vue'
 import api from '@/api'
 import { useRouter } from 'vue-router'
 import dayjs from 'dayjs'
@@ -384,6 +384,11 @@ const isProgramClickable = (program: any) => {
 
 onMounted(() => {
   generateDateRange()
+  fetchChannels()
+})
+
+onActivated(() => {
+  // 从别的页面回来时，重新获取频道列表
   fetchChannels()
 })
 </script>

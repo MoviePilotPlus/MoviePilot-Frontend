@@ -173,6 +173,9 @@ const tagOptionsList = computed(() => {
 // 优化图片 URL，将高度 h/120 替换为 h/9999
 function optimizeImageUrl(url: string): string {
   if (!url) return url
+  url = url.replace(/\/h\/\d+/, '/h/9999')
+  if (url?.startsWith('http'))
+    return `${import.meta.env.VITE_API_BASE_URL}system/img/1?imgurl=${encodeURIComponent(url)}&cache=true`
   return url.replace(/\/h\/\d+/, '/h/9999')
 }
 
