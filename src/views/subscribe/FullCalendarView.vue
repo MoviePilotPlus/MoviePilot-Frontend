@@ -113,22 +113,53 @@ async function eventsHander(subscribe: Subscribe) {
   }
 }
 
-// 调用API查询所有订阅
+// 处理预约任务
+async function reservedTasksHandler() {
+  try {
+    const reservedTasks: any[] = await api.get('collect/reserved/tasks')
+    
+    return reservedTasks.map(task => ({
+      title: task.cn_title || task.name || '预约节目',
+      subtitle: task.reserve_start_time ? `${new Date(task.reserve_start_time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} - ${new Date(task.reserve_end_time || task.reserve_start_time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}` : '',
+      start: task.reserve_start_time ? new Date(task.reserve_start_time) : null,
+      end: task.reserve_end_time ? new Date(task.reserve_end_time) : null,
+      allDay: false,
+      posterPath: task.poster,
+      mediaType: '预约',
+      len: 1,
+      isReserved: true,
+      channelName: task.channel_name || '',
+    })).filter(event => event.start)
+  } catch (error) {
+    console.error('获取预约任务失败:', error)
+    return []
+  }
+}
+
+// 调用API查询所有订阅和预约任务
 async function getSubscribes() {
   if (!isLoaded.value) progressDialog.value = true
   try {
-    // 订阅
     loading.value = true
+    
+    // 获取订阅事件
     const subscribes: Subscribe[] = await api.get('subscribe/')
-    loading.value = false
     const subEvents = await Promise.allSettled(subscribes.map(async sub => eventsHander(sub)))
     const succEvents = subEvents.filter(result => result.status === 'fulfilled').map(result => result.value)
-    calendarOptions.value.events = succEvents.flat().filter(event => event.start) as EventSourceInput
+    
+    // 获取预约任务
+    const reservedEvents = await reservedTasksHandler()
+    
+    // 合并事件
+    calendarOptions.value.events = [...succEvents.flat(), ...reservedEvents].filter(event => event.start) as EventSourceInput
+    
     isLoaded.value = true
   } catch (error) {
     console.error(error)
+  } finally {
+    loading.value = false
+    progressDialog.value = false
   }
-  progressDialog.value = false
 }
 
 // 页面加载时调用API查询所有订阅
@@ -147,7 +178,12 @@ onActivated(() => {
   <FullCalendar :options="calendarOptions">
     <template #eventContent="arg">
       <div class="hidden md:block overflow-hidden">
-        <VCard>
+        <VCard 
+          :color="arg.event.extendedProps.isReserved ? undefined : undefined"
+          :class="arg.event.extendedProps.isReserved ? 'reserved-task-card' : ''"
+          variant="elevated"
+          :elevation="arg.event.extendedProps.isReserved ? 2 : 0"
+        >
           <div class="d-flex justify-space-between flex-nowrap flex-row">
             <div class="ma-auto">
               <VImg
@@ -165,19 +201,29 @@ onActivated(() => {
                 </template>
               </VImg>
             </div>
-            <div>
+            <div class="flex-1 min-w-0">
               <VCardSubtitle class="pa-1 px-2 font-bold break-words whitespace-break-spaces">
                 {{ arg.event.title }}
               </VCardSubtitle>
-              <VCardText v-if="arg.event.extendedProps.subtitle" class="pa-0 px-2 break-words">
-                {{ t('calendar.episode', { number: arg.event.extendedProps.subtitle }) }}
+              <div class="pa-0 px-2">
+                <VChip v-if="arg.event.extendedProps.isReserved" size="x-small" color="primary" variant="tonal" class="mb-1">
+                  ⏰ 预约录制
+                </VChip>
+              </div>
+              <VCardText v-if="arg.event.extendedProps.subtitle" class="pa-0 px-2 break-words text-sm">
+                {{ arg.event.extendedProps.isReserved 
+                  ? arg.event.extendedProps.subtitle 
+                  : t('calendar.episode', { number: arg.event.extendedProps.subtitle }) }}
+              </VCardText>
+              <VCardText v-if="arg.event.extendedProps.channelName" class="pa-0 px-2 break-words text-xs opacity-75">
+                📺 {{ arg.event.extendedProps.channelName }}
               </VCardText>
             </div>
           </div>
         </VCard>
       </div>
       <div class="md:hidden">
-        <VTooltip :text="`${arg.event.title} ${t('calendar.episode', { number: arg.event.extendedProps.subtitle })}`">
+        <VTooltip :text="`${arg.event.title} ${arg.event.extendedProps.isReserved ? '' : t('calendar.episode', { number: arg.event.extendedProps.subtitle })} ${arg.event.extendedProps.isReserved ? '(预约)' : ''}`">
           <template #activator="{ props }">
             <VImg
               height="60"
@@ -185,7 +231,7 @@ onActivated(() => {
               :src="arg.event.extendedProps.posterPath"
               v-bind="props"
               aspect-ratio="2/3"
-              class="object-cover rounded ring-gray-500"
+              :class="`object-cover rounded ring-gray-500 ${arg.event.extendedProps.isReserved ? 'ring-2 ring-warning' : ''}`"
               cover
             >
               <template #placeholder>
@@ -196,11 +242,11 @@ onActivated(() => {
               <VChip
                 v-if="arg.event.extendedProps.len > 1"
                 variant="elevated"
-                color="primary"
+                :color="arg.event.extendedProps.isReserved ? 'warning' : 'primary'"
                 size="x-small"
                 class="absolute right-0 top-0"
               >
-                {{ arg.event.extendedProps.len }}
+                {{ arg.event.extendedProps.isReserved ? '预约' : arg.event.extendedProps.len }}
               </VChip>
             </VImg>
           </template>
@@ -491,6 +537,17 @@ onActivated(() => {
 
 .v-application .fc-v-event {
   background-color: transparent;
+}
+
+.reserved-task-card {
+  border-left: 4px solid rgb(var(--v-theme-primary));
+  background: linear-gradient(135deg, 
+    rgba(var(--v-theme-primary), 0.05) 0%, 
+    rgba(var(--v-theme-surface), 1) 100%);
+}
+
+.reserved-task-card .v-card {
+  background-color: rgba(var(--v-theme-surface-variant), 0.3);
 }
 
 @media (width <= 776px) {
