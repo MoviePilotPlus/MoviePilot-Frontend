@@ -177,24 +177,26 @@ const recordProgram = (program: any) => {
   const programStart = new Date(startTime)
   const isReserved = programStart > now
 
-  router.push({
-    path: '/collect/video',
-    query: {
-      source: 'ysp',
-      mediaid: cnlid,
-      title: programName,
-      cnlid,
-      name: channelName,
-      livepid,
-      defn,
-      programName,
-      startTime,
-      endTime,
-      type: 'TV',
-      cate: 'TV',
-      isReserved: isReserved.toString(),
-    },
+  // 构建查询字符串
+  const queryParams = new URLSearchParams({
+    source: 'ysp',
+    mediaid: cnlid,
+    title: programName,
+    cnlid,
+    name: channelName,
+    livepid,
+    defn,
+    programName,
+    startTime,
+    endTime,
+    type: 'TV',
+    cate: 'TV',
+    isReserved: isReserved.toString(),
   })
+
+  // 在新窗口打开
+  const newWindowUrl = `${window.location.origin}/#/collect/video?${queryParams.toString()}`
+  window.open(newWindowUrl, '_blank')
 }
 
 // 预览直播

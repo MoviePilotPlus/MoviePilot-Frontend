@@ -662,6 +662,16 @@ const submitForm = async () => {
   }
 }
 
+// 制作组选择变化时更新 copyright
+const onTeamChange = () => {
+  if (addForm.value.team) {
+    const teamItem = teamList.value.find(item => item.team === addForm.value.team)
+    if (teamItem) {
+      addForm.value.copyright = teamItem.copyright
+    }
+  }
+}
+
 // 返回上一页
 const goBack = () => {
   router.back()
@@ -866,6 +876,18 @@ const goBack = () => {
                   <span class="definition-name">{{ defn.fnname }}</span>
                   <span v-if="defn.defnrate" class="definition-rate">({{ defn.defnrate }})</span>
                   <span v-if="defn.encrypt === 1" class="encrypt-tag">加密</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-item full-width">
+              <label>制作组</label>
+              <div class="team-selector">
+                <label v-for="team in teamList" :key="team.team" class="team-radio">
+                  <input type="radio" :value="team.team" v-model="addForm.team" @change="onTeamChange" />
+                  <span class="team-name">{{ team.team }}</span>
                 </label>
               </div>
             </div>
@@ -1262,6 +1284,49 @@ const goBack = () => {
   padding: 1px 6px;
   border-radius: 4px;
   margin-left: 4px;
+}
+
+/* 制作组选择器样式 */
+.team-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.team-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 6px 12px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 6px;
+  background: rgba(var(--v-theme-surface), 1);
+  transition: all 0.2s ease;
+}
+
+.team-radio:hover {
+  background: rgba(var(--v-theme-primary), 0.05);
+  border-color: rgba(var(--v-theme-primary), 0.3);
+}
+
+.team-radio:has(input:checked) {
+  background: rgba(var(--v-theme-primary), 0.1);
+  border-color: rgba(var(--v-theme-primary), 0.5);
+  color: rgb(var(--v-theme-primary));
+}
+
+.team-radio input[type="radio"] {
+  accent-color: rgb(var(--v-theme-primary));
+  block-size: 16px;
+  inline-size: 16px;
+  cursor: pointer;
+  color-scheme: light;
+}
+
+.team-name {
+  font-weight: 500;
 }
 
 /* 标签选择器样式 */
