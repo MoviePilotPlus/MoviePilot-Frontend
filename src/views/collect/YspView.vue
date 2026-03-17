@@ -90,6 +90,10 @@ const programLoading = ref(false)
 const currentDate = ref(dayjs())
 const dateRange = ref<dayjs.Dayjs[]>([])
 
+// 批量选择相关
+const selectedPrograms = ref<any[]>([])
+const isBatchMode = ref(false)
+
 // 直播预览相关
 const previewDialog = ref(false)
 const previewLoading = ref(false)
@@ -165,9 +169,45 @@ const switchDate = (date: dayjs.Dayjs) => {
   }
 }
 
-// 录制节目
+// 切换节目选择状态
+const toggleProgramSelection = (program: any) => {
+  const index = selectedPrograms.value.findIndex(p => p.programId === program.programId)
+  if (index > -1) {
+    selectedPrograms.value.splice(index, 1)
+  } else {
+    selectedPrograms.value.push({
+      ...program,
+      channel: selectedChannel.value
+    })
+  }
+}
+
+// 检查节目是否被选中
+const isProgramSelected = (program: any) => {
+  return selectedPrograms.value.some(p => p.programId === program.programId)
+}
+
+// 清除所有选择
+const clearAllSelections = () => {
+  selectedPrograms.value = []
+  isBatchMode.value = false
+}
+
+// 切换批量模式
+const toggleBatchMode = () => {
+  isBatchMode.value = !isBatchMode.value
+  if (!isBatchMode.value) {
+    selectedPrograms.value = []
+  }
+}
+
+// 录制单个节目
 const recordProgram = (program: any) => {
   if (!selectedChannel.value) return
+  if (isBatchMode.value) {
+    toggleProgramSelection(program)
+    return
+  }
 
   const { cnlid, name: channelName, livepid, defn } = selectedChannel.value
   const { name: programName, startTime, endTime } = program
@@ -197,6 +237,18 @@ const recordProgram = (program: any) => {
   // 在新窗口打开
   const newWindowUrl = `${window.location.origin}/#/collect/video?${queryParams.toString()}`
   window.open(newWindowUrl, '_blank')
+}
+
+// 跳转到批量预约页面
+const goToBatchReserve = () => {
+  if (selectedPrograms.value.length === 0) {
+    return
+  }
+  
+  // 将选择的节目数据传递给批量预约页面
+  const batchData = JSON.stringify(selectedPrograms.value)
+  sessionStorage.setItem('batchReserveData', batchData)
+  router.push('/collect/batch-reserve')
 }
 
 // 预览直播
@@ -399,6 +451,32 @@ onActivated(() => {
   <div class="ysp-view">
     <div class="ysp-header">
       <h1 class="text-h4 font-bold">央视频电视</h1>
+      <div class="header-actions">
+        <VBtn 
+          v-if="!isBatchMode" 
+          color="primary" 
+          variant="tonal" 
+          @click="toggleBatchMode"
+        >
+          批量预约
+        </VBtn>
+        <template v-else>
+          <VBtn 
+            color="secondary" 
+            variant="tonal" 
+            @click="clearAllSelections"
+          >
+            取消
+          </VBtn>
+          <VBtn 
+            color="primary" 
+            :disabled="selectedPrograms.length === 0"
+            @click="goToBatchReserve"
+          >
+            确认 ({{ selectedPrograms.length }})
+          </VBtn>
+        </template>
+      </div>
     </div>
 
     <div class="ysp-content">
@@ -467,9 +545,18 @@ onActivated(() => {
                 'program-item--past': getProgramStatus(program) === 'past',
                 'program-item--current': getProgramStatus(program) === 'current',
                 'program-item--future': getProgramStatus(program) === 'future',
+                'program-item--selected': isProgramSelected(program),
               }"
               @click="isProgramClickable(program) && recordProgram(program)"
             >
+              <div v-if="isBatchMode" class="program-checkbox">
+                <input 
+                  type="checkbox" 
+                  :checked="isProgramSelected(program)"
+                  :disabled="getProgramStatus(program) === 'past'"
+                  @click.stop="getProgramStatus(program) !== 'past' && toggleProgramSelection(program)"
+                />
+              </div>
               <div class="program-time">
                 <div class="program-start-time">{{ program.startTimeStr }}</div>
                 <div class="program-end-time">{{ program.endTimeStr }}</div>
@@ -517,6 +604,15 @@ onActivated(() => {
 
 .ysp-header {
   margin-block-end: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .ysp-content {
@@ -699,6 +795,33 @@ onActivated(() => {
   gap: 16px;
   grid-template-columns: 120px 1fr;
   transition: all 0.2s ease;
+}
+
+.program-item:has(.program-checkbox) {
+  grid-template-columns: 40px 120px 1fr;
+}
+
+.program-item--selected {
+  border-color: rgba(var(--v-theme-primary), 0.5);
+  background: rgba(var(--v-theme-primary), 0.1);
+}
+
+.program-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.program-checkbox input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  accent-color: rgb(var(--v-theme-primary));
+  cursor: pointer;
+}
+
+.program-checkbox input[type="checkbox"]:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .program-item:hover {

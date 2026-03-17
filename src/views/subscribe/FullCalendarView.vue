@@ -179,10 +179,10 @@ onActivated(() => {
     <template #eventContent="arg">
       <div class="hidden md:block overflow-hidden">
         <VCard 
-          :color="arg.event.extendedProps.isReserved ? undefined : undefined"
-          :class="arg.event.extendedProps.isReserved ? 'reserved-task-card' : ''"
+          :color="undefined"
+          :class="''"
           variant="elevated"
-          :elevation="arg.event.extendedProps.isReserved ? 2 : 0"
+          :elevation="0"
         >
           <div class="d-flex justify-space-between flex-nowrap flex-row">
             <div class="ma-auto">
@@ -202,22 +202,24 @@ onActivated(() => {
               </VImg>
             </div>
             <div class="flex-1 min-w-0">
-              <VCardSubtitle class="pa-1 px-2 font-bold break-words whitespace-break-spaces">
-                {{ arg.event.title }}
-              </VCardSubtitle>
-              <div class="pa-0 px-2">
-                <VChip v-if="arg.event.extendedProps.isReserved" size="x-small" color="primary" variant="tonal" class="mb-1">
-                  ⏰ 预约录制
-                </VChip>
-              </div>
-              <VCardText v-if="arg.event.extendedProps.subtitle" class="pa-0 px-2 break-words text-sm">
+              <VTooltip :text="arg.event.title">
+                <template #activator="{ props }">
+                  <VCardSubtitle v-bind="props" class="pa-1 px-2 font-bold text-truncate">
+                    {{ arg.event.title }}
+                  </VCardSubtitle>
+                </template>
+              </VTooltip>
+
+              <VCardText v-if="arg.event.extendedProps.subtitle" class="pa-0 px-2 break-words text-xs">
                 {{ arg.event.extendedProps.isReserved 
                   ? arg.event.extendedProps.subtitle 
                   : t('calendar.episode', { number: arg.event.extendedProps.subtitle }) }}
               </VCardText>
-              <VCardText v-if="arg.event.extendedProps.channelName" class="pa-0 px-2 break-words text-xs opacity-75">
-                📺 {{ arg.event.extendedProps.channelName }}
-              </VCardText>
+              <div class="pa-0 pt-1 pl-1">
+                <VChip v-if="arg.event.extendedProps.isReserved" size="x-small" color="primary" variant="tonal" class="mb-1">
+                  ⏰ 预约录制
+                </VChip>
+              </div>
             </div>
           </div>
         </VCard>
@@ -539,6 +541,7 @@ onActivated(() => {
   background-color: transparent;
 }
 
+/* 预约录制卡片特殊样式已移除，保持与其他卡片一致
 .reserved-task-card {
   border-left: 4px solid rgb(var(--v-theme-primary));
   background: linear-gradient(135deg, 
@@ -548,6 +551,14 @@ onActivated(() => {
 
 .reserved-task-card .v-card {
   background-color: rgba(var(--v-theme-surface-variant), 0.3);
+}
+*/
+
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
 }
 
 @media (width <= 776px) {

@@ -73,6 +73,13 @@ const router = createRouter({
           },
         },
         {
+          path: '/collect/batch-reserve',
+          component: () => import('../pages/collect-batch-reserve.vue'),
+          meta: {
+            requiresAuth: true,
+          },
+        },
+        {
           path: '/video',
           component: () => import('../pages/video.vue'),
           meta: {
