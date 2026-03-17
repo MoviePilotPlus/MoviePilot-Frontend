@@ -47,6 +47,7 @@ const fixedInfo = reactive({
   defn: 'fhd',
   team: 'NoGroup',
   copyright: 'NoGroup',
+  source: 'HDTV',
   site_list: [] as number[],
   auto_download: true,
   auto_publish: true,
