@@ -38,7 +38,7 @@ async function loadTeamOptions() {
   } catch (error) {
     console.error('加载制作组数据失败:', error)
     // 加载失败时使用默认值
-    teamList.value = [{ team: 'ZimaWeb', copyright: 'Zima' }, { team: 'NoGroup', copyright: 'NoGroup' }]
+    teamList.value = [ { team: 'NoGroup', copyright: 'NoGroup' }]
   }
 }
 
