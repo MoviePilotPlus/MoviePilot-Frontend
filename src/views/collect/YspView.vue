@@ -121,6 +121,17 @@ const fetchChannels = async () => {
   try {
     channels.value = await api.get('ysp/get_channel_list')
     if (channels.value.length > 0) {
+      // 尝试从 localStorage 恢复上次选中的频道
+      const lastChannelId = localStorage.getItem('ysp_last_channel_id')
+      if (lastChannelId) {
+        const lastChannel = channels.value.find((ch: any) => ch.cnlid === lastChannelId || ch.livepid === lastChannelId)
+        if (lastChannel) {
+          selectedChannel.value = lastChannel
+          fetchPrograms(selectedChannel.value.livepid)
+          return
+        }
+      }
+      // 如果没有上次选中的频道或找不到，默认选中第一个
       selectedChannel.value = channels.value[0]
       fetchPrograms(selectedChannel.value.livepid)
     }
@@ -169,6 +180,8 @@ const fetchReservedTasks = async () => {
 // 切换频道
 const switchChannel = (channel: any) => {
   selectedChannel.value = channel
+  // 保存选中的频道到 localStorage
+  localStorage.setItem('ysp_last_channel_id', channel.cnlid || channel.livepid)
   fetchPrograms(channel.livepid)
 }
 
