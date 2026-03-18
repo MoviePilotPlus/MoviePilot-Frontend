@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive, provide } from 'vue'
+import { useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import api from '@/api'
 import { tagOptions, mediaCateOptions, categoryOptions } from '@/api/constants'
 import type { CollectCreate, PtgenInfo } from '@/api/types'
 import GroupTile from '@/components/GroupTitle.vue'
 import { doneNProgress, startNProgress } from '@/api/nprogress'
-import router from '@/router'
 import { useUserStore, useGlobalSettingsStore } from '@/stores'
+
+const router = useRouter()
 
 // 输入参数
 const mediaProps = defineProps({

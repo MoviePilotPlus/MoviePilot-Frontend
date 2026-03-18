@@ -94,6 +94,9 @@ const dateRange = ref<dayjs.Dayjs[]>([])
 const selectedPrograms = ref<any[]>([])
 const isBatchMode = ref(false)
 
+// 已预约任务
+const reservedTasks = ref<any[]>([])
+
 // 直播预览相关
 const previewDialog = ref(false)
 const previewLoading = ref(false)
@@ -151,6 +154,15 @@ const fetchPrograms = async (channelId: string) => {
     }
   } finally {
     programLoading.value = false
+  }
+}
+
+// 获取已预约任务
+const fetchReservedTasks = async () => {
+  try {
+    reservedTasks.value = await api.get('collect/reserved/tasks')
+  } catch (err: any) {
+    console.error('获取已预约任务失败:', err)
   }
 }
 
@@ -433,17 +445,37 @@ const getProgramStatus = (program: any) => {
 
 // 检查节目是否可点击
 const isProgramClickable = (program: any) => {
-  return getProgramStatus(program) !== 'past'
+  return getProgramStatus(program) !== 'past' && !isProgramReserved(program)
+}
+
+// 检查节目是否已预约
+const isProgramReserved = (program: any) => {
+  if (!selectedChannel.value) return false
+  const cnlid = selectedChannel.value.cnlid
+  const startTime = new Date(program.startTime).getTime()
+  const endTime = new Date(program.endTime).getTime()
+  
+  return reservedTasks.value.some(task => {
+    if (task.cnlid !== cnlid) return false
+    if (!task.reserve_start_time || !task.reserve_end_time) return false
+    
+    const taskStartTime = new Date(task.reserve_start_time).getTime()
+    const taskEndTime = new Date(task.reserve_end_time).getTime()
+    // 时间重叠判断
+    return startTime < taskEndTime && endTime > taskStartTime
+  })
 }
 
 onMounted(() => {
   generateDateRange()
   fetchChannels()
+  fetchReservedTasks()
 })
 
 onActivated(() => {
-  // 从别的页面回来时，重新获取频道列表
+  // 从别的页面回来时，重新获取频道列表和已预约任务
   fetchChannels()
+  fetchReservedTasks()
 })
 </script>
 
@@ -546,6 +578,7 @@ onActivated(() => {
                 'program-item--current': getProgramStatus(program) === 'current',
                 'program-item--future': getProgramStatus(program) === 'future',
                 'program-item--selected': isProgramSelected(program),
+                'program-item--reserved': isProgramReserved(program),
               }"
               @click="isProgramClickable(program) && recordProgram(program)"
             >
@@ -553,8 +586,8 @@ onActivated(() => {
                 <input 
                   type="checkbox" 
                   :checked="isProgramSelected(program)"
-                  :disabled="getProgramStatus(program) === 'past'"
-                  @click.stop="getProgramStatus(program) !== 'past' && toggleProgramSelection(program)"
+                  :disabled="getProgramStatus(program) === 'past' || isProgramReserved(program)"
+                  @click.stop="getProgramStatus(program) !== 'past' && !isProgramReserved(program) && toggleProgramSelection(program)"
                 />
               </div>
               <div class="program-time">
@@ -562,7 +595,10 @@ onActivated(() => {
                 <div class="program-end-time">{{ program.endTimeStr }}</div>
               </div>
               <div class="program-info">
-                <div class="program-name">{{ program.name }}</div>
+                <div class="program-name">
+                  {{ program.name }}
+                  <span v-if="isProgramReserved(program)" class="reserved-badge">已预约</span>
+                </div>
                 <div v-if="getProgramStatus(program) === 'current'" class="program-playing">
                   <span class="playing-dot"></span>
                   <span>正在播放</span>
@@ -899,6 +935,25 @@ onActivated(() => {
 
 .program-item--future {
   cursor: pointer;
+}
+
+.program-item--reserved {
+  opacity: 0.7;
+  cursor: not-allowed;
+  border-color: rgba(var(--v-theme-success), 0.3);
+  background: rgba(var(--v-theme-success), 0.05);
+}
+
+.reserved-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(var(--v-theme-success), 0.1);
+  color: rgb(var(--v-theme-success));
+  font-size: 12px;
+  font-weight: 500;
 }
 
 /* 正在播放动画 */
