@@ -47,6 +47,31 @@ const siteList = ref<Site[]>([])
 
 const ptgen = ref<PtgenInfo>({} as PtgenInfo)
 
+// 采集模式选项
+const collectModeOptions = {
+  'normal': '普通采集',
+  'episode': '分集采集'
+}
+
+// 采集模式（二选一）
+const collectMode = ref<'normal' | 'episode'>('normal')
+
+// 是否预约采集（开关）
+const isReserveCollect = ref(false)
+
+// 预约时间
+const reserveStartTime = ref<string | null>(null)
+const reserveStartDate = ref<string | null>(null)
+const reserveStartTimeOnly = ref<string | null>(null)
+
+// 生成预约时间字符串
+const reserveTimeFormatted = computed(() => {
+  if (reserveStartDate.value && reserveStartTimeOnly.value) {
+    return `${reserveStartDate.value} ${reserveStartTimeOnly.value}:00`
+  }
+  return null
+})
+
 // 制作组列表
 const teamList = ref<any[]>([])
 
@@ -285,7 +310,6 @@ async function addCollect() {
       }
     })
     // 处理总集数
-    // 原代码中 int 可能是想将值转换为整数，在 JavaScript 中可以使用 Number 或 parseInt 方法
     console.log('addForm.value.episodes_all: ', addForm.value.episodes_all)
     // 处理版权和制作组信息
     if (addForm.value.team) {
@@ -297,12 +321,38 @@ async function addCollect() {
     // 提交前检查参数
     console.log(addForm.value)
 
-
     if (!validateForm()) return
+    
+    // 检查预约时间
+    if (isReserveCollect.value && !reserveTimeFormatted.value) {
+      $toast.error('请选择预约时间！')
+      return
+    }
+    
     // 调用接口添加采集任务
     startNProgress()
-    // 请求API
-    const result: { [key: string]: any } = await api.post('collect/', addForm.value)
+    
+    let result: { [key: string]: any }
+    
+    // 构建基础请求数据
+    const baseData = {
+      ...addForm.value,
+      isReserved: isReserveCollect.value,
+      reserveStartTime: isReserveCollect.value ? reserveTimeFormatted.value : null
+    }
+    
+    // 根据采集模式选择不同的API
+    if (collectMode.value === 'episode') {
+      // 分集采集：每个剧集创建独立的采集任务
+      result = await api.post('collect/episode', {
+        ...baseData,
+        collect_mode: 'episode'
+      })
+    } else {
+      // 普通采集
+      result = await api.post('collect/', baseData)
+    }
+    
     // 添加采集任务状态
     if (result.success) {
       // 成功
@@ -946,6 +996,52 @@ function handleIgnore() {
               </v-switch>
             </v-col>
           </v-row>
+        </div>
+        <div class="mt-6">
+          <GroupTile title="采集模式" />
+          <VChipGroup column v-model="collectMode">
+            <VChip :color="collectMode === 'normal' ? 'primary' : ''" filter variant="outlined" value="normal">
+              普通采集
+            </VChip>
+            <VChip :color="collectMode === 'episode' ? 'primary' : ''" filter variant="outlined" value="episode">
+              分集采集
+            </VChip>
+          </VChipGroup>
+          <div v-if="collectMode === 'normal'" class="text-caption text-grey mt-1">
+            所有选中剧集作为一个采集任务
+          </div>
+          <div v-if="collectMode === 'episode'" class="text-caption text-grey mt-1">
+            每个选中的剧集创建一个独立的采集任务，便于单独管理
+          </div>
+        </div>
+        <div class="mt-4">
+          <v-switch v-model="isReserveCollect" :label="`预约采集`" hide-details color="primary" />
+          <div v-if="isReserveCollect" class="mt-3">
+            <v-row>
+              <v-col cols="6" md="4">
+                <VTextField
+                  v-model="reserveStartDate"
+                  label="预约日期"
+                  type="date"
+                  variant="outlined"
+                  density="compact"
+                  :min="new Date().toISOString().split('T')[0]"
+                />
+              </v-col>
+              <v-col cols="6" md="4">
+                <VTextField
+                  v-model="reserveStartTimeOnly"
+                  label="预约时间"
+                  type="time"
+                  variant="outlined"
+                  density="compact"
+                />
+              </v-col>
+            </v-row>
+            <div v-if="reserveTimeFormatted" class="text-caption text-primary mt-1">
+              任务将在 {{ reserveTimeFormatted }} 自动开始下载
+            </div>
+          </div>
         </div>
         <div class="mt-6">
           <GroupTile title="清晰度" />
