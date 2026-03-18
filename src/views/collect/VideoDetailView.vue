@@ -1015,33 +1015,38 @@ function handleIgnore() {
           </div>
         </div>
         <div class="mt-4">
-          <v-switch v-model="isReserveCollect" :label="`预约采集`" hide-details color="primary" />
-          <div v-if="isReserveCollect" class="mt-3">
-            <v-row>
-              <v-col cols="6" md="4">
+          <v-switch v-model="isReserveCollect" :label="`预约采集`" hide-details color="primary" density="compact" />
+          <v-slide-y-transition>
+            <div v-if="isReserveCollect" class="mt-4">
+              <div class="d-flex align-center ga-3 flex-wrap">
                 <VTextField
                   v-model="reserveStartDate"
                   label="预约日期"
                   type="date"
                   variant="outlined"
                   density="compact"
+                  hide-details
                   :min="new Date().toISOString().split('T')[0]"
+                  style="max-width: 180px;"
+                  class="reserve-date-input"
                 />
-              </v-col>
-              <v-col cols="6" md="4">
                 <VTextField
                   v-model="reserveStartTimeOnly"
                   label="预约时间"
                   type="time"
                   variant="outlined"
                   density="compact"
+                  hide-details
+                  style="max-width: 150px;"
+                  class="reserve-time-input"
                 />
-              </v-col>
-            </v-row>
-            <div v-if="reserveTimeFormatted" class="text-caption text-primary mt-1">
-              任务将在 {{ reserveTimeFormatted }} 自动开始下载
+              </div>
+              <div v-if="reserveTimeFormatted" class="text-caption text-primary mt-2">
+                <v-icon size="small" class="mr-1">mdi-information-outline</v-icon>
+                任务将在 {{ reserveTimeFormatted }} 自动开始下载
+              </div>
             </div>
-          </div>
+          </v-slide-y-transition>
         </div>
         <div class="mt-6">
           <GroupTile title="清晰度" />
@@ -1143,6 +1148,17 @@ function handleIgnore() {
 </template>
 
 <style lang="scss">
+// 调整浏览器原生的日期/时间选择器图标
+.reserve-date-input,
+.reserve-time-input {
+  ::-webkit-calendar-picker-indicator {
+    position: absolute;
+    right: 8px;
+    cursor: pointer;
+    filter: invert(0.5);
+  }
+}
+
 .vue-media-back {
   background-image: linear-gradient(180deg,
       rgba(var(--v-theme-background), 0) 50%,
