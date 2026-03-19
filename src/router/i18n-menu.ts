@@ -63,6 +63,15 @@ export function getNavMenus(t: Composer['t']) {
       permission: 'discovery',
     },
     {
+      title: t('navItems.follow'),
+      icon: 'mdi-auto-fix',
+      to: '/follow',
+      header: t('menu.discovery'),
+      admin: false,
+      footer: true,
+      permission: 'discovery',
+    },
+    {
       title: t('navItems.movie'),
       full_title: t('navItems.movieSubscribe'),
       icon: 'mdi-movie-open-outline',

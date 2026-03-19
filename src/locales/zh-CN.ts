@@ -301,6 +301,7 @@ export default {
     explore: '探索',
     collect: '采集',
     task: '任务',
+    follow: '追更',
     movie: '电影',
     tv: '电视剧',
     workflow: '工作流',

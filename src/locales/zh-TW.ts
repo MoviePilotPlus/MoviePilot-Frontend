@@ -301,6 +301,7 @@ export default {
     explore: '探索',
     collect: '採集',
     task: '任務',
+    follow: '追更',
     movie: '電影',
     tv: '電視劇',
     workflow: '工作流',

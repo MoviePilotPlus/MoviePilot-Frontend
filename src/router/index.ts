@@ -80,6 +80,13 @@ const router = createRouter({
           },
         },
         {
+          path: '/follow',
+          component: () => import('../pages/follow.vue'),
+          meta: {
+            requiresAuth: true,
+          },
+        },
+        {
           path: '/video',
           component: () => import('../pages/video.vue'),
           meta: {

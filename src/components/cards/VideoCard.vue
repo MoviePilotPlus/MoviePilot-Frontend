@@ -44,6 +44,9 @@ const tmdbFlag = ref(true)
 // 本地存在状态
 const isExists = ref(false)
 
+// 追更状态
+const isFollowed = ref(false)
+
 // 本地忽略状态
 const isIgnore = ref(false)
 
@@ -129,46 +132,32 @@ function goMediaDetail() {
   })
   window.open(route.href, '_blank')
 }
-// 查询当前媒体是否已入库
-async function handleCheckExists() {
+
+// 合并检查媒体状态（已采集、已忽略、已追更）
+async function handleCheckStatus() {
   try {
     const abortController = new AbortController()
     registerAbortController(abortController)
     const { signal } = abortController
-    const result: { [key: string]: any } = await api.get('task/exist_cid/' + props.media?.cid, {
+    const result: { [key: string]: any } = await api.get(`collect/status/${props.media?.source}/${props.media?.cid}`, {
       params: {},
       signal,
     })
 
-    if (result.success) isExists.value = true
+    if (result.success && result.data) {
+      isExists.value = result.data.exists
+      isIgnore.value = result.data.ignored
+      isFollowed.value = result.data.followed
+    }
   } catch (error) {
     console.error(error)
   }
 }
 
-async function handleCheckIgnore() {
-  try {
-    const abortController = new AbortController()
-    registerAbortController(abortController)
-    const { signal } = abortController
-    const result: { [key: string]: any } = await api.get(`collect/ignore/${props.media?.source}/${props.media?.cid}`, {
-      params: {},
-      signal,
-    })
-
-    if (result.success) isIgnore.value = true
-  } catch (error) {
-    console.error(error)
-  }
-}
 // 懒加载检查
 function handleCheckLazy() {
   console.log('handleCheckLazy', props.media?.cid)
-  // if (props.media?.cid) {
-  //   return
-  // }
-  handleCheckExists()
-  handleCheckIgnore()
+  handleCheckStatus()
 }
 // 在元素进入视窗时触发懒加载函数
 function setupIntersectionObserver() {
@@ -331,7 +320,8 @@ function handleIgnore() {
               {{ props.media?.rating }}
             </VChip>
             <ExistIcon v-if="isExists" />
-            <IgnoreIcon v-if="!isExists && isIgnore" />
+            <FollowIcon v-if="isFollowed" />
+            <IgnoreIcon v-if="!isExists && !isFollowed && isIgnore" />
           </div>
 
           <VCardText class="video-content py-2">

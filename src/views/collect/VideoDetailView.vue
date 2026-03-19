@@ -50,19 +50,29 @@ const ptgen = ref<PtgenInfo>({} as PtgenInfo)
 // 采集模式选项
 const collectModeOptions = {
   'normal': '普通采集',
-  'episode': '分集采集'
+  'episode': '分集采集',
+  'follow': '追更采集'
 }
 
-// 采集模式（二选一）
-const collectMode = ref<'normal' | 'episode'>('normal')
+// 采集模式（三选一）
+const collectMode = ref<'normal' | 'episode' | 'follow'>('normal')
 
-// 是否预约采集（开关）
+// 是否预约采集（开关，仅普通和分集采集可用）
 const isReserveCollect = ref(false)
 
 // 预约时间
 const reserveStartTime = ref<string | null>(null)
 const reserveStartDate = ref<string | null>(null)
 const reserveStartTimeOnly = ref<string | null>(null)
+
+// 追更配置
+const followConfig = ref({
+  startEpisode: 1,
+  totalEpisodes: null as number | null,
+  checkStartTime: '18:00',
+  checkEndTime: '22:00',
+  checkInterval: 5
+})
 
 // 生成预约时间字符串
 const reserveTimeFormatted = computed(() => {
@@ -209,6 +219,8 @@ async function getMediaDetail() {
     if (addForm.value.episodes_all > 1 && addForm.value.episodes_all == mediaDetail.value.episode_list?.length) {
       addForm.value.tags.push("Completed")
     }
+    // 自动填入追更配置的总集数
+    followConfig.value.totalEpisodes = addForm.value.episodes_all
     isRefreshed.value = true
 
     // 加载制作组数据
@@ -270,30 +282,24 @@ async function getSites() {
     console.error(error)
   }
 }
-async function handleCheckExists() {
+
+// 合并检查媒体状态（已采集、已忽略、已追更）
+async function handleCheckStatus() {
   try {
-    const result: { [key: string]: any } = await api.get('task/exist_cid/' + mediaProps?.mediaid, {
-      params: {}
-    })
-
-    if (result.success) isExists.value = true
-  } catch (error) {
-    console.error(error)
-  }
-}
-
-async function handleCheckIgnore() {
-  try {
-
-    const result: { [key: string]: any } = await api.get(`collect/ignore/${mediaProps?.source}/${mediaProps?.mediaid}`, {
+    const result: { [key: string]: any } = await api.get(`collect/status/${mediaProps?.source}/${mediaProps?.mediaid}`, {
       params: {},
     })
 
-    if (result.success) isIgnore.value = true
+    if (result.success && result.data) {
+      isExists.value = result.data.exists
+      isIgnore.value = result.data.ignored
+      isFollowed.value = result.data.followed
+    }
   } catch (error) {
     console.error(error)
   }
 }
+
 // 调用API添加采集任务
 async function addCollect() {
   try {
@@ -323,10 +329,18 @@ async function addCollect() {
 
     if (!validateForm()) return
     
-    // 检查预约时间
-    if (isReserveCollect.value && !reserveTimeFormatted.value) {
+    // 检查预约时间（仅普通和分集采集）
+    if ((collectMode.value === 'normal' || collectMode.value === 'episode') && isReserveCollect.value && !reserveTimeFormatted.value) {
       $toast.error('请选择预约时间！')
       return
+    }
+    
+    // 检查追更配置（仅追更采集）
+    if (collectMode.value === 'follow') {
+      if (!followConfig.value.startEpisode || followConfig.value.startEpisode < 1) {
+        $toast.error('请输入有效的起始集数！')
+        return
+      }
     }
     
     // 调用接口添加采集任务
@@ -334,34 +348,69 @@ async function addCollect() {
     
     let result: { [key: string]: any }
     
-    // 构建基础请求数据
-    const baseData = {
-      ...addForm.value,
-      isReserved: isReserveCollect.value,
-      reserveStartTime: isReserveCollect.value ? reserveTimeFormatted.value : null
-    }
-    
     // 根据采集模式选择不同的API
-    if (collectMode.value === 'episode') {
-      // 分集采集：每个剧集创建独立的采集任务
-      result = await api.post('collect/episode', {
-        ...baseData,
-        collect_mode: 'episode'
+    if (collectMode.value === 'follow') {
+      // 追更采集：创建追更任务
+      result = await api.post('follow/', {
+        cid: addForm.value.cid,
+        site: addForm.value.site,
+        defn: addForm.value.defn,
+        cn_title: addForm.value.cn_title,
+        en_title: addForm.value.en_title,
+        original_title: addForm.value.original_title,
+        year: addForm.value.year,
+        season: addForm.value.season ? String(addForm.value.season) : null,
+        sub_title_template: addForm.value.sub_title,
+        douban_id: addForm.value.douban_id,
+        imdb_id: addForm.value.imdb_id,
+        team: addForm.value.team,
+        copyright: addForm.value.copyright,
+        tags: addForm.value.tags,
+        site_list: addForm.value.site_list,
+        poster: addForm.value.poster,
+        cover: addForm.value.cover,
+        total_episodes: followConfig.value.totalEpisodes ? Number(followConfig.value.totalEpisodes) : null,
+        start_episode: followConfig.value.startEpisode,
+        check_start_time: followConfig.value.checkStartTime,
+        check_end_time: followConfig.value.checkEndTime,
+        check_interval: followConfig.value.checkInterval,
+        auto_download: addForm.value.auto_download,
+        auto_publish: addForm.value.auto_publish,
+        anon_publish: addForm.value.anon_publish
       })
+    } else if (collectMode.value === 'episode') {
+      // 分集采集：每个剧集创建独立的采集任务
+      const baseData = {
+        ...addForm.value,
+        isReserved: isReserveCollect.value,
+        reserveStartTime: isReserveCollect.value ? reserveTimeFormatted.value : null,
+        collect_mode: 'episode'
+      }
+      result = await api.post('collect/episode', baseData)
     } else {
       // 普通采集
+      const baseData = {
+        ...addForm.value,
+        isReserved: isReserveCollect.value,
+        reserveStartTime: isReserveCollect.value ? reserveTimeFormatted.value : null
+      }
       result = await api.post('collect/', baseData)
     }
     
     // 添加采集任务状态
     if (result.success) {
       // 成功
-      router.push({ path: '/task' })
+      if (collectMode.value === 'follow') {
+        router.push({ path: '/follow' })
+      } else {
+        router.push({ path: '/task' })
+      }
       isExists.value = true
     }
 
     // 提示
-    showCollectAddToast(result.success, mediaDetail.value?.title ?? '', result.message)
+    const modeText = collectMode.value === 'follow' ? '追更任务' : '采集任务'
+    showCollectAddToast(result.success, mediaDetail.value?.title ?? '', result.message, modeText)
   } catch (error) {
     console.error(error)
   }
@@ -456,8 +505,8 @@ function validateForm() {
   return true
 }
 // 弹出添加订阅提示
-function showCollectAddToast(result: boolean, title: string, message: string) {
-  let subname = '采集任务'
+function showCollectAddToast(result: boolean, title: string, message: string, modeText: string = '采集任务') {
+  let subname = modeText
   if (!result) $toast.error(`${title} 添加${subname}失败：${message}！`)
 }
 
@@ -534,8 +583,7 @@ async function handlePlay() {
 }
 
 onBeforeMount(() => {
-  handleCheckExists()
-  handleCheckIgnore()
+  handleCheckStatus()
   getMediaDetail()
   getSites()
 })
@@ -689,6 +737,9 @@ const resourceDialog = ref(false)
 // 本地存在状态
 const isExists = ref(false)
 
+// 追更状态
+const isFollowed = ref(false)
+
 // 本地忽略状态
 const isIgnore = ref(false)
 
@@ -797,7 +848,11 @@ function handleIgnore() {
               class="mr-2 mb-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap transition !no-underline bg-green-500 bg-opacity-80 border border-green-500 !text-green-100 hover:bg-green-500 hover:bg-opacity-100 false overflow-hidden">
               <div class="relative z-20 flex items-center false"><span>已采集</span></div>
             </span>
-            <span v-if="isIgnore"
+            <span v-if="isFollowed"
+              class="mr-2 mb-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap transition !no-underline bg-orange-500 bg-opacity-80 border border-orange-500 !text-orange-100 hover:bg-orange-500 hover:bg-opacity-100 false overflow-hidden">
+              <div class="relative z-20 flex items-center false"><span>追更中</span></div>
+            </span>
+            <span v-if="!isFollowed && isIgnore"
               class="mr-2 mb-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap transition !no-underline bg-gray-500 bg-opacity-80 border border-gray-500 !text-green-100 hover:bg-green-500 hover:bg-opacity-100 false overflow-hidden">
               <div class="relative z-20 flex items-center false"><span>已忽略</span></div>
             </span>
@@ -1006,6 +1061,9 @@ function handleIgnore() {
             <VChip :color="collectMode === 'episode' ? 'primary' : ''" filter variant="outlined" value="episode">
               分集采集
             </VChip>
+            <VChip :color="collectMode === 'follow' ? 'primary' : ''" filter variant="outlined" value="follow">
+              追更采集
+            </VChip>
           </VChipGroup>
           <div v-if="collectMode === 'normal'" class="text-caption text-grey mt-1">
             所有选中剧集作为一个采集任务
@@ -1013,8 +1071,13 @@ function handleIgnore() {
           <div v-if="collectMode === 'episode'" class="text-caption text-grey mt-1">
             每个选中的剧集创建一个独立的采集任务，便于单独管理
           </div>
+          <div v-if="collectMode === 'follow'" class="text-caption text-grey mt-1">
+            自动检测并下载新发布的剧集
+          </div>
         </div>
-        <div class="mt-4">
+        
+        <!-- 预约采集选项（普通采集和分集采集可用） -->
+        <div v-if="collectMode === 'normal' || collectMode === 'episode'" class="mt-4">
           <v-switch v-model="isReserveCollect" :label="`预约采集`" hide-details color="primary" density="compact" />
           <v-slide-y-transition>
             <div v-if="isReserveCollect" class="mt-4">
@@ -1048,6 +1111,74 @@ function handleIgnore() {
             </div>
           </v-slide-y-transition>
         </div>
+        
+        <!-- 追更采集配置 -->
+        <div v-if="collectMode === 'follow'" class="mt-4">
+          <v-row>
+            <v-col cols="6" md="4">
+              <VTextField
+                v-model="followConfig.startEpisode"
+                label="起始集数"
+                type="number"
+                variant="outlined"
+                density="compact"
+                hide-details
+                min="1"
+              />
+            </v-col>
+            <v-col cols="6" md="4">
+              <VTextField
+                v-model="followConfig.totalEpisodes"
+                label="总集数（可选）"
+                type="number"
+                variant="outlined"
+                density="compact"
+                hide-details
+                min="1"
+              />
+            </v-col>
+          </v-row>
+          <v-row class="mt-2">
+            <v-col cols="6" md="4">
+              <VTextField
+                v-model="followConfig.checkStartTime"
+                label="检测开始时间"
+                type="time"
+                variant="outlined"
+                density="compact"
+                hide-details
+                class="reserve-time-input"
+              />
+            </v-col>
+            <v-col cols="6" md="4">
+              <VTextField
+                v-model="followConfig.checkEndTime"
+                label="检测结束时间"
+                type="time"
+                variant="outlined"
+                density="compact"
+                hide-details
+                class="reserve-time-input"
+              />
+            </v-col>
+            <v-col cols="6" md="4">
+              <VTextField
+                v-model="followConfig.checkInterval"
+                label="检测间隔（分钟）"
+                type="number"
+                variant="outlined"
+                density="compact"
+                hide-details
+                min="1"
+              />
+            </v-col>
+          </v-row>
+          <div class="text-caption text-grey mt-2">
+            <v-icon size="small" class="mr-1">mdi-information-outline</v-icon>
+            系统将在指定时间段内每隔一段时间检测新剧集，自动下载新发布的剧集
+          </div>
+        </div>
+        
         <div class="mt-6">
           <GroupTile title="清晰度" />
           <VChipGroup column v-model="addForm.defn">

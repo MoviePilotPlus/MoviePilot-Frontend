@@ -302,6 +302,7 @@ export default {
     explore: 'Explore',
     collect: 'Collect',
     task: 'Tasks',
+    follow: 'Follow',
     movie: 'Movies',
     tv: 'TV Shows',
     workflow: 'Workflow',
