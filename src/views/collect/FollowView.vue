@@ -29,11 +29,36 @@
     <template v-else>
       <v-card v-for="task in followTasks" :key="task.id" class="mb-4">
         <v-card-title class="d-flex align-center py-3">
-          <div>
+          <div class="flex-grow-1">
             <div class="text-h6">{{ task.cn_title || task.en_title || task.name }}</div>
             <div class="text-caption text-grey mt-1">
               {{ task.site }} · {{ task.defn }} · {{ task.year || '未知年份' }}
               <span v-if="task.season"> · S{{ String(task.season).padStart(2, '0') }}</span>
+            </div>
+            <!-- 标签和站点 -->
+            <div v-if="(task.tags && task.tags.length > 0) || (task.site_list && task.site_list.length > 0)" class="mt-2 d-flex align-center flex-wrap ga-1">
+              <template v-if="task.tags && task.tags.length > 0">
+                <v-chip
+                  v-for="tag in task.tags"
+                  :key="tag"
+                  size="x-small"
+                  color="primary"
+                  variant="outlined"
+                >
+                  {{ tagOptions[tag as keyof typeof tagOptions] || tag }}
+                </v-chip>
+              </template>
+              <template v-if="task.site_list && task.site_list.length > 0">
+                <v-chip
+                  v-for="siteId in task.site_list"
+                  :key="siteId"
+                  size="x-small"
+                  color="success"
+                  variant="outlined"
+                >
+                  {{ getSiteName(siteId) }}
+                </v-chip>
+              </template>
             </div>
           </div>
           <v-spacer />
@@ -206,9 +231,15 @@
 import { ref, onMounted } from 'vue'
 import api from '@/api'
 import { useToast } from 'vue-toastification'
+import { tagOptions } from '@/api/constants'
 import EditFollowDialog from '@/components/dialog/EditFollowDialog.vue'
 
 const $toast = useToast()
+
+interface Site {
+  id: number
+  name: string
+}
 
 interface FollowTask {
   id: number
@@ -232,6 +263,8 @@ interface FollowTask {
   is_finished: boolean | null
   auto_download: boolean | null
   auto_publish: boolean | null
+  tags: string[]
+  site_list: number[]
 }
 
 interface FollowRecord {
@@ -251,9 +284,11 @@ const recordsDialog = ref(false)
 const records = ref<FollowRecord[]>([])
 const editDialog = ref(false)
 const selectedTaskId = ref(0)
+const siteList = ref<Site[]>([])
 
 onMounted(() => {
   loadFollowTasks()
+  loadSites()
 })
 
 async function loadFollowTasks() {
@@ -269,6 +304,19 @@ async function loadFollowTasks() {
   } finally {
     loading.value = false
   }
+}
+
+async function loadSites() {
+  try {
+    siteList.value = await api.get('site/')
+  } catch (error) {
+    console.error('加载站点列表失败:', error)
+  }
+}
+
+function getSiteName(siteId: number): string {
+  const site = siteList.value.find(s => s.id === siteId)
+  return site ? site.name : `站点${siteId}`
 }
 
 function refresh() {

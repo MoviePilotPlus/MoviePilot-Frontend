@@ -82,6 +82,22 @@ const reserveTimeFormatted = computed(() => {
   return null
 })
 
+// 监听采集模式变化，自动选中/取消分集标签
+watch(collectMode, (newMode) => {
+  if (newMode === 'episode') {
+    // 分集采集时自动选中分集标签
+    if (!addForm.value.tags.includes('Episode')) {
+      addForm.value.tags.push('Episode')
+    }
+  } else {
+    // 非分集采集时移除分集标签
+    const index = addForm.value.tags.indexOf('Episode')
+    if (index > -1) {
+      addForm.value.tags.splice(index, 1)
+    }
+  }
+})
+
 // 制作组列表
 const teamList = ref<any[]>([])
 

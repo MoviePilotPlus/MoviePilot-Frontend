@@ -59,9 +59,10 @@
               <VTextField
                 v-model="formData.check_start_time"
                 label="检测开始时间"
+                type="time"
                 variant="outlined"
                 density="compact"
-                hint="格式: HH:MM，如 08:00"
+                hint="每天开始检测的时间"
                 persistent-hint
               />
             </VCol>
@@ -69,9 +70,10 @@
               <VTextField
                 v-model="formData.check_end_time"
                 label="检测结束时间"
+                type="time"
                 variant="outlined"
                 density="compact"
-                hint="格式: HH:MM，如 23:00"
+                hint="每天结束检测的时间"
                 persistent-hint
               />
             </VCol>
