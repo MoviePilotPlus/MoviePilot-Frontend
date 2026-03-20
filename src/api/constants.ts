@@ -135,6 +135,7 @@ export const tagOptions = {
   HighBitrateHighFrameRate: '高比特率高帧率',
   ThreeD: '3D',
   Collection: '合集',
+  Episode: '分集',
   SHD: '4K',
   UHD: '8K',
   HLG: 'HLG',

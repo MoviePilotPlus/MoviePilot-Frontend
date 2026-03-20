@@ -47,6 +47,12 @@
               </v-btn>
             </template>
             <v-list>
+              <v-list-item @click="editTask(task)">
+                <v-list-item-title>
+                  <v-icon class="mr-2">mdi-pencil</v-icon>
+                  编辑
+                </v-list-item-title>
+              </v-list-item>
               <v-list-item @click="manualCheck(task.id)">
                 <v-list-item-title>
                   <v-icon class="mr-2">mdi-refresh</v-icon>
@@ -186,6 +192,13 @@
         </v-card-text>
       </v-card>
     </v-dialog>
+
+    <!-- 编辑对话框 -->
+    <EditFollowDialog 
+      v-model="editDialog" 
+      :follow-id="selectedTaskId"
+      @updated="loadFollowTasks" 
+    />
   </div>
 </template>
 
@@ -193,6 +206,7 @@
 import { ref, onMounted } from 'vue'
 import api from '@/api'
 import { useToast } from 'vue-toastification'
+import EditFollowDialog from '@/components/dialog/EditFollowDialog.vue'
 
 const $toast = useToast()
 
@@ -235,6 +249,8 @@ const loading = ref(true)
 const followTasks = ref<FollowTask[]>([])
 const recordsDialog = ref(false)
 const records = ref<FollowRecord[]>([])
+const editDialog = ref(false)
+const selectedTaskId = ref(0)
 
 onMounted(() => {
   loadFollowTasks()
@@ -332,6 +348,11 @@ async function showRecords(task: FollowTask) {
     console.error('加载追更记录失败:', error)
     $toast.error('加载追更记录失败')
   }
+}
+
+function editTask(task: FollowTask) {
+  selectedTaskId.value = task.id
+  editDialog.value = true
 }
 </script>
 

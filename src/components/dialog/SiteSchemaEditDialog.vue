@@ -208,6 +208,7 @@ const templateData = ref<TemplateDataType>({
     HDR10: '',
     Completed: '',
     Original: '',
+    Episode: '',
     HighBitrateHighFrameRate: '',
     ThreeD: '',
     Collection: '',
