@@ -14,6 +14,7 @@ import AddSiteSeedDialog from '@/components/dialog/AddSiteSeedDialog.vue'
 import SiteSeedInfoDialog from '@/components/dialog/SiteSeedInfoDialog.vue'
 import VideoDescInfoDialog from '@/components/dialog/VideoDescInfoDialog.vue'
 import CollectOperationDialog from '@/components/dialog/CollectOperationDialog.vue'
+import MergeCollectDialog from '@/components/dialog/MergeCollectDialog.vue'
 const $toast = useToast()
 // 确认框
 const createConfirm = useConfirm()
@@ -37,6 +38,8 @@ const deleteOptions = ref({
   delete_file: true,
   remove_seed: true
 })
+// 合并打包对话框
+const showMergeDialog = ref(false)
 // 所有站点
 // 资源浏览弹窗
 const resourceDialog = ref(false)
@@ -549,6 +552,13 @@ onUnmounted(() => {
                   <VListItemTitle>转种</VListItemTitle>
                 </VListItem>
 
+                <VListItem variant="plain" @click="showMergeDialog = true">
+                  <template #prepend>
+                    <VIcon icon="mdi-folder-zip" />
+                  </template>
+                  <VListItemTitle>合并打包</VListItemTitle>
+                </VListItem>
+
                 <VListItem variant="plain" @click="showDeleteConfirmDialog()" class="bg-error-container">
                   <template #prepend>
                     <VIcon icon="mdi-delete" color="error" />
@@ -597,6 +607,8 @@ onUnmounted(() => {
   <SiteSearchDialog v-if="resourceDialog" v-model="resourceDialog" :site="getSelectedSite()"
     :keyword="task?.cn_title || task?.title || task?.name"
     @close="onSiteResourceDone" />
+  <!-- 合并打包弹窗 -->
+  <MergeCollectDialog v-model="showMergeDialog" :collect-id="task.id" @merged="emit('remove')" />
 </template>
 <style scoped>
 .status-corner {
