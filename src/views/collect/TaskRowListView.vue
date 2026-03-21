@@ -121,6 +121,12 @@ const deleteOptions = ref({
   delete_file: true,
   remove_seed: true
 })
+// 批量添加站点相关
+const showAddSiteDialog = ref(false)
+const selectedSites = ref<number[]>([])
+const addSiteOptions = ref({
+  next_step: false
+})
 // 全选状态的计算属性
 const isAllSelected = computed(() => {
   return filteredDataList.value.length > 0 && selectedItems.value.length === filteredDataList.value.length
@@ -158,6 +164,16 @@ function removeFilter(key: string, value: string) {
 function removeSelectedItem(id: number) {
   const index = selectedItems.value.indexOf(id)
   if (index !== -1) {
+    selectedItems.value.splice(index, 1)
+  }
+}
+
+// 切换单个任务的选中状态
+function toggleSelection(id: number) {
+  const index = selectedItems.value.indexOf(id)
+  if (index === -1) {
+    selectedItems.value.push(id)
+  } else {
     selectedItems.value.splice(index, 1)
   }
 }
@@ -513,6 +529,46 @@ function filterSiteSeed() {
   })
 }
 
+// 显示批量添加站点对话框
+function showAddSiteDialogDialog() {
+  if (selectedItems.value.length === 0) {
+    $toast.warning(t('collect.selectTaskBeforeDelete'))
+    return
+  }
+  selectedSites.value = []
+  showAddSiteDialog.value = true
+}
+
+// 批量添加站点
+async function batchAddSiteSeed() {
+  if (selectedSites.value.length === 0) {
+    $toast.warning('请选择至少一个站点')
+    return
+  }
+  
+  try {
+    const response = await api.post('collect/batchAddSiteSeed', {
+      collect_ids: selectedItems.value,
+      site_list: selectedSites.value,
+      next_step: addSiteOptions.value.next_step
+    })
+    
+    if (response.success) {
+      $toast.success(response.message || '批量添加站点成功')
+      showAddSiteDialog.value = false
+      selectedSites.value = []
+      addSiteOptions.value.next_step = false
+      // 刷新数据以更新站点信息
+      window.location.reload()
+    } else {
+      $toast.error(response.message || '批量添加站点失败')
+    }
+  } catch (error) {
+    $toast.error('批量添加站点失败')
+    console.error('批量添加站点失败:', error)
+  }
+}
+
 // 初始化过滤选项
 onMounted(() => {
   filterSiteSeed()
@@ -535,7 +591,10 @@ onMounted(() => {
             </VChip>
             <!-- 批量操作区域 -->
             <div class="batch-operations mr-0">
-
+              <VBtn v-if="showSelectionControls && selectedItems.length > 0" color="success" variant="flat" size="small"
+                @click="showAddSiteDialogDialog" prepend-icon="mdi-server-plus" class="ml-2">
+                {{ t('collect.batchAddSite') }} ({{ selectedItems.length }})
+              </VBtn>
               <VBtn v-if="showSelectionControls && selectedItems.length > 0" color="error" variant="flat" size="small"
                 @click="showDeleteConfirmDialog" prepend-icon="mdi-delete" class="ml-2">
                 {{ t('collect.batchDelete') }} ({{ selectedItems.length }})
@@ -662,6 +721,10 @@ onMounted(() => {
               <div class="d-flex">
                 <VCheckbox v-if="showSelectionControls" v-model="isAllSelected" @change="toggleSelectAll"
                   :label="t('collect.selectAll')" density="compact" hide-details class="me-2" />
+                <VBtn v-if="showSelectionControls && selectedItems.length > 0" color="success" variant="flat" size="small"
+                  @click="showAddSiteDialogDialog" prepend-icon="mdi-server-plus" class="mr-1">
+                  {{ t('collect.addSite') }}
+                </VBtn>
                 <VBtn v-if="showSelectionControls && selectedItems.length > 0" color="error" variant="flat" size="small"
                   @click="showDeleteConfirmDialog" prepend-icon="mdi-delete">
                   {{ t('collect.deleteSelected') }}({{ selectedItems.length }})
@@ -791,9 +854,12 @@ onMounted(() => {
         class="resource-list overflow-visible" @load="loadMore">
         <template #loading />
         <template #empty />
-        <div v-for="(item, index) in displayDataList" :key="item.id" class="resource-item-container">
-          <div class="selection-checkbox" v-if="showSelectionControls">
-            <VCheckbox v-model="selectedItems" :value="item.id" density="compact" hide-details />
+        <div v-for="(item, index) in displayDataList" :key="item.id" 
+             class="resource-item-container"
+             :class="{ 'selected': selectedItems.includes(item.id) }">
+          <div class="selection-checkbox" v-if="showSelectionControls" 
+               @click.stop="toggleSelection(item.id)">
+            <VIcon v-if="selectedItems.includes(item.id)" color="white" size="16">mdi-check</VIcon>
           </div>
           <div class="task-content">
             <TaskItem :task="item" :key="item.id" @remove="remove" />
@@ -818,9 +884,14 @@ onMounted(() => {
               <div v-for="id in selectedItems.slice(0, 10)" :key="id"
                 class="task-item-ellipsis d-flex items-center gap-2">
                 <span class="flex-1 min-w-0 text-ellipsis overflow-hidden">
-                  {{displayDataList.find((item: any) => item.id === id)?.cn_title || `ID:
-                  ${id}`}}{{displayDataList.find((item: any) => item.id === id)?.year ? ` (${displayDataList.find((item:
-                    any) => item.id === id)?.year})` : ''}}
+                  {{ displayDataList.find((item: any) => item.id === id)?.cn_title || `ID: ${id}` }}
+                  {{ displayDataList.find((item: any) => item.id === id)?.year ? ` (${displayDataList.find((item: any) => item.id === id)?.year})` : '' }}
+                  <span v-if="displayDataList.find((item: any) => item.id === id)?.season" class="text-primary">
+                    S{{ String(displayDataList.find((item: any) => item.id === id)?.season).padStart(2, '0') }}
+                  </span>
+                  <span v-if="displayDataList.find((item: any) => item.id === id)?.episodes" class="text-success">
+                    E{{ displayDataList.find((item: any) => item.id === id)?.episodes }}
+                  </span>
                 </span>
                 <VIcon icon="mdi-close-circle"
                   class="text-error cursor-pointer hover:opacity-70 transition-opacity flex-shrink-0"
@@ -837,6 +908,61 @@ onMounted(() => {
         <VCardActions>
           <VBtn @click="showDeleteConfirm = false">{{ t('collect.cancel') }}</VBtn>
           <VBtn color="error" @click="confirmDelete">{{ t('collect.delete') }}</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <!-- 批量增加站点对话框 -->
+    <VDialog v-model="showAddSiteDialog" max-width="600px" location="center">
+      <VCard>
+        <VCardTitle class="d-flex align-center">
+          <VIcon icon="mdi-server-plus" class="me-2" color="success"></VIcon>
+          {{ t('collect.batchAddSite') }}
+        </VCardTitle>
+        <VDivider />
+        <VCardText>
+          <!-- 已选任务列表 -->
+          <div class="mb-4">
+            <div class="text-subtitle-2 mb-2">{{ t('collect.selectedTasks') }} ({{ selectedItems.length }})</div>
+            <div class="selected-tasks-list max-h-48 overflow-y-auto">
+              <div v-for="id in selectedItems" :key="id"
+                class="task-item-ellipsis d-flex items-center gap-2 py-1">
+                <span class="flex-1 min-w-0 text-ellipsis overflow-hidden">
+                  {{ displayDataList.find((item: any) => item.id === id)?.cn_title || `ID: ${id}` }}
+                  {{ displayDataList.find((item: any) => item.id === id)?.year ? ` (${displayDataList.find((item: any) => item.id === id)?.year})` : '' }}
+                  <span v-if="displayDataList.find((item: any) => item.id === id)?.season" class="text-primary">
+                    S{{ String(displayDataList.find((item: any) => item.id === id)?.season).padStart(2, '0') }}
+                  </span>
+                  <span v-if="displayDataList.find((item: any) => item.id === id)?.episodes" class="text-success">
+                    E{{ displayDataList.find((item: any) => item.id === id)?.episodes }}
+                  </span>
+                </span>
+                <VIcon icon="mdi-close-circle"
+                  class="text-error cursor-pointer hover:opacity-70 transition-opacity flex-shrink-0"
+                  @click.stop="removeSelectedItem(id)" :title="t('collect.removeFromSelection')"></VIcon>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 站点选择 -->
+          <div class="mt-4">
+            <div class="text-subtitle-2 mb-2">{{ t('collect.selectSite') }}</div>
+            <VChipGroup v-model="selectedSites" multiple column>
+              <VChip v-for="site in allSites" :key="site.id" 
+                     :value="site.id" filter variant="outlined" size="small">
+                {{ site.name }}
+              </VChip>
+            </VChipGroup>
+          </div>
+          
+          <!-- 自动发布选项 -->
+          <VCheckbox v-model="addSiteOptions.next_step" :label="t('collect.autoPublish')" density="compact" class="mt-4" />
+        </VCardText>
+        <VCardActions>
+          <VBtn @click="showAddSiteDialog = false">{{ t('collect.cancel') }}</VBtn>
+          <VBtn color="success" @click="batchAddSiteSeed" :disabled="selectedSites.length === 0 || selectedItems.length === 0">
+            {{ t('collect.confirm') }}
+          </VBtn>
         </VCardActions>
       </VCard>
     </VDialog>
@@ -982,13 +1108,37 @@ onMounted(() => {
 .resource-item-container {
   position: relative;
   inline-size: 100%;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.resource-item-container.selected .task-content {
+  border-left: 3px solid rgb(var(--v-theme-success));
+  margin-left: -3px;
+  background-color: rgba(var(--v-theme-success), 0.03);
+  border-radius: 12px;
 }
 
 .selection-checkbox {
   position: absolute;
   z-index: 10;
-  inset-block-start: 5px;
-  inset-inline-start: 5px;
+  inset-block-start: 10px;
+  inset-inline-start: 10px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(var(--v-theme-surface), 0.9);
+  border: 2px solid rgba(var(--v-theme-on-surface), 0.3);
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.resource-item-container.selected .selection-checkbox {
+  background-color: rgb(var(--v-theme-success));
+  border-color: rgb(var(--v-theme-success));
 }
 
 .task-content {
