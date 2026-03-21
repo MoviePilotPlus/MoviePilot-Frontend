@@ -132,7 +132,7 @@
             </v-col>
             <v-col cols="6" md="3">
               <div class="text-caption text-grey">检测间隔</div>
-              <div class="text-body-1">{{ task.check_interval || 5 }} 分钟</div>
+              <div class="text-body-1">{{ task.check_interval_min || 5 }}-{{ task.check_interval_max || 30 }} 分钟</div>
             </v-col>
           </v-row>
 
@@ -257,8 +257,10 @@ interface FollowTask {
   followed_max_episode: number | null
   check_start_time: string | null
   check_end_time: string | null
-  check_interval: number | null
+  check_interval_min: number | null
+  check_interval_max: number | null
   last_check_time: string | null
+  last_update_date: string | null
   is_active: boolean | null
   is_finished: boolean | null
   auto_download: boolean | null

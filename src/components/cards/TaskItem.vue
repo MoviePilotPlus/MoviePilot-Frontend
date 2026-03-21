@@ -13,6 +13,7 @@ import SiteSearchDialog from '@/components/dialog/SiteSearchDialog.vue'
 import AddSiteSeedDialog from '@/components/dialog/AddSiteSeedDialog.vue'
 import SiteSeedInfoDialog from '@/components/dialog/SiteSeedInfoDialog.vue'
 import VideoDescInfoDialog from '@/components/dialog/VideoDescInfoDialog.vue'
+import VideoScreenshotDialog from '@/components/dialog/VideoScreenshotDialog.vue'
 import CollectOperationDialog from '@/components/dialog/CollectOperationDialog.vue'
 import MergeCollectDialog from '@/components/dialog/MergeCollectDialog.vue'
 const $toast = useToast()
@@ -23,6 +24,7 @@ const emit = defineEmits(['remove'])
 const showAddSiteSedd = ref(false)
 const showSiteSeedInfo = ref(false)
 const showDescInfo = ref(false)
+const showScreenshotInfo = ref(false)
 const seedInfo = ref<SiteSeed>({} as SiteSeed)
 // 从 provide 中获取全局设置
 // 全局设置
@@ -203,6 +205,9 @@ function showAddSiteSeddoDialog() {
 }
 function showDescInfoDialog() {
   showDescInfo.value = true
+}
+function showScreenshotInfoDialog() {
+  showScreenshotInfo.value = true
 }
 function showCollectOperationDialog(operation: string) {
   console.log('showCollectOperationDialog')
@@ -468,6 +473,12 @@ onUnmounted(() => {
                   </template>
                   <VListItemTitle>查看详情</VListItemTitle>
                 </VListItem>
+                <VListItem variant="plain" @click="showScreenshotInfoDialog()">
+                  <template #prepend>
+                    <VIcon icon="mdi-image-multiple" />
+                  </template>
+                  <VListItemTitle>查看截图</VListItemTitle>
+                </VListItem>
 
                 <VMenu close-on-content-click max-width="450">
                   <template v-slot:activator="{ props }">
@@ -577,6 +588,7 @@ onUnmounted(() => {
   <AddSiteSeedDialog v-if="showAddSiteSedd" v-model="showAddSiteSedd" :collect="task" :siteSeedList="siteSeedList"
     @done="addSiteSeedSuccess" @error="addSiteSeedError" @close="showAddSiteSedd = false" />
   <VideoDescInfoDialog v-if="showDescInfo" v-model="showDescInfo" :collect="task" @close="showDescInfo = false" />
+  <VideoScreenshotDialog v-if="showScreenshotInfo" v-model="showScreenshotInfo" :collect="task" @close="showScreenshotInfo = false" />
   <CollectOperationDialog v-if="showCollectOperation" v-model="showCollectOperation" :collect_id="task?.id"
     :operation="operationType" @close="showCollectOperation = false" />
 

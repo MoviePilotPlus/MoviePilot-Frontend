@@ -13,6 +13,7 @@ import { seedStatus } from '@/api/constants'
 import SiteSearchDialog from '@/components/dialog/SiteSearchDialog.vue'
 import VideoMediaInfoDialog from '@/components/dialog/VideoMediaInfoDialog.vue'
 import VideoDescInfoDialog from '@/components/dialog/VideoDescInfoDialog.vue'
+import VideoScreenshotDialog from '@/components/dialog/VideoScreenshotDialog.vue'
 import ProgressInfoDialog from '@/components/dialog/ProgressInfoDialog.vue'
 import AddSiteSeedDialog from '@/components/dialog/AddSiteSeedDialog.vue'
 import SiteSeedInfoDialog from '@/components/dialog/SiteSeedInfoDialog.vue'
@@ -47,6 +48,7 @@ const siteSeedList = ref<SiteSeed[]>([])
 const seedInfo = ref<SiteSeed>({} as SiteSeed)
 const showMediaInfo = ref(false)
 const showDescInfo = ref(false)
+const showScreenshotInfo = ref(false)
 const showProgressInfo = ref(false)
 const showSiteSeedInfo = ref(false)
 const showAddSiteSedd = ref(false)
@@ -204,6 +206,9 @@ function showMediaInfoDialog() {
 }
 function showDescInfoDialog() {
   showDescInfo.value = true
+}
+function showScreenshotInfoDialog() {
+  showScreenshotInfo.value = true
 }
 function showProgressInfoDialog() {
   console.log('showProgressInfoDialog')
@@ -557,6 +562,12 @@ watch(() => addForm.value.type,
             </template>
             简介
           </VBtn>
+          <VBtn class="ms-2 mb-2" color="purple" @click="showScreenshotInfoDialog()">
+            <template #prepend>
+              <VIcon icon="mdi-image-multiple" />
+            </template>
+            截图
+          </VBtn>
           <VBtn class="ms-2 mb-2" color="green" @click="showProgressInfoDialog()">
             <template #prepend>
               <VIcon icon="mdi-timetable" />
@@ -894,6 +905,8 @@ watch(() => addForm.value.type,
       @close="showMediaInfo = false" />
     <VideoDescInfoDialog v-if="showDescInfo" v-model="showDescInfo" :collect="collectDetail"
       @close="showDescInfo = false" />
+    <VideoScreenshotDialog v-if="showScreenshotInfo" v-model="showScreenshotInfo" :collect="collectDetail"
+      @close="showScreenshotInfo = false" />
     <ProgressInfoDialog v-if="showProgressInfo" v-model="showProgressInfo" type="collect" :id="collectDetail.id"
       :name="collectDetail.name" @close="showProgressInfo = false" />
     <SiteSeedInfoDialog v-if="showSiteSeedInfo" v-model="showSiteSeedInfo" :seed="seedInfo"

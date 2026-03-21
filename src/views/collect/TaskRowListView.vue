@@ -9,7 +9,7 @@ import { useToast } from 'vue-toastification'
 // API和类型导入
 import api from '@/api'
 import type { Collect, Site, SiteSeed } from '@/api/types'
-import { collectStatus, categoryOptions } from '@/api/constants'
+import { collectStatus, categoryOptions, tagOptions } from '@/api/constants'
 
 // 组件导入
 import TaskItem from '@/components/cards/TaskItem.vue'
@@ -127,6 +127,9 @@ const selectedSites = ref<number[]>([])
 const addSiteOptions = ref({
   next_step: false
 })
+// 批量添加标签相关
+const showAddTagsDialog = ref(false)
+const selectedTags = ref<string[]>([])
 // 全选状态的计算属性
 const isAllSelected = computed(() => {
   return filteredDataList.value.length > 0 && selectedItems.value.length === filteredDataList.value.length
@@ -569,6 +572,34 @@ async function batchAddSiteSeed() {
   }
 }
 
+// 批量添加标签
+async function batchAddTags() {
+  if (selectedTags.value.length === 0) {
+    $toast.warning('请选择至少一个标签')
+    return
+  }
+  
+  try {
+    const response = await api.post('collect/batchAddTags', {
+      collect_ids: selectedItems.value,
+      tags: selectedTags.value
+    })
+    
+    if (response.success) {
+      $toast.success(response.message || '批量添加标签成功')
+      showAddTagsDialog.value = false
+      selectedTags.value = []
+      // 刷新数据以更新标签信息
+      window.location.reload()
+    } else {
+      $toast.error(response.message || '批量添加标签失败')
+    }
+  } catch (error) {
+    $toast.error('批量添加标签失败')
+    console.error('批量添加标签失败:', error)
+  }
+}
+
 // 初始化过滤选项
 onMounted(() => {
   filterSiteSeed()
@@ -591,6 +622,10 @@ onMounted(() => {
             </VChip>
             <!-- 批量操作区域 -->
             <div class="batch-operations mr-0">
+              <VBtn v-if="showSelectionControls && selectedItems.length > 0" color="primary" variant="flat" size="small"
+                @click="showAddTagsDialog = true" prepend-icon="mdi-tag-plus" class="ml-2">
+                {{ t('collect.batchAddTags') }} ({{ selectedItems.length }})
+              </VBtn>
               <VBtn v-if="showSelectionControls && selectedItems.length > 0" color="success" variant="flat" size="small"
                 @click="showAddSiteDialogDialog" prepend-icon="mdi-server-plus" class="ml-2">
                 {{ t('collect.batchAddSite') }} ({{ selectedItems.length }})
@@ -961,6 +996,58 @@ onMounted(() => {
         <VCardActions>
           <VBtn @click="showAddSiteDialog = false">{{ t('collect.cancel') }}</VBtn>
           <VBtn color="success" @click="batchAddSiteSeed" :disabled="selectedSites.length === 0 || selectedItems.length === 0">
+            {{ t('collect.confirm') }}
+          </VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <!-- 批量添加标签对话框 -->
+    <VDialog v-model="showAddTagsDialog" max-width="600px" location="center">
+      <VCard>
+        <VCardTitle class="d-flex align-center">
+          <VIcon icon="mdi-tag-plus" class="me-2" color="primary"></VIcon>
+          {{ t('collect.batchAddTags') }}
+        </VCardTitle>
+        <VDivider />
+        <VCardText>
+          <!-- 已选任务列表 -->
+          <div class="mb-4">
+            <div class="text-subtitle-2 mb-2">{{ t('collect.selectedTasks') }} ({{ selectedItems.length }})</div>
+            <div class="selected-tasks-list max-h-48 overflow-y-auto">
+              <div v-for="id in selectedItems" :key="id"
+                class="task-item-ellipsis d-flex items-center gap-2 py-1">
+                <span class="flex-1 min-w-0 text-ellipsis overflow-hidden">
+                  {{ displayDataList.find((item: any) => item.id === id)?.cn_title || `ID: ${id}` }}
+                  {{ displayDataList.find((item: any) => item.id === id)?.year ? ` (${displayDataList.find((item: any) => item.id === id)?.year})` : '' }}
+                  <span v-if="displayDataList.find((item: any) => item.id === id)?.season" class="text-primary">
+                    S{{ String(displayDataList.find((item: any) => item.id === id)?.season).padStart(2, '0') }}
+                  </span>
+                  <span v-if="displayDataList.find((item: any) => item.id === id)?.episodes" class="text-success">
+                    E{{ displayDataList.find((item: any) => item.id === id)?.episodes }}
+                  </span>
+                </span>
+                <VIcon icon="mdi-close-circle"
+                  class="text-error cursor-pointer hover:opacity-70 transition-opacity flex-shrink-0"
+                  @click.stop="removeSelectedItem(id)" :title="t('collect.removeFromSelection')"></VIcon>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 标签选择 -->
+          <div class="mt-4">
+            <div class="text-subtitle-2 mb-2">{{ t('collect.selectTags') }}</div>
+            <VChipGroup v-model="selectedTags" multiple column>
+              <VChip v-for="(label, key) in tagOptions" :key="key" 
+                     :value="key" filter variant="outlined" size="small">
+                {{ label }}
+              </VChip>
+            </VChipGroup>
+          </div>
+        </VCardText>
+        <VCardActions>
+          <VBtn @click="showAddTagsDialog = false">{{ t('collect.cancel') }}</VBtn>
+          <VBtn color="primary" @click="batchAddTags" :disabled="selectedTags.length === 0 || selectedItems.length === 0">
             {{ t('collect.confirm') }}
           </VBtn>
         </VCardActions>

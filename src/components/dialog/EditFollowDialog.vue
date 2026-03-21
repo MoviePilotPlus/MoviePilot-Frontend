@@ -19,36 +19,25 @@
       <VCardText v-else>
         <VForm ref="formRef">
           <VRow>
-            <VCol cols="12" md="4">
+            <VCol cols="12" md="6">
               <VTextField
                 v-model.number="formData.total_episodes"
                 label="总集数"
                 type="number"
                 variant="outlined"
                 density="compact"
-                hint="剧集总数"
+                hint="剧集总数，填写后采集完成会自动标记完结"
                 persistent-hint
               />
             </VCol>
-            <VCol cols="12" md="4">
-              <VTextField
-                v-model.number="formData.start_episode"
-                label="起始集数"
-                type="number"
-                variant="outlined"
-                density="compact"
-                hint="从第几集开始追更"
-                persistent-hint
-              />
-            </VCol>
-            <VCol cols="12" md="4">
+            <VCol cols="12" md="6">
               <VTextField
                 v-model.number="formData.followed_max_episode"
                 label="已追更集数"
                 type="number"
                 variant="outlined"
                 density="compact"
-                hint="已追更到的最大集数"
+                :hint="`已追更到第 ${formData.followed_max_episode || 0} 集，下次从第 ${(formData.followed_max_episode || 0) + 1} 集开始检测`"
                 persistent-hint
               />
             </VCol>
@@ -82,13 +71,26 @@
           <VRow>
             <VCol cols="12" md="6">
               <VTextField
-                v-model.number="formData.check_interval"
-                label="检测间隔（分钟）"
+                v-model.number="formData.check_interval_min"
+                label="最小检测间隔（分钟）"
                 type="number"
                 variant="outlined"
                 density="compact"
-                hint="每隔多少分钟检测一次"
+                hint="检测间隔的最小值"
                 persistent-hint
+                min="1"
+              />
+            </VCol>
+            <VCol cols="12" md="6">
+              <VTextField
+                v-model.number="formData.check_interval_max"
+                label="最大检测间隔（分钟）"
+                type="number"
+                variant="outlined"
+                density="compact"
+                hint="检测间隔的最大值，系统将随机选择间隔"
+                persistent-hint
+                min="1"
               />
             </VCol>
           </VRow>
@@ -203,7 +205,8 @@ interface FormData {
   followed_max_episode: number | null
   check_start_time: string
   check_end_time: string
-  check_interval: number | null
+  check_interval_min: number | null
+  check_interval_max: number | null
   auto_download: boolean
   auto_publish: boolean
   anon_publish: boolean
@@ -217,7 +220,8 @@ const formData = ref<FormData>({
   followed_max_episode: null,
   check_start_time: '',
   check_end_time: '',
-  check_interval: null,
+  check_interval_min: null,
+  check_interval_max: null,
   auto_download: true,
   auto_publish: true,
   anon_publish: false,
@@ -247,7 +251,8 @@ async function loadTaskDetail() {
         followed_max_episode: task.followed_max_episode,
         check_start_time: task.check_start_time || '',
         check_end_time: task.check_end_time || '',
-        check_interval: task.check_interval,
+        check_interval_min: task.check_interval_min,
+        check_interval_max: task.check_interval_max,
         auto_download: task.auto_download ?? true,
         auto_publish: task.auto_publish ?? true,
         anon_publish: task.anon_publish ?? false,
@@ -275,7 +280,8 @@ async function handleSave() {
     if (formData.value.followed_max_episode !== null) updateData.followed_max_episode = formData.value.followed_max_episode
     if (formData.value.check_start_time) updateData.check_start_time = formData.value.check_start_time
     if (formData.value.check_end_time) updateData.check_end_time = formData.value.check_end_time
-    if (formData.value.check_interval !== null) updateData.check_interval = formData.value.check_interval
+    if (formData.value.check_interval_min !== null) updateData.check_interval_min = formData.value.check_interval_min
+    if (formData.value.check_interval_max !== null) updateData.check_interval_max = formData.value.check_interval_max
     
     updateData.auto_download = formData.value.auto_download
     updateData.auto_publish = formData.value.auto_publish

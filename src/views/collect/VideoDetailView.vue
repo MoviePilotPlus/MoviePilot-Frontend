@@ -9,6 +9,7 @@ import GroupTile from '@/components/GroupTitle.vue'
 import EpisodeCard from '@/components/cards/EpisodeCard.vue'
 import SlideView from '@/components/slide/SlideView.vue'
 import SiteSearchDialog from '@/components/dialog/SiteSearchDialog.vue'
+import VideoScreenshotDialog from '@/components/dialog/VideoScreenshotDialog.vue'
 import { doneNProgress, startNProgress } from '@/api/nprogress'
 import router from '@/router'
 import { useUserStore, useGlobalSettingsStore } from '@/stores'
@@ -47,6 +48,10 @@ const siteList = ref<Site[]>([])
 
 const ptgen = ref<PtgenInfo>({} as PtgenInfo)
 
+// 查看截图对话框
+const showScreenshotDialog = ref(false)
+const screenshotCollect = ref<any>({})
+
 // 采集模式选项
 const collectModeOptions = {
   'normal': '普通采集',
@@ -71,7 +76,8 @@ const followConfig = ref({
   totalEpisodes: null as number | null,
   checkStartTime: '18:00',
   checkEndTime: '22:00',
-  checkInterval: 5
+  checkIntervalMin: 5,
+  checkIntervalMax: 30
 })
 
 // 生成预约时间字符串
@@ -389,7 +395,8 @@ async function addCollect() {
         start_episode: followConfig.value.startEpisode,
         check_start_time: followConfig.value.checkStartTime,
         check_end_time: followConfig.value.checkEndTime,
-        check_interval: followConfig.value.checkInterval,
+        check_interval_min: followConfig.value.checkIntervalMin,
+        check_interval_max: followConfig.value.checkIntervalMax,
         auto_download: addForm.value.auto_download,
         auto_publish: addForm.value.auto_publish,
         anon_publish: addForm.value.anon_publish
@@ -1138,7 +1145,8 @@ function handleIgnore() {
                 type="number"
                 variant="outlined"
                 density="compact"
-                hide-details
+                :hint="followConfig.startEpisode ? `采集将从第 ${followConfig.startEpisode} 集开始` : '留空则从第 1 集开始采集'"
+                persistent-hint
                 min="1"
               />
             </v-col>
@@ -1149,7 +1157,8 @@ function handleIgnore() {
                 type="number"
                 variant="outlined"
                 density="compact"
-                hide-details
+                hint="填写总集数后采集完成会自动标记完结"
+                persistent-hint
                 min="1"
               />
             </v-col>
@@ -1179,19 +1188,32 @@ function handleIgnore() {
             </v-col>
             <v-col cols="6" md="4">
               <VTextField
-                v-model="followConfig.checkInterval"
-                label="检测间隔（分钟）"
+                v-model="followConfig.checkIntervalMin"
+                label="最小检测间隔（分钟）"
                 type="number"
                 variant="outlined"
                 density="compact"
-                hide-details
+                hint="检测间隔最小值"
+                persistent-hint
+                min="1"
+              />
+            </v-col>
+            <v-col cols="6" md="4">
+              <VTextField
+                v-model="followConfig.checkIntervalMax"
+                label="最大检测间隔（分钟）"
+                type="number"
+                variant="outlined"
+                density="compact"
+                hint="检测间隔最大值，系统将随机选择"
+                persistent-hint
                 min="1"
               />
             </v-col>
           </v-row>
           <div class="text-caption text-grey mt-2">
             <v-icon size="small" class="mr-1">mdi-information-outline</v-icon>
-            系统将在指定时间段内每隔一段时间检测新剧集，自动下载新发布的剧集
+            系统将在指定时间段内随机间隔检测新剧集，当天已更新则跳过，次日重新开始
           </div>
         </div>
         
@@ -1292,6 +1314,9 @@ function handleIgnore() {
   <!-- 站点资源弹窗 -->
   <SiteSearchDialog v-if="resourceDialog" v-model="resourceDialog" :site="getSelectedSite()"
     :keyword="mediaProps?.title" @close="onSiteResourceDone" />
+  <!-- 查看截图弹窗 -->
+  <VideoScreenshotDialog v-if="showScreenshotDialog" v-model="showScreenshotDialog" :collect="screenshotCollect"
+    @close="showScreenshotDialog = false" />
 </template>
 
 <style lang="scss">
