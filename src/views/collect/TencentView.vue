@@ -2,10 +2,11 @@
 // @ts-nocheck
 import api from '@/api'
 import { ref, reactive, watch, onMounted, computed } from 'vue'
-import type { CategoryInfo, CategoryItem } from '@/api/types'
+import type { CategoryInfo, CategoryItem, UserInfo } from '@/api/types'
 import { default as MediaCardListView } from '@/views/collect/MediaCardListView.vue'
 import { default as MediaSearchView } from '@/views/collect/MediaSearchView.vue'
-import { VTextField } from 'vuetify/components'
+import { VTextField, VDialog, VCard, VCardTitle, VCardText, VCardActions, VBtn, VImg, VRow, VCol, VChip, VMenu, VIcon } from 'vuetify/components'
+import { useToast } from 'vue-toastification'
 
 // 排序 类型 资费 出品 地区 年份 状态 画风 年龄 全部 性别 语言  动画明星 剧场 奖项 其他-characteristic
 // 电影或者电视剧 movies/tvs
@@ -21,6 +22,27 @@ const hiddenFilterCount = computed(() => Math.max(cateEntries.value.length - 3, 
 // 搜索词
 const searchWord = ref<string | null>(null)
 const isSearch = ref(false)
+
+// 用户信息
+const userInfo = ref<UserInfo>({
+  is_login: false,
+  vip_status: 0,
+  vip_type: 0,
+  vip_type_name: '',
+  due_date: '',
+  nickname: '',
+  face: ''
+})
+
+// 登录弹窗相关
+const loginDialogVisible = ref(false)
+const qrCodeUrl = ref('')
+const qrCodeId = ref('')
+const pollingStatus = ref('')
+const pollingTimer = ref<number | null>(null)
+const loginTimeoutTimer = ref<number | null>(null)
+
+const $toast = useToast()
 
 
 // 过滤参数
@@ -100,9 +122,127 @@ function searchClear() {
   searchWord.value = null
   isSearch.value = false
 }
-onMounted(() => {
+onMounted(async () => {
   queryCate(defaultType)
+  // 检测登录状态
+  await checkLoginStatus()
 })
+
+// 检测用户登录状态
+async function checkLoginStatus() {
+  try {
+    const info: UserInfo = await api.get('tencent/user/info')
+    userInfo.value = info
+  } catch (error) {
+    console.error('获取腾讯视频用户信息失败:', error)
+    userInfo.value.is_login = false
+  }
+}
+
+// 打开登录弹窗
+function openLoginDialog() {
+  loginDialogVisible.value = true
+  getQRCode()
+}
+
+// 获取二维码
+async function getQRCode() {
+  try {
+    const response = await api.get('tencent/qrcode')
+    qrCodeUrl.value = response.url
+    qrCodeId.value = response.qrcode_key
+    pollingStatus.value = '等待扫码'
+
+    // 开始轮询
+    startPolling()
+
+    // 设置登录超时
+    loginTimeoutTimer.value = window.setTimeout(() => {
+      stopPolling()
+      pollingStatus.value = '登录超时'
+      $toast.error('登录超时，请重新扫码')
+    }, 300000)
+  } catch (error) {
+    console.error('获取二维码失败:', error)
+    $toast.error('获取二维码失败')
+  }
+}
+
+// 开始轮询登录状态
+function startPolling() {
+  // 确保先停止之前的轮询
+  if (pollingTimer.value) {
+    clearInterval(pollingTimer.value)
+    pollingTimer.value = null
+  }
+
+  pollingTimer.value = window.setInterval(async () => {
+    try {
+      const response = await api.get('tencent/login_status', {
+        params: { qr_code_id: qrCodeId.value }
+      })
+
+      pollingStatus.value = response.message
+
+      if (response.status === 3) {
+        // 已完成扫码，进行登录
+        const loginResponse = await api.post('tencent/login?qr_code_id=' + qrCodeId.value)
+
+        if (loginResponse.code === 0) {
+          // 登录成功
+          stopPolling() // 立即关闭轮询
+          loginDialogVisible.value = false
+          $toast.success('登录成功')
+          // 重新获取用户信息
+          await checkLoginStatus()
+        } else {
+          stopPolling()
+          pollingStatus.value = '登录失败'
+          $toast.error('登录失败，请重试')
+        }
+      }
+    } catch (error) {
+      console.error('轮询登录状态失败:', error)
+    }
+  }, 3000)
+}
+
+// 停止轮询
+function stopPolling() {
+  if (pollingTimer.value) {
+    clearInterval(pollingTimer.value)
+    pollingTimer.value = null
+  }
+
+  if (loginTimeoutTimer.value) {
+    clearTimeout(loginTimeoutTimer.value)
+    loginTimeoutTimer.value = null
+  }
+}
+
+// 关闭登录弹窗
+function closeLoginDialog() {
+  stopPolling()
+  loginDialogVisible.value = false
+}
+
+// 退出登录
+async function logout() {
+  try {
+    await api.post('tencent/logout')
+    userInfo.value.is_login = false
+    userInfo.value.nickname = ''
+    userInfo.value.face = ''
+    userInfo.value.vip_status = 0
+    userInfo.value.vip_type = 0
+    userInfo.value.vip_type_name = ''
+    userInfo.value.due_date = ''
+    $toast.success('退出登录成功')
+  } catch (error) {
+    console.error('退出登录失败:', error)
+    $toast.error('退出登录失败')
+  }
+}
 // 类型变化
 watch(type, () => {
   filterParams.type = type.value
@@ -125,10 +265,41 @@ watch(filterParams, () => {
 
 <template>
   <div class="collect-source-view">
-    <div class="collect-toolbar px-3 flex justify-start align-center">
+    <div class="collect-toolbar px-3 flex justify-between items-center mb-3">
       <VCombobox ref="searchWordInput" v-model="searchWord" density="comfortable" variant="outlined"
-        class="search-input" prepend-inner-icon="mdi-magnify" append-inner-icon="mdi-close"
-        @click:append-inner="searchClear()" placeholder="搜索腾讯视频" @keydown.enter="searchMedia()" hide-details />
+        class="search-input search-input--wide" prepend-inner-icon="mdi-magnify"
+        append-inner-icon="mdi-close" @click:append-inner="searchClear()" placeholder="搜索腾讯视频"
+        @keydown.enter="searchMedia()" hide-details />
+      <div class="flex items-center">
+        <!-- 当前登录用户信息 -->
+        <VMenu v-if="userInfo.is_login" location="bottom center" transition="scale-transition" nudge-bottom="10">
+          <template #activator="{ props }">
+            <div v-bind="props" class="relative cursor-pointer mr-3" role="button" tabindex="0">
+              <VImg :src="userInfo.face" class="rounded-full" style="block-size: 32px; inline-size: 32px;" />
+              <VIcon v-if="userInfo.vip_status === 1" size="20" color="warning"
+                class="absolute -top-2 -right-2  rounded-full">mdi-crown
+              </VIcon>
+            </div>
+          </template>
+          <VCard class="p-3 min-w-[200px]">
+            <div class="flex flex-col items-center">
+              <VImg :src="userInfo.face" class="rounded-full mb-2"
+                style="block-size: 64px; inline-size: 64px;" />
+              <span class="font-medium">{{ userInfo.nickname }}</span>
+              <span class="font-medium text-sm text-gray-500">{{ userInfo.due_date }}</span>
+              <VChip v-if="userInfo.vip_status === 1" variant="flat" color="primary" size="small" class="mt-1">
+                {{ userInfo.vip_type_name }}
+              </VChip>
+              <VBtn variant="text" size="small" class="mt-2" @click="logout()">
+                退出登录
+              </VBtn>
+            </div>
+          </VCard>
+        </VMenu>
+        <VBtn v-if="!userInfo.is_login" color="primary" @click="openLoginDialog()">
+          登录
+        </VBtn>
+      </div>
     </div>
     <div class="collect-filter-panel px-3" v-show="!isSearch">
       <div class="collect-chip-row flex justify-start align-center">
@@ -162,6 +333,23 @@ watch(filterParams, () => {
       <MediaCardListView v-show="!isSearch" :key="currentKey" :apipath="`tencent/page_data`" :params="filterParams"
         :cate="cate" />
     </div>
+
+    <!-- 登录弹窗 -->
+    <VDialog v-model="loginDialogVisible" max-width="500px">
+      <VCard>
+        <VCardTitle>腾讯视频扫码登录</VCardTitle>
+        <VCardText class="text-center">
+          <VImg :src="`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrCodeUrl)}`"
+            class="mx-auto" style=" block-size: 200px;inline-size: 200px;" />
+          <p class="mt-4">{{ pollingStatus }}</p>
+          <p class="text-sm text-gray-500 mt-2">请使用腾讯视频APP扫描二维码登录</p>
+        </VCardText>
+        <VCardActions class="justify-center">
+          <VBtn color="primary" @click="getQRCode()">刷新二维码</VBtn>
+          <VBtn @click="closeLoginDialog()">取消</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
   </div>
 </template>
 <style scoped>
@@ -172,6 +360,12 @@ watch(filterParams, () => {
 .search-input {
   width: 100%;
   max-width: 560px;
+}
+
+.search-input--wide {
+  flex: 1 1 auto;
+  margin-inline-end: 10px;
+  max-width: 720px;
 }
 
 :deep(.search-input .v-field) {
