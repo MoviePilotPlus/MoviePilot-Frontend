@@ -152,6 +152,68 @@ function updateCurrentUserInfo(type: 'tv' | 'web') {
   }
 }
 
+// 退出登录
+async function logout() {
+  try {
+    await api.post(`bilibili/logout/${loginType.value}`)
+    if (loginType.value === 'tv') {
+      tvUserInfo.value.is_login = false
+      tvUserInfo.value.nickname = ''
+      tvUserInfo.value.face = ''
+      tvUserInfo.value.vip_status = 0
+      tvUserInfo.value.vip_type = 0
+      tvUserInfo.value.vip_type_name = ''
+      tvUserInfo.value.due_date = ''
+      tvLoginStatus.value = '未登录'
+    } else {
+      webUserInfo.value.is_login = false
+      webUserInfo.value.nickname = ''
+      webUserInfo.value.face = ''
+      webUserInfo.value.vip_status = 0
+      webUserInfo.value.vip_type = 0
+      webUserInfo.value.vip_type_name = ''
+      webUserInfo.value.due_date = ''
+      webLoginStatus.value = '未登录'
+    }
+    updateCurrentUserInfo(loginType.value)
+    $toast.success('退出登录成功')
+  } catch (error) {
+    console.error('退出登录失败:', error)
+    $toast.error('退出登录失败')
+  }
+}
+
+// 格式化时间
+function formatDate(dateString: string): string {
+  if (!dateString) return ''
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) {
+      // 尝试其他格式
+      const timestamp = parseInt(dateString)
+      if (!isNaN(timestamp)) {
+        const dateFromTimestamp = new Date(timestamp * 1000)
+        if (!isNaN(dateFromTimestamp.getTime())) {
+          return dateFromTimestamp.toLocaleDateString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+          })
+        }
+      }
+      return dateString
+    }
+    return date.toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    })
+  } catch (error) {
+    console.error('时间格式化失败:', error)
+    return dateString
+  }
+}
+
 // 检测用户登录状态
 async function checkLoginStatus(type: 'tv' | 'web') {
   try {
@@ -310,26 +372,35 @@ watch(filterParams, () => {
         <!-- 当前登录类型的用户信息 -->
         <VMenu v-if="currentUserInfo.is_login" location="bottom center" transition="scale-transition" nudge-bottom="10">
           <template #activator="{ props }">
-            <div v-bind="props" class="relative cursor-pointer mr-3" role="button" tabindex="0">
-              <VImg :src="currentUserInfo.face" class="rounded-full" style="block-size: 32px; inline-size: 32px;" />
-              <VIcon v-if="currentUserInfo.vip_status === 1" size="20" color="warning"
-                class="absolute -top-2 -right-2  rounded-full">mdi-crown
-              </VIcon>
+            <div v-bind="props" class="relative cursor-pointer mr-3 transition-all duration-300 hover:scale-105" role="button" tabindex="0">
+              <VImg :src="currentUserInfo.face" class="rounded-full border-2 border-transparent hover:border-primary transition-all duration-300" style="block-size: 36px; inline-size: 36px;" />
+              <div v-if="currentUserInfo.vip_status === 1" class="absolute -top-1 -right-1 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-full p-0.5 shadow-lg w-5 h-5 flex items-center justify-center">
+                <VIcon size="14" color="white">mdi-crown</VIcon>
+              </div>
             </div>
           </template>
-          <VCard class="p-3 min-w-[200px]">
+          <VCard class="p-4 min-w-[240px] rounded-xl shadow-lg border border-gray-100">
             <div class="flex flex-col items-center">
-              <VImg :src="currentUserInfo.face" class="rounded-full mb-2"
-                style="block-size: 64px; inline-size: 64px;" />
-              <span class="font-medium">{{ currentUserInfo.nickname }}</span>
-              <span class="font-medium text-sm text-gray-500">{{ currentUserInfo.due_date }}</span>
-              <VChip v-if="currentUserInfo.vip_status === 1" variant="flat" color="primary" size="small" class="mt-1">
+              <div class="relative mb-3">
+                <VImg :src="currentUserInfo.face" class="rounded-full border-4 border-white shadow-md" style="block-size: 72px; inline-size: 72px;" />
+                <div v-if="currentUserInfo.vip_status === 1" class="absolute -bottom-1 -right-1 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-full p-1 shadow-md w-6 h-6 flex items-center justify-center">
+                  <VIcon size="16" color="white">mdi-crown</VIcon>
+                </div>
+              </div>
+              <h3 class="font-semibold text-lg text-center mb-1">{{ currentUserInfo.nickname }}</h3>
+              <p v-if="currentUserInfo.due_date" class="text-sm text-gray-500 mb-3">{{ formatDate(currentUserInfo.due_date) }}</p>
+              <VChip v-if="currentUserInfo.vip_status === 1" variant="flat" color="primary" size="small" class="mb-3 px-3 py-0.5">
                 {{ currentUserInfo.vip_type_name }}
               </VChip>
+              <VBtn variant="text" size="small" class="mt-1 text-red-500 hover:text-red-700 transition-colors duration-300" @click="logout()">
+                <VIcon size="16" class="mr-1">mdi-logout</VIcon>
+                退出登录
+              </VBtn>
             </div>
           </VCard>
         </VMenu>
-        <VBtn v-if="!currentUserInfo.is_login" color="primary" @click="openLoginDialog(loginType)">
+        <VBtn v-if="!currentUserInfo.is_login" color="primary" variant="flat" class="rounded-full px-4 py-1.5 transition-all duration-300 hover:shadow-md hover:scale-105" @click="openLoginDialog(loginType)">
+          <VIcon size="16" class="mr-1">mdi-login</VIcon>
           登录{{ loginType === 'tv' ? 'TV端' : '网页端' }}
         </VBtn>
       </div>
