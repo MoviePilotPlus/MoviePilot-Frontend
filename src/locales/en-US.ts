@@ -593,6 +593,10 @@ export default {
       title: 'Cache',
       subtitle: 'Manage Cache',
     },
+    scheduler: {
+      title: 'Services',
+      subtitle: 'Scheduled Services',
+    },
   },
   workflow: {
     components: 'Action Components',
@@ -1565,6 +1569,17 @@ export default {
       aiAgentGlobal: 'Global AI Assistant',
       aiAgentGlobalHint:
         'Enable global AI assistant functionality, all message conversations will be answered by the AI agent without using the /ai command',
+      aiAgentJobInterval: 'AI Agent Job Interval',
+      aiAgentJobIntervalHint:
+        'Set the check interval for AI agent scheduled tasks. Select "Disabled" to disable scheduled tasks.',
+      aiAgentJobIntervalDisabled: 'Disabled',
+      aiAgentJobInterval1h: '1 Hour',
+      aiAgentJobInterval3h: '3 Hours',
+      aiAgentJobInterval6h: '6 Hours',
+      aiAgentJobInterval12h: '12 Hours',
+      aiAgentJobInterval24h: '24 Hours',
+      aiAgentJobInterval1w: '1 Week',
+      aiAgentJobInterval1M: '1 Month',
       advancedSettings: 'Advanced Settings',
       advancedSettingsDesc: 'System advanced settings, only need to be adjusted in special cases',
       downloaders: 'Downloaders',
@@ -1761,6 +1776,11 @@ export default {
       episodeThumb: 'Thumb',
       scrapingSwitchSaveFailed: 'Scraping switch settings save failed: {message}',
       scrapingSwitchSaveError: 'Scraping switch settings save failed',
+      policy: {
+        skipDesc: 'Skip scraping, this file will not be generated',
+        missingOnlyDesc: 'Scrape only if missing, existing file remains unchanged',
+        overwriteDesc: 'Always scrape, existing file will be overwritten',
+      }
     },
     site: {
       siteSync: 'Site Synchronization',

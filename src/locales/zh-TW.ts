@@ -590,6 +590,10 @@ export default {
       title: '緩存',
       subtitle: '管理緩存',
     },
+    scheduler: {
+      title: '服務',
+      subtitle: '定時服務',
+    },
   },
   workflow: {
     components: '動作組件',
@@ -1550,6 +1554,16 @@ export default {
       llmBaseUrlHint: 'LLM API的基礎URL地址，用於自定義API端點',
       aiAgentGlobal: '全局智能助手',
       aiAgentGlobalHint: '啟用全局智能助手功能，所有消息對話均使用智能體回答而不用使用/ai命令',
+      aiAgentJobInterval: '智能體定時任務間隔',
+      aiAgentJobIntervalHint: '設置智能體定時任務的檢查間隔，選擇「不啟用」則不執行定時任務',
+      aiAgentJobIntervalDisabled: '不啟用',
+      aiAgentJobInterval1h: '1小時',
+      aiAgentJobInterval3h: '3小時',
+      aiAgentJobInterval6h: '6小時',
+      aiAgentJobInterval12h: '12小時',
+      aiAgentJobInterval24h: '24小時',
+      aiAgentJobInterval1w: '1週',
+      aiAgentJobInterval1M: '1個月',
       advancedSettings: '高級設置',
       advancedSettingsDesc: '系統進階設置，特殊情況下才需要調整',
       downloaders: '下載器',
@@ -1739,6 +1753,11 @@ export default {
       episodeThumb: '縮略圖',
       scrapingSwitchSaveFailed: '刮削開關設定保存失敗：{message}',
       scrapingSwitchSaveError: '刮削開關設定保存失敗',
+      policy: {
+        skipDesc: '跳過刮削，不生成該文件',
+        missingOnlyDesc: '僅在缺失時刮削，已存在則保持不變',
+        overwriteDesc: '始終刮削，已存在則覆蓋',
+      }
     },
     site: {
       siteSync: '站點同步',

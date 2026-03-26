@@ -9,7 +9,6 @@ import AccountSettingSearch from '@/views/setting/AccountSettingSearch.vue'
 import AccountSettingSubscribe from '@/views/setting/AccountSettingSubscribe.vue'
 import AccountSettingCollect from '@/views/setting/AccountSettingCollect.vue'
 import AccountSettingSystem from '@/views/setting/AccountSettingSystem.vue'
-import AccountSettingService from '@/views/setting/AccountSettingService.vue'
 import AccountSettingDirectory from '@/views/setting/AccountSettingDirectory.vue'
 import AccountSettingRule from '@/views/setting/AccountSettingRule.vue'
 import AccountSettingCache from '@/views/setting/AccountSettingCache.vue'
@@ -102,24 +101,6 @@ onMounted(() => {
         <transition name="fade-slide" appear>
           <div>
             <AccountSettingSubscribe />
-          </div>
-        </transition>
-      </VWindowItem>
-
-      <!-- 服务 -->
-      <VWindowItem value="scheduler">
-        <transition name="fade-slide" appear>
-          <div>
-            <AccountSettingService />
-          </div>
-        </transition>
-      </VWindowItem>
-
-      <!-- 缓存 -->
-      <VWindowItem value="cache">
-        <transition name="fade-slide" appear>
-          <div>
-            <AccountSettingCache />
           </div>
         </transition>
       </VWindowItem>

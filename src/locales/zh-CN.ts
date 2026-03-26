@@ -590,6 +590,10 @@ export default {
       title: '缓存',
       subtitle: '管理缓存',
     },
+    scheduler: {
+      title: '服务',
+      subtitle: '定时服务',
+    },
   },
   workflow: {
     components: '动作组件',
@@ -1555,6 +1559,16 @@ export default {
       llmBaseUrlHint: 'LLM API的基础URL地址，用于自定义API端点',
       aiAgentGlobal: '全局智能助手',
       aiAgentGlobalHint: '启用全局智能助手功能，所有消息对话均使用智能体回答而不用使用/ai命令',
+      aiAgentJobInterval: '智能体定时任务间隔',
+      aiAgentJobIntervalHint: '设置智能体定时任务的检查间隔，选择"不启用"则不执行定时任务',
+      aiAgentJobIntervalDisabled: '不启用',
+      aiAgentJobInterval1h: '1小时',
+      aiAgentJobInterval3h: '3小时',
+      aiAgentJobInterval6h: '6小时',
+      aiAgentJobInterval12h: '12小时',
+      aiAgentJobInterval24h: '24小时',
+      aiAgentJobInterval1w: '1周',
+      aiAgentJobInterval1M: '1个月',
       advancedSettings: '高级设置',
       advancedSettingsDesc: '系统进阶设置，特殊情况下才需要调整',
       downloaders: '下载器',
@@ -1744,6 +1758,11 @@ export default {
       episodeThumb: '缩略图',
       scrapingSwitchSaveFailed: '刮削开关设置保存失败：{message}',
       scrapingSwitchSaveError: '刮削开关设置保存失败',
+      policy: {
+        skipDesc: '跳过刮削，不生成该文件',
+        missingOnlyDesc: '仅在缺失时刮削，已存在则保持不变',
+        overwriteDesc: '始终刮削，已存在则覆盖',
+      }
     },
     site: {
       siteSync: '站点同步',
