@@ -219,18 +219,6 @@ export function getSettingTabs(t: Composer['t']) {
       description: t('settingTabs.subscribe.description'),
     },
     {
-      title: t('settingTabs.scheduler.title'),
-      icon: 'mdi-list-box',
-      tab: 'scheduler',
-      description: t('settingTabs.scheduler.description'),
-    },
-    {
-      title: t('settingTabs.cache.title'),
-      icon: 'mdi-database',
-      tab: 'cache',
-      description: t('settingTabs.cache.description'),
-    },
-    {
       title: t('settingTabs.notification.title'),
       icon: 'mdi-bell',
       tab: 'notification',
