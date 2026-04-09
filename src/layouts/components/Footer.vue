@@ -271,7 +271,7 @@ const showDynamicButton = computed(() => {
   background-color: rgba(var(--v-theme-surface), 0.6);
   pointer-events: auto;
   transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
-  will-change: transform, max-width, opacity;
+  will-change: transform, max-inline-size, opacity;
 
   // 透明主题下的特殊样式
   .v-theme--transparent & {
@@ -335,8 +335,8 @@ const showDynamicButton = computed(() => {
 .dynamic-btn-card {
   block-size: auto;
   inline-size: auto;
+  max-inline-size: 60px;
   min-block-size: 0;
-  max-width: 60px;
 
   .footer-card-content {
     padding: 3px;
@@ -361,17 +361,17 @@ const showDynamicButton = computed(() => {
 // 底部导航动画
 .footer-nav-enter-active,
 .footer-nav-leave-active {
-  transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
   overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .footer-nav-enter-from,
 .footer-nav-leave-to {
-  opacity: 0;
-  max-width: 0 !important;
-  margin-inline-start: 0 !important;
-  border-width: 0 !important;
   padding: 0 !important;
+  border-width: 0 !important;
+  margin-inline-start: 0 !important;
+  max-inline-size: 0 !important;
+  opacity: 0;
   transform: translateX(20px);
 }
 

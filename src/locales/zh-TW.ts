@@ -90,6 +90,7 @@ export default {
     mediaServer: '媒體伺服器',
     manual: '手動處理',
     plugin: '插件',
+    agent: '智能體',
     other: '其它',
   },
   actionStep: {
@@ -256,6 +257,7 @@ export default {
     noPermission: '登錄失敗，您沒有任何功能權限，請聯繫管理員！',
     loginFailed: '登錄失敗',
     secondaryVerification: '二次驗證',
+    orDivider: '或',
     loginWithPasskey: '使用通行密鑰登錄',
     loginWithOtp: '使用驗證碼登錄',
     orUsePasskey: '或使用通行密鑰進行驗證',
@@ -1554,8 +1556,10 @@ export default {
       llmBaseUrlHint: 'LLM API的基礎URL地址，用於自定義API端點',
       aiAgentGlobal: '全局智能助手',
       aiAgentGlobalHint: '啟用全局智能助手功能，所有消息對話均使用智能體回答而不用使用/ai命令',
-      aiAgentJobInterval: '智能體定時任務間隔',
-      aiAgentJobIntervalHint: '設置智能體定時任務的檢查間隔，選擇「不啟用」則不執行定時任務',
+      aiAgentJobInterval: '定時喚醒',
+      aiAgentJobIntervalHint: '設置定時喚醒的檢查間隔，選擇「不啟用」則不執行定時任務',
+      aiAgentVerbose: '囉嗦模式',
+      aiAgentVerboseHint: '開啟後會在智能體回覆時顯示工具調用過程',
       aiAgentJobIntervalDisabled: '不啟用',
       aiAgentJobInterval1h: '1小時',
       aiAgentJobInterval3h: '3小時',
@@ -1568,6 +1572,9 @@ export default {
       advancedSettingsDesc: '系統進階設置，特殊情況下才需要調整',
       downloaders: '下載器',
       downloadersDesc: '只有默認下載器才會被默認使用。',
+      aiAgentRetryTransfer: '檔案整理失敗智能接管',
+      aiAgentRetryTransferHint:
+        '啟用後，當檔案整理失敗時，智能助手將自動接管並嘗試重新整理，利用AI能力解決識別和匹配問題',
       aiRecommendEnabled: '搜索結果智能推薦',
       aiRecommendEnabledHint:
         '啟用搜索結果智能推薦功能，開啟後將在搜索結果頁面顯示智能推薦按鈕，可根據用戶偏好智能推薦資源',
@@ -2197,7 +2204,7 @@ export default {
     },
     searchBar: {
       search: '搜索',
-      searchPlaceholder: '搜索功能、訂閱、設置...',
+      searchPlaceholder: '搜索電影、劇集以及更多...',
       recentSearches: '最近搜索',
       noRecentSearches: '沒有最近搜索記錄',
       functions: '功能',
@@ -2217,6 +2224,9 @@ export default {
       searchInSites: '在站點中搜索種子資源',
       relatedResources: '相關資源',
       searchTip: '可搜索電影、電視劇、演員、資源等',
+      emptySearchHint: '輸入關鍵字開始搜索',
+      escClose: '關閉',
+      openSearch: '打開搜索',
     },
     searchSite: {
       selectSites: '選擇站點',

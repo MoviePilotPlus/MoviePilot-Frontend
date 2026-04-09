@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { NavMenu } from '@/@layouts/types'
 import { getNavMenus } from '@/router/i18n-menu'
-import { useUserStore } from '@/stores'
+import { usePluginSidebarNavStore, useUserStore } from '@/stores'
 import { useI18n } from 'vue-i18n'
+import { filterPluginSidebarNavEntries } from '@/utils/pluginSidebarNav'
 import { filterMenusByPermission } from '@/utils/permission'
 
 // 国际化
 const { t } = useI18n()
 
-// 从 Store 中获取用户信息
 const userStore = useUserStore()
+const pluginSidebarNavStore = usePluginSidebarNavStore()
 
 // 获取用户权限信息
 const userPermissions = computed(() => ({
@@ -20,34 +21,22 @@ const userPermissions = computed(() => ({
 // 应用分组（以header分组）
 const appGroups = ref<Record<string, NavMenu[]>>({})
 
-function getVisibleFooterMenus(menus: NavMenu[]): NavMenu[] {
-  const footerMenusWithProperty = menus.filter((menu: NavMenu) => menu.footer === true)
-  const expectedFooterMenuCount = 3
-
-  if (footerMenusWithProperty.length >= expectedFooterMenuCount)
-    return footerMenusWithProperty.slice(0, expectedFooterMenuCount)
-
-  const nonFooterMenus = menus.filter(
-    (menu: NavMenu) =>
-      menu.footer !== true &&
-      !footerMenusWithProperty.some(footerMenu => footerMenu.to === menu.to),
-  )
-
-  const needCount = expectedFooterMenuCount - footerMenusWithProperty.length
-  return [...footerMenusWithProperty, ...nonFooterMenus.slice(0, needCount)]
-}
-
-// 根据header属性对应用进行分类
-function categorizeApps() {
-  // 获取所有菜单并根据权限过滤
+// 根据header属性对应用进行分类（含插件侧栏项，与桌面端侧栏一致）
+async function categorizeApps() {
   const allMenus = getNavMenus(t)
   const filteredMenus = filterMenusByPermission(allMenus, userPermissions.value)
-  const visibleFooterMenus = getVisibleFooterMenus(filteredMenus)
-  const menus = filteredMenus.filter(
-    (item: NavMenu) => !visibleFooterMenus.some(footerMenu => footerMenu.to === item.to),
-  )
+  let menus = filteredMenus.filter((item: NavMenu) => !item.footer)
 
-  // 按header属性分组
+  await pluginSidebarNavStore.ensureSidebarNav()
+  if (pluginSidebarNavStore.items.length > 0) {
+    const pluginNavMenus = filterPluginSidebarNavEntries(
+      pluginSidebarNavStore.items,
+      t,
+      userPermissions.value,
+    ).map(e => e.navMenu)
+    menus = [...menus, ...pluginNavMenus]
+  }
+
   const groupedMenus: Record<string, NavMenu[]> = {}
 
   menus.forEach(menu => {
@@ -58,11 +47,9 @@ function categorizeApps() {
     groupedMenus[header].push(menu)
   })
 
-  // 将分组结果赋值给响应式变量
   appGroups.value = groupedMenus
 }
 
-// 页面加载时对应用进行分类
 onMounted(() => {
   categorizeApps()
 })
@@ -80,7 +67,7 @@ onMounted(() => {
           <VList lines="one" class="settings-list">
             <VListItem
               v-for="(app, appIndex) in apps"
-              :key="appIndex"
+              :key="`${header}-${appIndex}-${String(app.to)}`"
               :to="app.to || ''"
               color="primary"
               class="settings-list-item"

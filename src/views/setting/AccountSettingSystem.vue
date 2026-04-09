@@ -33,11 +33,13 @@ const SystemSettings = ref<any>({
     CUSTOMIZE_WALLPAPER_API_URL: null,
     AI_AGENT_ENABLE: false,
     AI_AGENT_GLOBAL: false,
+    AI_AGENT_VERBOSE: false,
     AI_AGENT_JOB_INTERVAL: 24,
     LLM_PROVIDER: 'deepseek',
     LLM_MODEL: 'deepseek-chat',
     LLM_API_KEY: null,
     LLM_BASE_URL: 'https://api.deepseek.com',
+     AI_AGENT_RETRY_TRANSFER: false,
     AI_RECOMMEND_ENABLED: false,
     AI_RECOMMEND_USER_PREFERENCE: null,
     AI_RECOMMEND_MAX_ITEMS: 50,
@@ -131,11 +133,7 @@ const scrapingConfig = [
 
 // 刮削策略设置
 const ScrapingPolicies = ref<Record<string, 'skip' | 'missingOnly' | 'overwrite'>>(
-  Object.fromEntries(
-    scrapingConfig.flatMap(section =>
-      section.items.map(item => [item.key, 'missingOnly'])
-    )
-  )
+  Object.fromEntries(scrapingConfig.flatMap(section => section.items.map(item => [item.key, 'missingOnly']))),
 )
 
 // 是否发送请求的总开关
@@ -513,7 +511,8 @@ async function loadScrapingSwitchs() {
     if (result.success && result.data?.value) {
       const loadedSwitches = result.data.value
       for (const key in loadedSwitches) {
-        if (typeof loadedSwitches[key] === 'boolean') { // 兼容旧数据
+        if (typeof loadedSwitches[key] === 'boolean') {
+          // 兼容旧数据
           loadedSwitches[key] = loadedSwitches[key] ? 'missingOnly' : 'skip'
         }
       }
@@ -685,7 +684,7 @@ onDeactivated(() => {
             </VRow>
             <VDivider class="my-4" />
             <VRow>
-              <VCol cols="12" md="6">
+              <VCol cols="12" md="4">
                 <VSwitch
                   v-model="SystemSettings.Basic.AI_AGENT_ENABLE"
                   :label="t('setting.system.aiAgentEnable')"
@@ -693,7 +692,7 @@ onDeactivated(() => {
                   persistent-hint
                 />
               </VCol>
-              <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE" cols="12" md="6">
+              <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE" cols="12" md="4">
                 <VSwitch
                   v-model="SystemSettings.Basic.AI_AGENT_GLOBAL"
                   :label="t('setting.system.aiAgentGlobal')"
@@ -701,23 +700,12 @@ onDeactivated(() => {
                   persistent-hint
                 />
               </VCol>
-              <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE" cols="12" md="6">
-                <VSelect
-                  v-model="SystemSettings.Basic.AI_AGENT_JOB_INTERVAL"
-                  :label="t('setting.system.aiAgentJobInterval')"
-                  :hint="t('setting.system.aiAgentJobIntervalHint')"
+              <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE" cols="12" md="4">
+                <VSwitch
+                  v-model="SystemSettings.Basic.AI_AGENT_VERBOSE"
+                  :label="t('setting.system.aiAgentVerbose')"
+                  :hint="t('setting.system.aiAgentVerboseHint')"
                   persistent-hint
-                  :items="[
-                    { title: t('setting.system.aiAgentJobIntervalDisabled'), value: 0 },
-                    { title: t('setting.system.aiAgentJobInterval1h'), value: 1 },
-                    { title: t('setting.system.aiAgentJobInterval3h'), value: 3 },
-                    { title: t('setting.system.aiAgentJobInterval6h'), value: 6 },
-                    { title: t('setting.system.aiAgentJobInterval12h'), value: 12 },
-                    { title: t('setting.system.aiAgentJobInterval24h'), value: 24 },
-                    { title: t('setting.system.aiAgentJobInterval1w'), value: 168 },
-                    { title: t('setting.system.aiAgentJobInterval1M'), value: 720 },
-                  ]"
-                  prepend-inner-icon="mdi-timer-outline"
                 />
               </VCol>
               <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE" cols="12" md="6">
@@ -785,6 +773,33 @@ onDeactivated(() => {
                   persistent-hint
                   type="number"
                   prepend-inner-icon="mdi-counter"
+                />
+              </VCol>
+              <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE" cols="12" md="6">
+                <VSelect
+                  v-model="SystemSettings.Basic.AI_AGENT_JOB_INTERVAL"
+                  :label="t('setting.system.aiAgentJobInterval')"
+                  :hint="t('setting.system.aiAgentJobIntervalHint')"
+                  persistent-hint
+                  :items="[
+                    { title: t('setting.system.aiAgentJobIntervalDisabled'), value: 0 },
+                    { title: t('setting.system.aiAgentJobInterval1h'), value: 1 },
+                    { title: t('setting.system.aiAgentJobInterval3h'), value: 3 },
+                    { title: t('setting.system.aiAgentJobInterval6h'), value: 6 },
+                    { title: t('setting.system.aiAgentJobInterval12h'), value: 12 },
+                    { title: t('setting.system.aiAgentJobInterval24h'), value: 24 },
+                    { title: t('setting.system.aiAgentJobInterval1w'), value: 168 },
+                    { title: t('setting.system.aiAgentJobInterval1M'), value: 720 },
+                  ]"
+                  prepend-inner-icon="mdi-timer-outline"
+                />
+              </VCol>
+              <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE" cols="12">
+                <VSwitch
+                  v-model="SystemSettings.Basic.AI_AGENT_RETRY_TRANSFER"
+                  :label="t('setting.system.aiAgentRetryTransfer')"
+                  :hint="t('setting.system.aiAgentRetryTransferHint')"
+                  persistent-hint
                 />
               </VCol>
               <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE" cols="12">
@@ -1209,14 +1224,11 @@ onDeactivated(() => {
                       <VExpansionPanelText>
                         <VRow v-for="section in scrapingConfig" :key="section.section">
                           <VCol cols="12" class="pb-2">
-                            <VListSubheader class="text-lg">{{ t(`setting.system.${section.section}`) }}</VListSubheader>
+                            <VListSubheader class="text-lg">
+                              {{ t(`setting.system.${section.section}`) }}
+                            </VListSubheader>
                           </VCol>
-                          <VCol
-                            v-for="item in section.items"
-                            :key="item.key"
-                            cols="12"
-                            md="4"
-                          >
+                          <VCol v-for="item in section.items" :key="item.key" cols="12" md="4">
                             <div class="d-flex align-center">
                               <VBtnToggle
                                 :model-value="ScrapingPolicies[item.key]"
