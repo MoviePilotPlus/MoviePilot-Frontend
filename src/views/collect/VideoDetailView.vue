@@ -509,9 +509,9 @@ function validateForm() {
     }
   }
 
-  if (addForm.value.site_list.length === 0) {
-    errors.push('请至少选择一个站点！')
-  }
+  // if (addForm.value.site_list.length === 0) {
+  //   errors.push('请至少选择一个站点！')
+  // }
 
   // if (!addForm.value.douban_id && !addForm.value.imdb_id) {
   //   errors.push('豆瓣ID或者IMDBID需要至少需输入一个！')
