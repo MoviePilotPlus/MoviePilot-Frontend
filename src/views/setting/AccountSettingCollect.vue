@@ -39,6 +39,10 @@ const CollectSettings = ref<any>({
     TV_FOLDER_FORMAT: '',
     MOVIE_FOLDER_FORMAT: '',
   },
+  TencentApi: {
+    TENCENT_CHACHAO20_API_URL: '',
+    TENCENT_CKEY42_API_URL: '',
+  },
   ImageHosting: {
     ipic: {
       active: true,
@@ -394,7 +398,12 @@ async function saveBasicSettings() {
     $toast.success(t('setting.collect.basicSaveSuccess'))
   }
 }
-
+// 保存腾讯API设置
+async function saveTencentApiSettings() {
+  if (await saveSystemSetting(CollectSettings.value.TencentApi)) {
+    $toast.success(t('setting.collect.tencentApiSaveSuccess'))
+  }
+}
 // 添加制作组配置
 function addTeamConfig() {
   const newConfig: TeamConfig = {
@@ -954,6 +963,49 @@ onDeactivated(() => {
           <VForm @submit.prevent="() => {}">
             <div class="d-flex flex-wrap gap-4 mt-4">
               <VBtn type="submit" @click="saveTencentCookie"> {{ t('common.save') }} </VBtn>
+            </div>
+          </VForm>
+        </VCardText>
+      </VCard>
+    </VCol>
+  </VRow>
+  <VRow>
+    <VCol cols="12">
+      <VCard>
+        <VCardItem>
+          <VCardTitle>{{ t('setting.collect.tencentApiSettings') }}</VCardTitle>
+          <VCardSubtitle>{{ t('setting.collect.tencentApiSettingsDesc') }}</VCardSubtitle>
+        </VCardItem>
+        <VCardText>
+          <VForm @submit.prevent="() => {}">
+            <VRow>
+              <VCol cols="12" md="6">
+                <VTextField
+                  v-model="CollectSettings.TencentApi.TENCENT_CHACHAO20_API_URL"
+                  :label="t('setting.collect.tencentChachao20ApiUrl')"
+                  :hint="t('setting.collect.tencentChachao20ApiUrlHint')"
+                  persistent-hint
+                  prepend-inner-icon="mdi-lock-open-outline"
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VTextField
+                  v-model="CollectSettings.TencentApi.TENCENT_CKEY42_API_URL"
+                  :label="t('setting.collect.tencentCkey42ApiUrl')"
+                  :hint="t('setting.collect.tencentCkey42ApiUrlHint')"
+                  persistent-hint
+                  prepend-inner-icon="mdi-key"
+                />
+              </VCol>
+            </VRow>
+          </VForm>
+        </VCardText>
+        <VCardText>
+          <VForm @submit.prevent="() => {}">
+            <div class="d-flex flex-wrap gap-4 mt-4">
+              <VBtn type="submit" @click="saveTencentApiSettings" prepend-icon="mdi-content-save">
+                {{ t('common.save') }}
+              </VBtn>
             </div>
           </VForm>
         </VCardText>
