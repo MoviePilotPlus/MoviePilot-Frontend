@@ -118,6 +118,7 @@ const templateData = ref<TemplateDataType>({
     SD: '',
   },
   video_codec: {
+    H266: '',
     H265: '',
     H264: '',
     VP8: '',
@@ -606,6 +607,9 @@ onMounted(async () => {
                 <VCardTitle class="text-lg font-medium">视频编码配置</VCardTitle>
                 <VCardText>
                   <VRow>
+                    <VCol cols="12" sm="6" md="4" lg="3">
+                      <VTextField v-model="templateData.video_codec.H266" label="H.266/VVC" type="text" />
+                    </VCol>
                     <VCol cols="12" sm="6" md="4" lg="3">
                       <VTextField v-model="templateData.video_codec.H265" label="H.265/HEVC" type="text" />
                     </VCol>
