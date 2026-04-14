@@ -113,7 +113,7 @@ registerHeaderTab({
 const pluginId = ref(route.query.id)
 
 // 当前排序字段
-const activeSort = ref(null)
+const activeSort = ref<string | null>(null)
 
 // 插件顺序配置
 const orderConfig = ref<{ id: string; type?: string; order?: number }[]>([])
@@ -218,6 +218,16 @@ const isFilterFormEmpty = computed(() => {
     !filterForm.name && filterForm.author.length === 0 && filterForm.label.length === 0 && filterForm.repo.length === 0
   )
 })
+
+// 切换市场过滤器多选项
+function toggleMarketFilter(field: 'author' | 'label' | 'repo', value: string) {
+  const index = filterForm[field].indexOf(value)
+  if (index > -1) {
+    filterForm[field].splice(index, 1)
+  } else {
+    filterForm[field].push(value)
+  }
+}
 
 // 插件过滤条件
 const installedFilter = ref(null)
@@ -1289,113 +1299,144 @@ function onDragStartPlugin(evt: any) {
 
 <template>
   <div>
-    <!-- 过滤弹窗 -->
+    <!-- 已安装插件过滤下拉菜单 -->
     <Teleport to="body" v-if="filterInstalledPluginDialog">
       <VMenu
         v-model="filterInstalledPluginDialog"
-        width="20rem"
         :close-on-content-click="false"
         :activator="'[data-menu-activator=installed-filter-btn]'"
         location="bottom end"
       >
-        <VCard>
-          <VCardItem>
-            <VCardTitle>
-              <VIcon icon="mdi-filter-multiple-outline" class="mr-2" />
-              {{ t('plugin.filterPlugins') }}
-            </VCardTitle>
-            <VDialogCloseBtn @click="filterInstalledPluginDialog = false" />
-          </VCardItem>
-          <VCardText>
-            <VRow>
-              <VCol cols="12">
-                <VCombobox
-                  v-model="installedFilter"
-                  :items="installedPluginNames"
-                  :label="t('plugin.name')"
-                  density="comfortable"
-                  clearable
-                />
-              </VCol>
-              <VCol cols="6">
-                <VSwitch v-model="enabledFilter" :label="t('plugin.running')" />
-              </VCol>
-              <VCol cols="6">
-                <VSwitch v-model="hasUpdateFilter" :label="t('plugin.hasNewVersion')" />
-              </VCol>
-            </VRow>
-          </VCardText>
+        <VCard min-width="220">
+          <!-- 名称搜索 -->
+          <div class="px-3 pt-3 pb-1">
+            <VCombobox
+              v-model="installedFilter"
+              :items="installedPluginNames"
+              :placeholder="t('plugin.name')"
+              prepend-inner-icon="mdi-magnify"
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+            />
+          </div>
+          <VDivider class="mt-2" />
+          <!-- 快捷筛选 -->
+          <VList density="compact" class="px-2 py-1">
+            <VListSubheader>{{ t('common.filter') }}</VListSubheader>
+            <VListItem
+              :active="enabledFilter"
+              @click="enabledFilter = !enabledFilter"
+              density="compact"
+            >
+              <template #prepend>
+                <VIcon icon="mdi-play-circle" color="success" size="small" />
+              </template>
+              <VListItemTitle>{{ t('plugin.running') }}</VListItemTitle>
+              <template #append>
+                <VIcon v-if="enabledFilter" icon="mdi-check" color="primary" size="small" />
+              </template>
+            </VListItem>
+            <VListItem
+              :active="hasUpdateFilter"
+              @click="hasUpdateFilter = !hasUpdateFilter"
+              density="compact"
+            >
+              <template #prepend>
+                <VIcon icon="mdi-arrow-up-circle" color="info" size="small" />
+              </template>
+              <VListItemTitle>{{ t('plugin.hasNewVersion') }}</VListItemTitle>
+              <template #append>
+                <VIcon v-if="hasUpdateFilter" icon="mdi-check" color="primary" size="small" />
+              </template>
+            </VListItem>
+          </VList>
         </VCard>
       </VMenu>
     </Teleport>
 
+    <!-- 插件市场过滤下拉菜单 -->
     <Teleport to="body" v-if="filterMarketPluginDialog">
       <VMenu
         v-model="filterMarketPluginDialog"
-        width="25rem"
         :close-on-content-click="false"
         :activator="'[data-menu-activator=market-filter-btn]'"
         location="bottom end"
       >
-        <VCard>
-          <VCardItem>
-            <VCardTitle>
-              <VIcon icon="mdi-filter-multiple-outline" class="mr-2" />
-              {{ t('plugin.filterPlugins') }}
-            </VCardTitle>
-            <VDialogCloseBtn @click="filterMarketPluginDialog = false" />
-          </VCardItem>
-          <VCardText>
-            <!-- 过滤表单 -->
-            <div v-if="isAppMarketLoaded">
-              <VRow>
-                <VCol cols="6">
-                  <VTextField v-model="filterForm.name" density="comfortable" :label="t('plugin.name')" clearable />
-                </VCol>
-                <VCol v-if="authorFilterOptions.length > 0" cols="6">
-                  <VSelect
-                    v-model="filterForm.author"
-                    :items="authorFilterOptions"
-                    density="comfortable"
-                    chips
-                    :label="t('plugin.author')"
-                    multiple
-                    clearable
-                  />
-                </VCol>
-                <VCol v-if="labelFilterOptions.length > 0" cols="6">
-                  <VSelect
-                    v-model="filterForm.label"
-                    :items="labelFilterOptions"
-                    density="comfortable"
-                    chips
-                    :label="t('plugin.label')"
-                    multiple
-                    clearable
-                  />
-                </VCol>
-                <VCol v-if="repoFilterOptions.length > 0" cols="6">
-                  <VSelect
-                    v-model="filterForm.repo"
-                    :items="repoFilterOptions"
-                    density="comfortable"
-                    chips
-                    :label="t('plugin.repository')"
-                    multiple
-                    clearable
-                  />
-                </VCol>
-                <VCol v-if="sortOptions.length > 0" cols="6">
-                  <VSelect
-                    v-model="activeSort"
-                    :items="sortOptions"
-                    density="comfortable"
-                    :label="t('plugin.sortTitle')"
-                  />
-                </VCol>
-              </VRow>
-            </div>
-          </VCardText>
+        <VCard min-width="260" max-width="320">
+          <!-- 名称搜索 -->
+          <div class="px-3 pt-3 pb-1">
+            <VTextField
+              v-model="filterForm.name"
+              :placeholder="t('plugin.name')"
+              prepend-inner-icon="mdi-magnify"
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+            />
+          </div>
+          <VDivider class="mt-2" />
+          <!-- 排序 -->
+          <VList density="compact" class="px-2 py-1">
+            <VListSubheader>{{ t('plugin.sortTitle') }}</VListSubheader>
+            <VListItem
+              v-for="option in sortOptions"
+              :key="option.value"
+              :active="(activeSort || 'count') === option.value"
+              @click="activeSort = option.value"
+              density="compact"
+            >
+              <VListItemTitle>{{ option.title }}</VListItemTitle>
+              <template #append>
+                <VIcon v-if="(activeSort || 'count') === option.value" icon="mdi-check" color="primary" size="small" />
+              </template>
+            </VListItem>
+          </VList>
+          <!-- 下拉多选筛选项 -->
+          <VDivider />
+          <div class="px-3 py-2 d-flex flex-column gap-2">
+            <VSelect
+              v-if="authorFilterOptions.length > 0"
+              v-model="filterForm.author"
+              :items="authorFilterOptions"
+              :label="t('plugin.author')"
+              multiple
+              chips
+              closable-chips
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+            />
+            <VSelect
+              v-if="labelFilterOptions.length > 0"
+              v-model="filterForm.label"
+              :items="labelFilterOptions"
+              :label="t('plugin.label')"
+              multiple
+              chips
+              closable-chips
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+            />
+            <VSelect
+              v-if="repoFilterOptions.length > 0"
+              v-model="filterForm.repo"
+              :items="repoFilterOptions"
+              :label="t('plugin.repository')"
+              multiple
+              chips
+              closable-chips
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+            />
+          </div>
         </VCard>
       </VMenu>
     </Teleport>
