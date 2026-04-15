@@ -68,7 +68,7 @@ export function getNavMenus(t: Composer['t']) {
       to: '/follow',
       header: t('menu.discovery'),
       admin: false,
-      footer: true,
+      footer: false,
       permission: 'discovery',
     },
     {
