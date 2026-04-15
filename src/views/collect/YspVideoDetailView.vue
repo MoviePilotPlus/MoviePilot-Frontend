@@ -51,7 +51,7 @@ const teamList = ref<any[]>([])
 const definitionOptions = ref<any[]>([
   { fn: 'hd', fnname: '高清', defnname: '高清', defnrate: '540P', encrypt: 0 },
   { fn: 'shd', fnname: '超清', defnname: '超清', defnrate: '720P', encrypt: 0 },
-  { fn: 'fhd', fnname: '蓝光', defnname: '蓝光', defnrate: '1080P', encrypt: 0 }
+  { fn: 'fhd', fnname: '蓝光', defnname: '蓝光', defnrate: '1080P', encrypt: 0 },
 ])
 
 // ptgen信息
@@ -90,7 +90,7 @@ const addForm = ref<CollectCreate>({
   source: 'WEB-DL',
   tags: [],
   episode_list: [],
-  site_list: []
+  site_list: [],
 })
 
 // 格式化时间为 datetime-local 格式
@@ -98,7 +98,7 @@ function formatDateTimeForInput(dateTimeStr: string): string {
   if (!dateTimeStr) return ''
   try {
     console.log('原始时间字符串:', dateTimeStr)
-    
+
     // 尝试解析为 Date 对象
     let date: Date
     if (dateTimeStr.includes(' ')) {
@@ -112,20 +112,20 @@ function formatDateTimeForInput(dateTimeStr: string): string {
       // 尝试直接解析
       date = new Date(dateTimeStr)
     }
-    
+
     // 检查日期是否有效
     if (isNaN(date.getTime())) {
       console.error('无效的日期:', dateTimeStr)
       return ''
     }
-    
+
     // 格式化为 yyyy-MM-ddTHH:mm
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     const hours = String(date.getHours()).padStart(2, '0')
     const minutes = String(date.getMinutes()).padStart(2, '0')
-    
+
     const result = `${year}-${month}-${day}T${hours}:${minutes}`
     console.log('格式化后时间:', result)
     return result
@@ -157,14 +157,12 @@ const siteTagOptions = computed(() => {
 
 // 类型标签
 const typeOptions = computed(() => {
-  return Object.entries(mediaCateOptions)
-    .map(([value, label]) => ({ value, label }))
+  return Object.entries(mediaCateOptions).map(([value, label]) => ({ value, label }))
 })
 
 // 分类标签
 const categoryOptionsList = computed(() => {
-  return Object.entries(categoryOptions)
-    .map(([value, label]) => ({ value, label }))
+  return Object.entries(categoryOptions).map(([value, label]) => ({ value, label }))
 })
 
 // 标签选项
@@ -252,7 +250,7 @@ function parseLiveProgramTitle(title: string) {
     year,
     episode,
     issue,
-    episodesAll
+    episodesAll,
   }
 }
 
@@ -307,7 +305,7 @@ function onClickImdb() {
 // 获取PTGen信息
 async function getPtgen(url: string) {
   try {
-    ptgen.value = await api.get('collect/ptgen/info?url=' + url) as PtgenInfo
+    ptgen.value = (await api.get('collect/ptgen/info?url=' + url)) as PtgenInfo
     addForm.value.en_title = ptgen.value.en_title
     addForm.value.cn_title = ptgen.value.cn_title || addForm.value.cn_title
     addForm.value.sub_title = ptgen.value.sub_title
@@ -315,7 +313,9 @@ async function getPtgen(url: string) {
     addForm.value.season = ptgen.value.season || 1
     // 处理可能为 null 的情况，确保赋值给 addForm.value.overview 的是 string 类型
     addForm.value.overview = ptgen.value.description || addForm.value.overview || ''
-    addForm.value.year = ptgen.value.year || addForm.value.year || ''
+    console.log(ptgen.value.year)
+    console.log(addForm.value.year)
+    addForm.value.year = addForm.value.year || ptgen.value.year || ''
     // 更新封面和海报
     if (ptgen.value.poster) {
       addForm.value.cover = ptgen.value.poster
@@ -360,9 +360,9 @@ function formatDateToChinese(dateStr: string): string {
     } else {
       date = new Date(dateStr)
     }
-    
+
     if (isNaN(date.getTime())) return ''
-    
+
     const year = date.getFullYear()
     const month = date.getMonth() + 1
     const day = date.getDate()
@@ -376,7 +376,7 @@ function formatDateToChinese(dateStr: string): string {
 // 更新副标题
 function update_subtitle() {
   let additionalInfo = ''
-  
+
   // 构建补充的副标题信息
   if (addForm.value.episode) {
     // 存在集数
@@ -394,7 +394,7 @@ function update_subtitle() {
     }
   }
   // 单片类型不需要补充副标题信息
-  
+
   // 如果有补充信息，在原有基础上添加
   if (additionalInfo) {
     if (addForm.value.sub_title) {
@@ -427,39 +427,44 @@ function fill_subtile(sub_tile: string, title: string) {
   if (!sub_tile) return sub_tile
   if (!title) return sub_tile
   // 分割标题和其他信息
-  const [originalTitle, ...restParts] = sub_tile.split('|').map(p => p.trim());
+  const [originalTitle, ...restParts] = sub_tile.split('|').map(p => p.trim())
   // 检查原标题是否包含新标题
   if (!originalTitle.includes(title)) {
     // 合并新旧标题
-    const mergedTitle = `${title}/${originalTitle}`;
+    const mergedTitle = `${title}/${originalTitle}`
     // 重组完整sub_title
-    return [mergedTitle, ...restParts].join(' | ');
+    return [mergedTitle, ...restParts].join(' | ')
   }
 
   // 保持原标题格式不变
-  return sub_tile;
+  return sub_tile
 }
 
 // 获取直播节目豆瓣信息
 async function getLiveProgramDoubanInfo(parsedYear?: string) {
   try {
     const programName = addForm.value.cn_title
-    const programYear = parsedYear ? parseInt(parsedYear) : (parseInt(addForm.value.year) || new Date().getFullYear())
-    
+    const programYear = parsedYear ? parseInt(parsedYear) : parseInt(addForm.value.year) || new Date().getFullYear()
+
     if (!programName) {
       console.log('节目名称为空，跳过获取豆瓣信息')
       return
     }
 
-    console.log('开始获取直播节目豆瓣信息:', { programName, programYear, cnlid: liveParams.cnlid, livepid: liveParams.livepid })
-    
+    console.log('开始获取直播节目豆瓣信息:', {
+      programName,
+      programYear,
+      cnlid: liveParams.cnlid,
+      livepid: liveParams.livepid,
+    })
+
     const result = await api.get('ysp/get_live_program_douban_info', {
       params: {
         program_name: programName,
         program_year: programYear,
         cnlid: liveParams.cnlid,
-        livepid: liveParams.livepid
-      }
+        livepid: liveParams.livepid,
+      },
     })
 
     console.log('获取到的豆瓣信息:', result)
@@ -521,11 +526,11 @@ async function getLiveProgramDoubanInfo(parsedYear?: string) {
 onMounted(async () => {
   startNProgress()
   isLoading.value = true
-  
+
   // 调试：输出传入的时间
   console.log('传入的 startTime:', mediaProps.startTime)
   console.log('传入的 endTime:', mediaProps.endTime)
-  
+
   // 确保时间正确回填
   if (mediaProps.startTime) {
     liveParams.startTime = formatDateTimeForInput(mediaProps.startTime)
@@ -533,10 +538,10 @@ onMounted(async () => {
   if (mediaProps.endTime) {
     liveParams.endTime = formatDateTimeForInput(mediaProps.endTime)
   }
-  
+
   console.log('格式化后的 startTime:', liveParams.startTime)
   console.log('格式化后的 endTime:', liveParams.endTime)
-  
+
   try {
     await loadSites()
     await loadTeamOptions()
@@ -544,11 +549,11 @@ onMounted(async () => {
     if (siteList.value.length > 0) {
       addForm.value.site_list = [siteList.value[0].id]
     }
-    
+
     // 解析节目名称
     const parsedInfo = parseLiveProgramTitle(addForm.value.cn_title)
     console.log('解析结果:', parsedInfo)
-    
+
     // 应用解析结果
     if (parsedInfo.cleanTitle) {
       addForm.value.cn_title = parsedInfo.cleanTitle
@@ -565,10 +570,10 @@ onMounted(async () => {
     if (parsedInfo.episodesAll) {
       addForm.value.episodes_all = parsedInfo.episodesAll
     }
-    
+
     // 获取直播节目豆瓣信息，传入解析到的年份
     await getLiveProgramDoubanInfo(parsedInfo.year)
-    
+
     // 更新副标题
     update_subtitle()
   } catch (error) {
@@ -602,21 +607,23 @@ const submitForm = async () => {
     } else if (addForm.value.poster) {
       addForm.value.cover = addForm.value.poster
     }
-
+    addForm.value.cid = liveParams.cnlid + '_' + liveParams.livepid
     // 构建直播采集参数
-    addForm.value.episode_list = [{
-      cid: liveParams.cnlid,
-      vid: liveParams.livepid,
-      poster: addForm.value.poster,
-      episode: addForm.value.episode ? parseInt(addForm.value.episode) : 1
-    }]
+    addForm.value.episode_list = [
+      {
+        cid: addForm.value.cid,
+        vid: formatDateTimeForVid(liveParams.startTime),
+        poster: addForm.value.poster,
+        episode: addForm.value.episode ? parseInt(addForm.value.episode) : 1,
+      },
+    ]
     addForm.value.source = 'HDTV'
     addForm.value.site = 'YSP'
     addForm.value.team = addForm.value.team || 'NoGroup'
-    
+
     // 添加期数字段
     ;(addForm.value as any).issue = addForm.value.issue
-    
+
     // 处理版权和制作组信息
     if (addForm.value.team) {
       const teamItem = teamList.value.find(item => item.team === addForm.value.team)
@@ -631,7 +638,17 @@ const submitForm = async () => {
       // datetime-local 格式是 "2026-03-15T10:30"，转换为 "2026-03-15 10:30:00"
       return dateTimeStr.replace('T', ' ') + ':00'
     }
-    
+
+    // 格式化时间为后端需要的格式
+    function formatDateTimeForVid(dateTimeStr: string): string {
+      if (!dateTimeStr) return ''
+      // datetime-local 格式是 "2026-03-15T10:30"，转换为 "2026-03-15 10:30:00"
+      dateTimeStr = dateTimeStr.replace('T', '')
+      dateTimeStr = dateTimeStr.replaceAll('-', '')
+      dateTimeStr = dateTimeStr.replaceAll(':', '')
+      return dateTimeStr
+    }
+
     // 添加直播专用参数
     addForm.value.cnlid = liveParams.cnlid
     addForm.value.livepid = liveParams.livepid
@@ -716,23 +733,23 @@ const goBack = () => {
           </div>
         </div>
         <div class="live-info-content">
-            <div class="live-info-item">
-              <span class="label">频道名称：</span>
-              <span class="value">{{ liveParams.channelName }}</span>
-            </div>
-            <div class="live-info-item">
-              <span class="label">节目名称：</span>
-              <span class="value">{{ liveParams.programName }}</span>
-            </div>
-            <div class="live-info-item">
-              <span class="label">开始时间：</span>
-              <input v-model="liveParams.startTime" type="datetime-local" class="form-input" />
-            </div>
-            <div class="live-info-item">
-              <span class="label">结束时间：</span>
-              <input v-model="liveParams.endTime" type="datetime-local" class="form-input" />
-            </div>
+          <div class="live-info-item">
+            <span class="label">频道名称：</span>
+            <span class="value">{{ liveParams.channelName }}</span>
           </div>
+          <div class="live-info-item">
+            <span class="label">节目名称：</span>
+            <span class="value">{{ liveParams.programName }}</span>
+          </div>
+          <div class="live-info-item">
+            <span class="label">开始时间：</span>
+            <input v-model="liveParams.startTime" type="datetime-local" class="form-input" />
+          </div>
+          <div class="live-info-item">
+            <span class="label">结束时间：</span>
+            <input v-model="liveParams.endTime" type="datetime-local" class="form-input" />
+          </div>
+        </div>
       </div>
     </div>
 
@@ -758,10 +775,37 @@ const goBack = () => {
               <div class="input-with-icon">
                 <input v-model="addForm.douban_id" type="text" class="form-input" placeholder="如：1878011" />
                 <button class="icon-button" @click="onClickDouban" :disabled="!addForm.douban_id">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  </svg>
                 </button>
                 <button v-if="addForm.douban_id" class="icon-button" @click="openDoubanDetail(addForm.douban_id)">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                  </svg>
                 </button>
               </div>
             </div>
@@ -770,10 +814,37 @@ const goBack = () => {
               <div class="input-with-icon">
                 <input v-model="addForm.imdb_id" type="text" class="form-input" placeholder="如：tt1878011" />
                 <button class="icon-button" @click="onClickImdb" :disabled="!addForm.imdb_id">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  </svg>
                 </button>
                 <button v-if="addForm.imdb_id" class="icon-button" @click="openImdbDetail(addForm.imdb_id)">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                  </svg>
                 </button>
               </div>
             </div>
@@ -793,11 +864,14 @@ const goBack = () => {
           <div class="form-row">
             <div class="form-item full-width">
               <label>副标题</label>
-              <input v-model="addForm.sub_title" type="text" class="form-input" placeholder="根据豆瓣信息自动生成，可以手动修正" />
+              <input
+                v-model="addForm.sub_title"
+                type="text"
+                class="form-input"
+                placeholder="根据豆瓣信息自动生成，可以手动修正"
+              />
             </div>
           </div>
-
-
 
           <div class="form-row">
             <div class="form-item">
@@ -882,7 +956,7 @@ const goBack = () => {
               </div>
             </div>
           </div>
-          
+
           <div class="form-row">
             <div class="form-item full-width">
               <label>制作组</label>
@@ -894,7 +968,7 @@ const goBack = () => {
               </div>
             </div>
           </div>
-          
+
           <div class="form-row">
             <div class="form-item full-width">
               <label>下载站点</label>
@@ -922,8 +996,6 @@ const goBack = () => {
             </div>
           </div>
         </div>
-
-
       </div>
     </div>
 
@@ -983,27 +1055,27 @@ const goBack = () => {
 
 .live-info-wrapper {
   display: flex;
-  gap: 24px;
   align-items: flex-start;
+  gap: 24px;
 }
 
 .live-info-content {
-  flex: 1;
   display: grid;
+  flex: 1;
   gap: 12px;
   grid-template-columns: 1fr;
 }
 
 .live-info-wrapper .live-cover-container {
-  margin-top: 0;
   flex-shrink: 0;
+  margin-block-start: 0;
 }
 
 .live-info-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 48px;
+  min-block-size: 48px;
 }
 
 .live-info-item .label {
@@ -1021,25 +1093,27 @@ const goBack = () => {
 
 .live-info-item .form-input {
   flex: 0 0 auto;
-  width: 240px;
+  inline-size: 240px;
 }
 
 .reserved-tag {
-  background: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
-  padding: 2px 8px;
   border-radius: 10px;
+  background: rgba(34, 197, 94, 10%);
+  color: #22c55e;
   font-size: 12px;
   font-weight: 600;
+  padding-block: 2px;
+  padding-inline: 8px;
 }
 
 .normal-tag {
-  background: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
-  padding: 2px 8px;
   border-radius: 10px;
+  background: rgba(59, 130, 246, 10%);
+  color: #3b82f6;
   font-size: 12px;
   font-weight: 600;
+  padding-block: 2px;
+  padding-inline: 8px;
 }
 
 /* 采集设置 */
@@ -1092,9 +1166,9 @@ const goBack = () => {
 
 /* 直播信息卡片中的封面容器样式 */
 .live-cover-container {
-  margin-top: 16px;
   display: flex;
   justify-content: center;
+  margin-block-start: 16px;
 }
 
 .form-input,
@@ -1137,18 +1211,18 @@ const goBack = () => {
 
 /* 封面图片样式 */
 .cover-image-container {
-  width: 100%;
-  max-width: 250px;
-  max-height: 350px;
-  border-radius: 8px;
   overflow: hidden;
+  border-radius: 8px;
   box-shadow: 0 2px 8px rgba(var(--v-theme-on-surface), 0.1);
+  inline-size: 100%;
+  max-block-size: 350px;
+  max-inline-size: 250px;
 }
 
 .cover-image {
-  width: 100%;
-  height: 100%;
   display: block;
+  block-size: 100%;
+  inline-size: 100%;
   object-fit: cover;
 }
 
@@ -1197,38 +1271,39 @@ const goBack = () => {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 8px;
+  margin-block-start: 8px;
 }
 
 .site-checkbox {
   display: flex;
   align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  padding: 6px 12px;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   border-radius: 6px;
   background: rgba(var(--v-theme-surface), 1);
+  cursor: pointer;
+  gap: 6px;
+  padding-block: 6px;
+  padding-inline: 12px;
   transition: all 0.2s ease;
 }
 
 .site-checkbox:hover {
-  background: rgba(var(--v-theme-primary), 0.05);
   border-color: rgba(var(--v-theme-primary), 0.3);
+  background: rgba(var(--v-theme-primary), 0.05);
 }
 
 .site-checkbox:has(input:checked) {
-  background: rgba(var(--v-theme-primary), 0.1);
   border-color: rgba(var(--v-theme-primary), 0.5);
+  background: rgba(var(--v-theme-primary), 0.1);
   color: rgb(var(--v-theme-primary));
 }
 
-.site-checkbox input[type="checkbox"] {
+.site-checkbox input[type='checkbox'] {
   accent-color: rgb(var(--v-theme-primary));
   block-size: 16px;
-  inline-size: 16px;
-  cursor: pointer;
   color-scheme: light;
+  cursor: pointer;
+  inline-size: 16px;
 }
 
 /* 清晰度选择器样式 */
@@ -1236,38 +1311,39 @@ const goBack = () => {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 8px;
+  margin-block-start: 8px;
 }
 
 .definition-radio {
   display: flex;
   align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  padding: 6px 12px;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   border-radius: 6px;
   background: rgba(var(--v-theme-surface), 1);
+  cursor: pointer;
+  gap: 6px;
+  padding-block: 6px;
+  padding-inline: 12px;
   transition: all 0.2s ease;
 }
 
 .definition-radio:hover {
-  background: rgba(var(--v-theme-primary), 0.05);
   border-color: rgba(var(--v-theme-primary), 0.3);
+  background: rgba(var(--v-theme-primary), 0.05);
 }
 
 .definition-radio:has(input:checked) {
-  background: rgba(var(--v-theme-primary), 0.1);
   border-color: rgba(var(--v-theme-primary), 0.5);
+  background: rgba(var(--v-theme-primary), 0.1);
   color: rgb(var(--v-theme-primary));
 }
 
-.definition-radio input[type="radio"] {
+.definition-radio input[type='radio'] {
   accent-color: rgb(var(--v-theme-primary));
   block-size: 16px;
-  inline-size: 16px;
-  cursor: pointer;
   color-scheme: light;
+  cursor: pointer;
+  inline-size: 16px;
 }
 
 .definition-name {
@@ -1280,12 +1356,13 @@ const goBack = () => {
 }
 
 .encrypt-tag {
-  background: rgba(255, 107, 107, 0.1);
+  border-radius: 4px;
+  background: rgba(255, 107, 107, 10%);
   color: #ff6b6b;
   font-size: 12px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  margin-left: 4px;
+  margin-inline-start: 4px;
+  padding-block: 1px;
+  padding-inline: 6px;
 }
 
 /* 制作组选择器样式 */
@@ -1293,38 +1370,39 @@ const goBack = () => {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 8px;
+  margin-block-start: 8px;
 }
 
 .team-radio {
   display: flex;
   align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  padding: 6px 12px;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   border-radius: 6px;
   background: rgba(var(--v-theme-surface), 1);
+  cursor: pointer;
+  gap: 6px;
+  padding-block: 6px;
+  padding-inline: 12px;
   transition: all 0.2s ease;
 }
 
 .team-radio:hover {
-  background: rgba(var(--v-theme-primary), 0.05);
   border-color: rgba(var(--v-theme-primary), 0.3);
+  background: rgba(var(--v-theme-primary), 0.05);
 }
 
 .team-radio:has(input:checked) {
-  background: rgba(var(--v-theme-primary), 0.1);
   border-color: rgba(var(--v-theme-primary), 0.5);
+  background: rgba(var(--v-theme-primary), 0.1);
   color: rgb(var(--v-theme-primary));
 }
 
-.team-radio input[type="radio"] {
+.team-radio input[type='radio'] {
   accent-color: rgb(var(--v-theme-primary));
   block-size: 16px;
-  inline-size: 16px;
-  cursor: pointer;
   color-scheme: light;
+  cursor: pointer;
+  inline-size: 16px;
 }
 
 .team-name {
@@ -1336,38 +1414,39 @@ const goBack = () => {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 8px;
+  margin-block-start: 8px;
 }
 
 .tag-checkbox {
   display: flex;
   align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  padding: 6px 12px;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   border-radius: 6px;
   background: rgba(var(--v-theme-surface), 1);
+  cursor: pointer;
+  gap: 6px;
+  padding-block: 6px;
+  padding-inline: 12px;
   transition: all 0.2s ease;
 }
 
 .tag-checkbox:hover {
-  background: rgba(var(--v-theme-primary), 0.05);
   border-color: rgba(var(--v-theme-primary), 0.3);
+  background: rgba(var(--v-theme-primary), 0.05);
 }
 
 .tag-checkbox:has(input:checked) {
-  background: rgba(var(--v-theme-primary), 0.1);
   border-color: rgba(var(--v-theme-primary), 0.5);
+  background: rgba(var(--v-theme-primary), 0.1);
   color: rgb(var(--v-theme-primary));
 }
 
-.tag-checkbox input[type="checkbox"] {
+.tag-checkbox input[type='checkbox'] {
   accent-color: rgb(var(--v-theme-primary));
   block-size: 16px;
-  inline-size: 16px;
-  cursor: pointer;
   color-scheme: light;
+  cursor: pointer;
+  inline-size: 16px;
 }
 
 /* 带图标的输入框 */
@@ -1378,21 +1457,21 @@ const goBack = () => {
 }
 
 .input-with-icon .form-input {
-  padding-right: 80px;
+  padding-inline-end: 80px;
 }
 
 .input-with-icon .icon-button {
   position: absolute;
-  right: 8px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: rgb(var(--v-theme-on-surface-variant));
-  padding: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 8px;
+  border: none;
   border-radius: 4px;
+  background: none;
+  color: rgb(var(--v-theme-on-surface-variant));
+  cursor: pointer;
+  inset-inline-end: 8px;
   transition: all 0.2s ease;
 }
 
@@ -1402,12 +1481,12 @@ const goBack = () => {
 }
 
 .input-with-icon .icon-button:disabled {
-  opacity: 0.5;
   cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .input-with-icon .icon-button:nth-child(2) {
-  right: 48px;
+  inset-inline-end: 48px;
 }
 
 /* 响应式设计 */
