@@ -1472,6 +1472,10 @@ export default {
       youkuCookieHint: '設置優酷Cookie，用於獲取視頻播放地址',
       youkuCookieTips: '訪問https://www.youku.com/ 1、打開控制臺 2、復制請求頭中完整的Cookie 3、黏貼到上面的輸入框中',
       youkuCookieTipsTitle: '獲取方式：',
+      youkuStoken: '優酷Stoken',
+      youkuStokenHint: '設置優酷Stoken，用於獲取視頻播放地址',
+      youkuStokenTips: '登錄優酷APP，獲取cookie中的stoken',
+      youkuStokenTipsTitle: '獲取方式：',
       bilibiliCookie: '嗶哩嗶哩Cookie',
       bilibiliCookieHint: '設置嗶哩嗶哩Cookie，用於獲取視頻播放地址',
       bilibiliCookieTips:

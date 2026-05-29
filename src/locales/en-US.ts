@@ -1486,6 +1486,10 @@ export default {
       youkuCookieTips:
         'Steps to obtain cookie:\n1. Visit https://www.youku.com/\n2. Open developer tools\n3. Copy complete Cookie from request headers\n4. Paste into this field',
       youkuCookieTipsTitle: 'How to get:',
+      youkuStoken: 'Youku Stoken',
+      youkuStokenHint: 'Set Youku Stoken for video playback authentication',
+      youkuStokenTips: 'Login Youku APP to obtain stoken',
+      youkuStokenTipsTitle: 'How to get:',
       bilibiliCookie: 'Bilibili Cookie',
       bilibiliCookieHint: 'Set Bilibili Cookie for video playback authentication',
       bilibiliCookieTips:

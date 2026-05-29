@@ -87,6 +87,7 @@ const mgTvTicket = ref('')
 const mgAppTicket = ref('')
 const iqiyiCookie = ref('')
 const youkuCookie = ref('')
+const youkuStoken = ref('')
 const bilibiliCookie = ref('')
 
 // 查询已设置的腾讯视频Cookie
@@ -131,6 +132,14 @@ async function queryYoukuCookie() {
   try {
     const result: { [key: string]: any } = await api.get('system/setting/YoukuCookie')
     if (result && result.data && result.data.value) youkuCookie.value = result.data.value
+  } catch (error) {
+    console.log(error)
+  }
+}
+async function queryYoukuStoken() {
+  try {
+    const result: { [key: string]: any } = await api.get('system/setting/YoukuStoken')
+    if (result && result.data && result.data.value) youkuStoken.value = result.data.value
   } catch (error) {
     console.log(error)
   }
@@ -225,7 +234,19 @@ async function saveYoukuCookie() {
     console.log(error)
   }
 }
+// 保存用户设置的优酷Stoken
+async function saveYoukuStoken() {
+  try {
+    const result: { [key: string]: any } = await api.post('system/setting/YoukuStoken', youkuStoken.value)
 
+    if (result.success) {
+      $toast.success('优酷Stoken保存成功')
+      await reloadSystem()
+    } else $toast.error('优酷Stoken保存失败！')
+  } catch (error) {
+    console.log(error)
+  }
+}
 // 保存用户设置的哔哩哔哩Cookie
 async function saveBilibiliCookie() {
   try {
@@ -585,6 +606,7 @@ onMounted(() => {
   queryMgAppTicket()
   queryIqiyiCookie()
   queryYoukuCookie()
+  queryYoukuStoken()
   queryBilibiliCookie()
   loadImageHostingSetting()
   loadMediaServerSetting()
@@ -1124,6 +1146,38 @@ onDeactivated(() => {
           <VForm @submit.prevent="() => {}">
             <div class="d-flex flex-wrap gap-4 mt-4">
               <VBtn type="submit" @click="saveYoukuCookie"> {{ t('common.save') }} </VBtn>
+            </div>
+          </VForm>
+        </VCardText>
+      </VCard>
+    </VCol>
+  </VRow>
+  <VRow>
+    <VCol cols="12">
+      <VCard>
+        <VCardItem>
+          <VCardTitle> {{ t('setting.collect.youkuStoken') }}</VCardTitle>
+          <VCardSubtitle>{{ t('setting.collect.youkuStokenHint') }} </VCardSubtitle>
+        </VCardItem>
+        <VCardText>
+          <VTextarea
+            v-model="youkuStoken"
+            auto-grow
+            :placeholder="t('setting.collect.youkuStoken')"
+            :hint="t('setting.collect.youkuStokenHint')"
+            rows="3"
+            persistent-hint
+          />
+        </VCardText>
+        <VCardText>
+          <VAlert type="info" variant="tonal" :title="t('setting.collect.youkuStokenTipsTitle')">
+            <span v-html="t('setting.collect.youkuStokenTips')" />
+          </VAlert>
+        </VCardText>
+        <VCardText>
+          <VForm @submit.prevent="() => {}">
+            <div class="d-flex flex-wrap gap-4 mt-4">
+              <VBtn type="submit" @click="saveYoukuStoken"> {{ t('common.save') }} </VBtn>
             </div>
           </VForm>
         </VCardText>

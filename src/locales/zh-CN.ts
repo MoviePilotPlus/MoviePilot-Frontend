@@ -1477,6 +1477,10 @@ export default {
       youkuCookieHint: '设置优酷Cookie，用于获取视频播放地址',
       youkuCookieTips: '访问https://www.youku.com/ 1、打开控制台 2、复制请求头中完整的Cookie 3、粘贴到上面的输入框中',
       youkuCookieTipsTitle: '获取方式：',
+      youkuStoken: '优酷Stoken',
+      youkuStokenHint: '设置优酷Stoken，用于获取视频播放地址',
+      youkuStokenTips: '登录优酷APP，获取cookie中的stoken',
+      youkuStokenTipsTitle: '获取方式：',
       bilibiliCookie: '哔哩哔哩Cookie',
       bilibiliCookieHint: '设置哔哩哔哩Cookie，用于获取视频播放地址',
       bilibiliCookieTips:
