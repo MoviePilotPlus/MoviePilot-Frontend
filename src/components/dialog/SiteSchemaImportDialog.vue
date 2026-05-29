@@ -102,7 +102,7 @@ async function processFile(file: File) {
 
 // 验证站点模板数据
 function validateSiteData(site: any): boolean {
-  const requiredFields = ['domain', 'name', 'url']
+  const requiredFields = ['domain', 'name', 'upload_api']
   return requiredFields.every(field => site[field])
 }
 
@@ -290,7 +290,7 @@ watch(selectedFile, async newFile => {
                     />
                   </template>
                   <VListItemTitle>{{ site.name || t('site.preview.unnamed') }}</VListItemTitle>
-                  <VListItemSubtitle>{{ site.url || t('site.preview.noUrl') }}</VListItemSubtitle>
+                  <VListItemSubtitle>{{ site.upload_api || t('site.preview.noUrl') }}</VListItemSubtitle>
                   <template #append>
                     <VChip v-if="!validateSiteData(site)" size="small" color="error" variant="tonal">
                       {{ t('site.preview.invalid') }}
