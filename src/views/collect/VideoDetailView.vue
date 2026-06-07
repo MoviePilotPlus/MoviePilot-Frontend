@@ -137,6 +137,30 @@ function definitionLabel(definition: any) {
   return definition?.sname || definition?.cname || definition?.name || ''
 }
 
+function optionLabel(option: any) {
+  return option?.label || option?.name || option?.value || ''
+}
+
+const isYoukuSource = computed(() => mediaProps.source === 'YouKu' || mediaProps.source === 'youku')
+
+const youkuVideoQualityOptions = computed(() => {
+  const options = mediaDetail.value.video_quality_options || []
+  if (Array.isArray(options)) return options
+  return options.default || Object.values(options)[0] || []
+})
+
+const hasYoukuVideoQualityOptions = computed(() => {
+  return isYoukuSource.value && youkuVideoQualityOptions.value.length > 0
+})
+
+function resetYoukuQualitySelection() {
+  if (!hasYoukuVideoQualityOptions.value) return
+  const videoOptions = youkuVideoQualityOptions.value
+  if (videoOptions.length > 0) {
+    addForm.value.defn = videoOptions[0].value
+  }
+}
+
 // 采集任务添加表单
 const addForm = ref<CollectCreate>({
   cid: '',
@@ -213,7 +237,9 @@ async function getMediaDetail() {
     })
     // mediaDetail.value.episode_all = episodeIndex.toString()
     // 设置默认选中第一个清晰度
-    if (mediaDetail.value.definition_list?.length > 0) {
+    if (hasYoukuVideoQualityOptions.value) {
+      resetYoukuQualitySelection()
+    } else if (mediaDetail.value.definition_list?.length > 0) {
       addForm.value.defn = mediaDetail.value.definition_list[0].name
     }
     // addForm 赋值
@@ -467,7 +493,11 @@ function validateForm() {
   if (!addForm.value.cid) {
     errors.push('媒体ID不能为空！')
   }
-  if (!addForm.value.defn) {
+  if (hasYoukuVideoQualityOptions.value) {
+    if (!addForm.value.defn) {
+      errors.push('请选择画质！')
+    }
+  } else if (!addForm.value.defn) {
     errors.push('请选择清晰度！')
   }
   if (!addForm.value.cate) {
@@ -1311,7 +1341,23 @@ function handleIgnore() {
           </div>
         </div>
 
-        <div class="mt-6">
+        <div v-if="hasYoukuVideoQualityOptions" class="mt-6">
+          <GroupTile title="画质" />
+          <VChipGroup column v-model="addForm.defn">
+            <template v-for="option in youkuVideoQualityOptions" :key="option.value">
+              <VChip
+                :color="addForm.defn === option.value ? 'primary' : ''"
+                filter
+                variant="outlined"
+                :value="option.value"
+              >
+                {{ optionLabel(option) }}
+              </VChip>
+            </template>
+          </VChipGroup>
+        </div>
+
+        <div v-if="!hasYoukuVideoQualityOptions" class="mt-6">
           <GroupTile title="清晰度" />
           <VChipGroup column v-model="addForm.defn">
             <template v-for="definition in mediaDetail.definition_list" :key="definition.name">

@@ -1481,6 +1481,9 @@ export default {
       youkuStokenHint: '设置优酷Stoken，用于获取视频播放地址',
       youkuStokenTips: '登录优酷APP，获取cookie中的stoken',
       youkuStokenTipsTitle: '获取方式：',
+      youkuDownloadLine: '优酷下载线路',
+      youkuDownloadLineHint: '选择优酷视频下载时使用的播放线路',
+      youkuDownloadLineSaveSuccess: '优酷下载线路保存成功',
       bilibiliCookie: '哔哩哔哩Cookie',
       bilibiliCookieHint: '设置哔哩哔哩Cookie，用于获取视频播放地址',
       bilibiliCookieTips:

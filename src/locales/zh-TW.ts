@@ -1476,6 +1476,9 @@ export default {
       youkuStokenHint: '設置優酷Stoken，用於獲取視頻播放地址',
       youkuStokenTips: '登錄優酷APP，獲取cookie中的stoken',
       youkuStokenTipsTitle: '獲取方式：',
+      youkuDownloadLine: '優酷下載線路',
+      youkuDownloadLineHint: '選擇優酷視頻下載時使用的播放線路',
+      youkuDownloadLineSaveSuccess: '優酷下載線路保存成功',
       bilibiliCookie: '嗶哩嗶哩Cookie',
       bilibiliCookieHint: '設置嗶哩嗶哩Cookie，用於獲取視頻播放地址',
       bilibiliCookieTips:

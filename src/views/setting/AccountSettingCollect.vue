@@ -43,6 +43,9 @@ const CollectSettings = ref<any>({
     TENCENT_CHACHAO20_API_URL: '',
     TENCENT_CKEY42_API_URL: '',
   },
+  Youku: {
+    YOUKU_DOWNLOAD_LINE: 'normal_tv',
+  },
   ImageHosting: {
     ipic: {
       active: true,
@@ -66,6 +69,12 @@ const CollectSettings = ref<any>({
     },
   },
 })
+
+const youkuDownloadLineOptions = [
+  { title: '普通酷喵TV', value: 'normal_tv' },
+  { title: '安卓端', value: 'android' },
+  { title: '酷喵帧享影院', value: 'frame_enjoy_cinema' },
+]
 
 // 是否发送请求的总开关
 const isRequest = ref(true)
@@ -423,6 +432,12 @@ async function saveBasicSettings() {
 async function saveTencentApiSettings() {
   if (await saveSystemSetting(CollectSettings.value.TencentApi)) {
     $toast.success(t('setting.collect.tencentApiSaveSuccess'))
+  }
+}
+// 保存优酷下载线路设置
+async function saveYoukuDownloadLineSettings() {
+  if (await saveSystemSetting(CollectSettings.value.Youku)) {
+    $toast.success(t('setting.collect.youkuDownloadLineSaveSuccess'))
   }
 }
 // 添加制作组配置
@@ -1178,6 +1193,35 @@ onDeactivated(() => {
           <VForm @submit.prevent="() => {}">
             <div class="d-flex flex-wrap gap-4 mt-4">
               <VBtn type="submit" @click="saveYoukuStoken"> {{ t('common.save') }} </VBtn>
+            </div>
+          </VForm>
+        </VCardText>
+      </VCard>
+    </VCol>
+  </VRow>
+  <VRow>
+    <VCol cols="12">
+      <VCard>
+        <VCardItem>
+          <VCardTitle>{{ t('setting.collect.youkuDownloadLine') }}</VCardTitle>
+          <VCardSubtitle>{{ t('setting.collect.youkuDownloadLineHint') }}</VCardSubtitle>
+        </VCardItem>
+        <VCardText>
+          <VSelect
+            v-model="CollectSettings.Youku.YOUKU_DOWNLOAD_LINE"
+            :items="youkuDownloadLineOptions"
+            item-title="title"
+            item-value="value"
+            :label="t('setting.collect.youkuDownloadLine')"
+            :hint="t('setting.collect.youkuDownloadLineHint')"
+            persistent-hint
+            prepend-inner-icon="mdi-routes"
+          />
+        </VCardText>
+        <VCardText>
+          <VForm @submit.prevent="() => {}">
+            <div class="d-flex flex-wrap gap-4 mt-4">
+              <VBtn type="submit" @click="saveYoukuDownloadLineSettings"> {{ t('common.save') }} </VBtn>
             </div>
           </VForm>
         </VCardText>

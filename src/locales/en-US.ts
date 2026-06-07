@@ -1490,6 +1490,9 @@ export default {
       youkuStokenHint: 'Set Youku Stoken for video playback authentication',
       youkuStokenTips: 'Login Youku APP to obtain stoken',
       youkuStokenTipsTitle: 'How to get:',
+      youkuDownloadLine: 'Youku Download Line',
+      youkuDownloadLineHint: 'Select the playback line used for Youku video downloads',
+      youkuDownloadLineSaveSuccess: 'Youku download line saved successfully',
       bilibiliCookie: 'Bilibili Cookie',
       bilibiliCookieHint: 'Set Bilibili Cookie for video playback authentication',
       bilibiliCookieTips:
