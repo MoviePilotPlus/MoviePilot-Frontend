@@ -16,6 +16,7 @@ import VideoDescInfoDialog from '@/components/dialog/VideoDescInfoDialog.vue'
 import VideoScreenshotDialog from '@/components/dialog/VideoScreenshotDialog.vue'
 import CollectOperationDialog from '@/components/dialog/CollectOperationDialog.vue'
 import MergeCollectDialog from '@/components/dialog/MergeCollectDialog.vue'
+import TransferDirDialog from '@/components/dialog/TransferDirDialog.vue'
 const $toast = useToast()
 // 确认框
 const createConfirm = useConfirm()
@@ -42,6 +43,8 @@ const deleteOptions = ref({
 })
 // 合并打包对话框
 const showMergeDialog = ref(false)
+// 转移目录对话框
+const showTransferDir = ref(false)
 // 所有站点
 // 资源浏览弹窗
 const resourceDialog = ref(false)
@@ -466,7 +469,7 @@ onUnmounted(() => {
           <IconBtn>
             <VIcon icon="mdi-dots-vertical" />
             <VMenu activator="parent" close-on-content-click>
-              <VList>
+              <VList class="task-menu-list">
                 <VListItem variant="plain" @click="showDescInfoDialog()">
                   <template #prepend>
                     <VIcon icon="mdi-information" />
@@ -570,6 +573,13 @@ onUnmounted(() => {
                   <VListItemTitle>合并打包</VListItemTitle>
                 </VListItem>
 
+                <VListItem variant="plain" @click="showTransferDir = true">
+                  <template #prepend>
+                    <VIcon icon="mdi-folder-move" />
+                  </template>
+                  <VListItemTitle>转移目录</VListItemTitle>
+                </VListItem>
+
                 <VListItem variant="plain" @click="showDeleteConfirmDialog()" class="bg-error-container">
                   <template #prepend>
                     <VIcon icon="mdi-delete" color="error" />
@@ -621,8 +631,15 @@ onUnmounted(() => {
     @close="onSiteResourceDone" />
   <!-- 合并打包弹窗 -->
   <MergeCollectDialog v-model="showMergeDialog" :collect-id="task.id" @merged="emit('remove')" />
+  <!-- 转移目录弹窗 -->
+  <TransferDirDialog v-model="showTransferDir" :collect="task" />
 </template>
 <style scoped>
+.task-menu-list {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
 .status-corner {
   position: absolute;
   z-index: 2;
