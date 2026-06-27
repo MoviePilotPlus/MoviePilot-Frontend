@@ -10,9 +10,33 @@ import ProgressDialog from '@/components/dialog/ProgressDialog.vue'
 import SiteSchemaImportDialog from '@/components/dialog/SiteSchemaImportDialog.vue'
 import { useI18n } from 'vue-i18n'
 import { mediaServerOptions } from '@/api/constants'
+// 截图模板预览：清单 + 各模板预览图（由后端 gen_screenshot_templates.py 生成）
+import templateManifest from '@/assets/screenshot-templates/templates.json'
+const _tplImgGlob = import.meta.glob('@/assets/screenshot-templates/*.jpg', { eager: true, import: 'default', query: 'url' }) as Record<string, string>
+const _tplImgMap: Record<string, string> = {}
+Object.entries(_tplImgGlob).forEach(([p, url]) => {
+  const name = decodeURIComponent(p.split('/').pop() || '').replace(/\.jpg$/i, '')
+  if (name) _tplImgMap[name] = url
+})
+const screenshotTemplates = (templateManifest as Array<{ name: string; label: string }>).map(it => ({
+  name: it.name,
+  label: it.label,
+  url: _tplImgMap[it.name],
+}))
 
 // 国际化
 const { t } = useI18n()
+
+// 截图模板大图预览
+const screenshotPreviewDialog = ref(false)
+const screenshotPreviewUrl = ref('')
+const screenshotPreviewLabel = ref('')
+function openScreenshotPreview(tpl: { name: string; label: string; url?: string }) {
+  if (!tpl.url) return
+  screenshotPreviewUrl.value = tpl.url
+  screenshotPreviewLabel.value = tpl.label
+  screenshotPreviewDialog.value = true
+}
 
 // 导入对话框
 const siteImportDialog = ref(false)
@@ -31,6 +55,7 @@ const CollectSettings = ref<any>({
     DOWNLOAD_TASK_MAX_WORKERS: 1,
     RAISE_EXCEPTION: false,
     API_DEBUG: false,
+    SCREENSHOT_TEMPLATE: 'default',
     DOWNLOADER_DELETE_AFTER_DONE: true,
     TV_FILE_FORMAT: '',
     MOVIE_FILE_FORMAT: '',
@@ -761,6 +786,47 @@ onDeactivated(() => {
                   persistent-hint
                 />
               </VCol>
+              <!-- 截图拼接模板（带预览） -->
+              <VCol cols="12">
+                <div class="text-subtitle-2 mb-1">
+                  {{ t('setting.collect.screenshotTemplate') }}
+                </div>
+                <div class="text-body-2 text-medium-emphasis mb-3">
+                  {{ t('setting.collect.screenshotTemplateHint') }}
+                </div>
+                <div class="d-flex gap-3 screenshot-templates-wrap">
+                  <div
+                    v-for="tpl in screenshotTemplates"
+                    :key="tpl.name"
+                    class="screenshot-template-thumb"
+                    :class="{ 'screenshot-template-thumb--active': CollectSettings.Basic.SCREENSHOT_TEMPLATE === tpl.name }"
+                    @click="CollectSettings.Basic.SCREENSHOT_TEMPLATE = tpl.name"
+                  >
+                    <VImg
+                      v-if="tpl.url"
+                      :src="tpl.url"
+                      cover
+                      aspect-ratio="1.5"
+                      class="rounded-lg"
+                    />
+                    <div v-else class="rounded-lg d-flex align-center justify-center bg-grey-lighten-2" style="aspect-ratio:1.5">
+                      <VIcon icon="mdi-image-off" />
+                    </div>
+                    <VBtn
+                      v-if="tpl.url"
+                      icon
+                      size="small"
+                      variant="flat"
+                      class="screenshot-template-preview"
+                      :title="t('setting.collect.screenshotPreview')"
+                      @click.stop="openScreenshotPreview(tpl)"
+                    >
+                      <VIcon icon="mdi-magnify-expand" size="small" />
+                    </VBtn>
+                    <div class="text-center text-caption mt-1">{{ tpl.label }}</div>
+                  </div>
+                </div>
+              </VCol>
               <VCol cols="12" md="12">
                 <VTextarea
                   v-model="CollectSettings.Basic.TV_FILE_FORMAT"
@@ -1359,4 +1425,49 @@ onDeactivated(() => {
 
   <!-- 导入站点模板弹窗 -->
   <SiteSchemaImportDialog v-if="siteImportDialog" v-model="siteImportDialog" @import-success="handleImportSuccess" />
+
+  <!-- 截图模板大图预览 -->
+  <VDialog v-model="screenshotPreviewDialog" max-width="95vw">
+    <VCard>
+      <VCardItem class="py-2">
+        <VCardTitle class="text-subtitle-1">{{ screenshotPreviewLabel }}</VCardTitle>
+        <template #append>
+          <VBtn icon variant="text" size="small" @click="screenshotPreviewDialog = false">
+            <VIcon icon="mdi-close" />
+          </VBtn>
+        </template>
+      </VCardItem>
+      <VImg :src="screenshotPreviewUrl" max-height="85vh" contain @click="screenshotPreviewDialog = false" />
+    </VCard>
+  </VDialog>
 </template>
+
+<style scoped>
+.screenshot-templates-wrap {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.screenshot-template-thumb {
+  position: relative;
+  flex: 0 0 220px;
+  width: 220px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 4px;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.screenshot-template-thumb:hover {
+  transform: translateY(-2px);
+}
+.screenshot-template-thumb--active {
+  border-color: rgb(var(--v-theme-primary));
+}
+.screenshot-template-preview {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: #fff;
+}
+</style>
