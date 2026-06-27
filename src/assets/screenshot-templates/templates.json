@@ -12,10 +12,6 @@
     "label": "浅色圆角"
   },
   {
-    "name": "hero",
-    "label": "海报横幅"
-  },
-  {
     "name": "gradient",
     "label": "渐变科技"
   },
@@ -38,5 +34,13 @@
   {
     "name": "poster",
     "label": "海报封面"
+  },
+  {
+    "name": "noir",
+    "label": "纯黑·图上文下"
+  },
+  {
+    "name": "paper",
+    "label": "纯白·图上文下"
   }
 ]
