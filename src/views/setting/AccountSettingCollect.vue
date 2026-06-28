@@ -15,7 +15,7 @@ import { mediaServerOptions } from '@/api/constants'
 const TPL_DEFAULTS = {
   layout: 'grid', margin: 18,
   background: { type: 'solid', color: '#ffffff', image_source: 'first', blur: 40, scrim_color: '#080a12', scrim_alpha: 150, gradient_top: '#0c0c14', gradient_bottom: '#1e1034' },
-  grid: { gap: 10, corner_radius: 0, border_width: 0, border_color: '#ffffff', border_alpha: 30, shadow: false },
+  grid: { gap: 10, corner_radius: 0, border_width: 0, border_color: '#ffffff', border_alpha: 30, shadow: false, show_timestamp: true },
   metadata: { position: 'top', align: 'left', font_color: '#000000', hierarchy: false, stroke: 0, outline: false, label_prefix: true, bold: false },
   poster: { show_cover: true },
   font: { primary: null, fallback: null },
@@ -1038,6 +1038,7 @@ onDeactivated(() => {
                 </VCol>
               </VRow>
               <VSwitch v-model="tplConfig.grid.shadow" label="柔影" density="compact" hide-details class="mb-1 mt-1" />
+              <VSwitch v-model="tplConfig.grid.show_timestamp" label="截图时间戳" density="compact" hide-details class="mb-1" />
 
               <!-- 元数据 -->
               <div class="text-body-2 font-weight-bold mb-1 mt-2">元数据</div>
