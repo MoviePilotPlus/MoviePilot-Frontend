@@ -265,6 +265,18 @@ async function getMediaDetail() {
     if (addForm.value.episodes_all > 1 && addForm.value.episodes_all == mediaDetail.value.episode_list?.length) {
       addForm.value.tags.push('Completed')
     }
+    // 默认选中中字、官方标签
+    addForm.value.tags.push('ChineseSubtitles')
+    addForm.value.tags.push('Official')
+    // 检测可用音轨语言，自动选标签并生成音轨说明
+    const audioLangs = (mediaDetail.value as any).audio_languages || []
+    if (audioLangs.includes('mandarin') && !addForm.value.tags.includes('Mandarin')) {
+      addForm.value.tags.push('Mandarin')
+    }
+    if (audioLangs.includes('cantonese') && !addForm.value.tags.includes('Cantonese')) {
+      addForm.value.tags.push('Cantonese')
+    }
+    ;(addForm.value as any).audio_languages = audioLangs
     // 自动填入追更配置的总集数
     followConfig.value.totalEpisodes = addForm.value.episodes_all
     isRefreshed.value = true
@@ -698,6 +710,33 @@ function update_subtitle() {
 
   // 插入原始标题
   addForm.value.sub_title = fill_subtile(addForm.value.sub_title, mediaDetail.value.title)
+
+  // 在末尾追加音轨说明
+  const audioLangs = ((addForm.value as any).audio_languages as string[]) || []
+  if (audioLangs.length > 0) {
+    const langMap: Record<string, { short: string; full: string }> = {
+      mandarin: { short: '国', full: '国语' },
+      cantonese: { short: '粤', full: '粤语' },
+      english: { short: '英', full: '英语' },
+      japanese: { short: '日', full: '日语' },
+      korean: { short: '韩', full: '韩语' },
+      french: { short: '法', full: '法语' },
+      german: { short: '德', full: '德语' },
+      spanish: { short: '西', full: '西班牙语' },
+      italian: { short: '意', full: '意大利语' },
+      portuguese: { short: '葡', full: '葡萄牙语' },
+      russian: { short: '俄', full: '俄语' },
+      thai: { short: '泰', full: '泰语' },
+      turkish: { short: '土', full: '土耳其语' },
+      swedish: { short: '瑞', full: '瑞典语' },
+    }
+    const known = audioLangs.map(l => langMap[l]).filter(Boolean)
+    if (known.length === 1) {
+      addForm.value.sub_title = addForm.value.sub_title + ` | ${known[0].full}音轨`
+    } else if (known.length > 1) {
+      addForm.value.sub_title = addForm.value.sub_title + ` | [${known.map(l => l.short).join('/')}]音轨`
+    }
+  }
 }
 watch(
   () => [addForm.value.episodes_all, mediaDetail.value.episode_list?.map(ep => ep.episode), selectedCount],
