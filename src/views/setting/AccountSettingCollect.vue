@@ -116,6 +116,7 @@ const CollectSettings = ref<any>({
     API_DEBUG: false,
     SCREENSHOT_TEMPLATE: 'default',
     SCREENSHOT_TEMPLATE_CONFIG: '',
+    SCREENSHOT_HDR_PROCESSOR: 'auto',
     DOWNLOADER_DELETE_AFTER_DONE: true,
     TV_FILE_FORMAT: '',
     MOVIE_FILE_FORMAT: '',
@@ -859,6 +860,20 @@ onDeactivated(() => {
                   :label="t('setting.collect.apiDebug')"
                   :hint="t('setting.collect.apiDebugHint')"
                   persistent-hint
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VSelect
+                  v-model="CollectSettings.Basic.SCREENSHOT_HDR_PROCESSOR"
+                  :items="[
+                    { title: '自动检测', value: 'auto' },
+                    { title: 'libplacebo（强制，需Vulkan）', value: 'libplacebo' },
+                    { title: 'zscale（强制CPU）', value: 'zscale' },
+                  ]"
+                  label="截图色彩处理引擎"
+                  hint="HDR/DV 截图的色彩映射引擎。auto 自动检测 Vulkan；libplacebo 质量最好但需要 Vulkan 支持；zscale 纯 CPU 速度快但 DV 可能偏色"
+                  persistent-hint
+                  prepend-inner-icon="mdi-palette"
                 />
               </VCol>
               <VCol cols="12" md="12">
