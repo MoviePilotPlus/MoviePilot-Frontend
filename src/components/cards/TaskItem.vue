@@ -17,6 +17,7 @@ import VideoScreenshotDialog from '@/components/dialog/VideoScreenshotDialog.vue
 import CollectOperationDialog from '@/components/dialog/CollectOperationDialog.vue'
 import MergeCollectDialog from '@/components/dialog/MergeCollectDialog.vue'
 import TransferDirDialog from '@/components/dialog/TransferDirDialog.vue'
+import { VTooltip } from 'vuetify/components'
 const $toast = useToast()
 // 确认框
 const createConfirm = useConfirm()
@@ -39,7 +40,7 @@ const isIgnore = ref(false)
 const showDeleteConfirm = ref(false)
 const deleteOptions = ref({
   delete_file: true,
-  remove_seed: true
+  remove_seed: true,
 })
 // 合并打包对话框
 const showMergeDialog = ref(false)
@@ -55,6 +56,13 @@ const props = defineProps({
   task: Object as PropType<Collect>,
 })
 
+// 文本截断函数
+const truncateText = (text: string, maxLength: number = 15): string => {
+  if (!text) return ''
+  if (text.length <= maxLength) return text
+  text = text.replace(/\\/g, '/')
+  return text.substring(0, maxLength) + '...'
+}
 
 // 任务信息
 const task = ref(props.task)
@@ -108,7 +116,7 @@ function getIgnorePayload() {
   const cid = task.value?.cid
   return {
     type: type ? String(type) : '',
-    cid: cid ? String(cid) : ''
+    cid: cid ? String(cid) : '',
   }
 }
 function getIgnoreEndpoint() {
@@ -175,7 +183,7 @@ function goDetail() {
   const route = router.resolve({
     path: '/cdetail',
     query: {
-      id: props.task?.id
+      id: props.task?.id,
     },
   })
   window.open(route.href, '_blank')
@@ -226,11 +234,10 @@ function showDeleteConfirmDialog() {
 // 确认删除任务
 async function confirmDelete() {
   try {
-    if (!task.value?.id)
-      return
+    if (!task.value?.id) return
 
     await api.delete(`collect/${task.value.id}`, {
-      params: deleteOptions.value
+      params: deleteOptions.value,
     })
 
     // 通知父组件刷新
@@ -245,11 +252,9 @@ async function confirmDelete() {
   }
 }
 function getTags() {
-  if (!props.task?.tags)
-    return []
+  if (!props.task?.tags) return []
   const tags = JSON.parse(props.task?.tags)
-  if (!tags)
-    return []
+  if (!tags) return []
   // 明确指定 tagList 的类型为 string 数组，避免隐式的 any[] 类型
   let tagList: string[] = []
   tags.forEach((t: string) => {
@@ -283,8 +288,7 @@ async function getSiteSeedList() {
 }
 async function deleteCollect(collect_id: number | undefined) {
   try {
-    if (!collect_id)
-      return
+    if (!collect_id) return
     const isConfirmed = await createConfirm({
       title: '确认',
       content: '确认删除采集任务？',
@@ -294,8 +298,8 @@ async function deleteCollect(collect_id: number | undefined) {
     await api.delete(`collect/${collect_id}`, {
       params: {
         'delete_file': true,
-        'remove_seed': false
-      }
+        'remove_seed': false,
+      },
     })
     // 通知父组件刷新
     emit('remove', collect_id)
@@ -309,7 +313,7 @@ async function deleteCollect(collect_id: number | undefined) {
 const showAll = ref(false)
 
 // 计算实际可见数量
-const visibleCount = computed(() => showAll.value ? siteSeedList.value.length : defaultVisible.value)
+const visibleCount = computed(() => (showAll.value ? siteSeedList.value.length : defaultVisible.value))
 
 // 添加容器ref
 const chipContainer = ref<HTMLDivElement | null>(null)
@@ -382,16 +386,21 @@ onUnmounted(() => {
 
 <template>
   <div class="w-100">
-
-    <VListItem @click.stop="goDetail()"
-      class="pa-3 mb-2 rounded-lg task-row-card torrent-item overflow-hidden">
+    <VListItem @click.stop="goDetail()" class="pa-3 mb-2 rounded-lg task-row-card torrent-item overflow-hidden">
       <div class="status-corner">
         <span class="status-text">{{ getCollectStatus(task?.status) }}</span>
       </div>
       <template v-slot:prepend>
         <div class="d-none d-sm-flex flex-column align-center pr-3">
-          <VImg v-if="getCoverUrl" :src="getCoverUrl" :alt="task?.name" class="rounded mb-1" width="110"
-            aspect-ratio="9/16" cover />
+          <VImg
+            v-if="getCoverUrl"
+            :src="getCoverUrl"
+            :alt="task?.name"
+            class="rounded mb-1"
+            width="110"
+            aspect-ratio="9/16"
+            cover
+          />
         </div>
       </template>
       <VListItemTitle>
@@ -410,6 +419,12 @@ onUnmounted(() => {
           {{ task?.sub_title || '暂无描述' }}
         </div>
         <div class="meta-tags">
+          <VChip v-if="task?.media_base_dir" label class="meta-chip" variant="outlined" size="small">
+            {{ truncateText(task?.media_base_dir) }}
+            <VTooltip v-if="(task?.media_base_dir || '').length > 15" activator="parent" location="bottom">
+              {{ task?.media_base_dir }}
+            </VTooltip>
+          </VChip>
           <VChip v-if="task?.type" label class="meta-chip" variant="outlined" size="small">
             {{ task?.type }}
           </VChip>
@@ -426,14 +441,18 @@ onUnmounted(() => {
             {{ tag }}
           </VChip>
         </div>
-
       </VListItemTitle>
 
       <div class="pt-2">
         <div ref="chipContainer">
           <!-- 显示可见范围内的chip -->
-          <VChip class="mr-1 mb-1" color="success" variant="outlined" size="small"
-            @click.stop="showAddSiteSeddoDialog()">
+          <VChip
+            class="mr-1 mb-1"
+            color="success"
+            variant="outlined"
+            size="small"
+            @click.stop="showAddSiteSeddoDialog()"
+          >
             添加
           </VChip>
           <template v-for="(item, index) in siteSeedList.slice(0, visibleCount)" :key="index">
@@ -491,15 +510,19 @@ onUnmounted(() => {
                       </template>
                       <VListItemTitle>搜索站点</VListItemTitle>
                     </VListItem>
-
-
                   </template>
                   <VList>
                     <VListItem>
                       <VChipGroup v-model="selectedSites" column @click.stop>
-                        <VChip v-for="site in allSites" :key="site.id"
-                          :color="selectedSites === site.id ? 'primary' : ''" filter variant="outlined" :value="site.id"
-                          size="small">
+                        <VChip
+                          v-for="site in allSites"
+                          :key="site.id"
+                          :color="selectedSites === site.id ? 'primary' : ''"
+                          filter
+                          variant="outlined"
+                          :value="site.id"
+                          size="small"
+                        >
                           {{ site.name }}
                         </VChip>
                       </VChipGroup>
@@ -515,7 +538,6 @@ onUnmounted(() => {
                   </template>
                   <VListItemTitle>{{ isIgnore ? '取消忽略' : '忽略' }}</VListItemTitle>
                 </VListItem>
-
 
                 <VListItem variant="plain" @click="showCollectOperationDialog('start_download_by_collect')">
                   <template #prepend>
@@ -593,14 +615,36 @@ onUnmounted(() => {
       </template>
     </VListItem>
   </div>
-  <SiteSeedInfoDialog v-if="showSiteSeedInfo" v-model="showSiteSeedInfo" :seed="seedInfo" @close="deleteSiteSeedSuccess"
-    @remove="deleteSiteSeedSuccess" />
-  <AddSiteSeedDialog v-if="showAddSiteSedd" v-model="showAddSiteSedd" :collect="task" :siteSeedList="siteSeedList"
-    @done="addSiteSeedSuccess" @error="addSiteSeedError" @close="showAddSiteSedd = false" />
+  <SiteSeedInfoDialog
+    v-if="showSiteSeedInfo"
+    v-model="showSiteSeedInfo"
+    :seed="seedInfo"
+    @close="deleteSiteSeedSuccess"
+    @remove="deleteSiteSeedSuccess"
+  />
+  <AddSiteSeedDialog
+    v-if="showAddSiteSedd"
+    v-model="showAddSiteSedd"
+    :collect="task"
+    :siteSeedList="siteSeedList"
+    @done="addSiteSeedSuccess"
+    @error="addSiteSeedError"
+    @close="showAddSiteSedd = false"
+  />
   <VideoDescInfoDialog v-if="showDescInfo" v-model="showDescInfo" :collect="task" @close="showDescInfo = false" />
-  <VideoScreenshotDialog v-if="showScreenshotInfo" v-model="showScreenshotInfo" :collect="task" @close="showScreenshotInfo = false" />
-  <CollectOperationDialog v-if="showCollectOperation" v-model="showCollectOperation" :collect_id="task?.id"
-    :operation="operationType" @close="showCollectOperation = false" />
+  <VideoScreenshotDialog
+    v-if="showScreenshotInfo"
+    v-model="showScreenshotInfo"
+    :collect="task"
+    @close="showScreenshotInfo = false"
+  />
+  <CollectOperationDialog
+    v-if="showCollectOperation"
+    v-model="showCollectOperation"
+    :collect_id="task?.id"
+    :operation="operationType"
+    @close="showCollectOperation = false"
+  />
 
   <!-- 删除确认对话框 -->
   <VDialog v-model="showDeleteConfirm" max-width="500px">
@@ -626,9 +670,13 @@ onUnmounted(() => {
     </VCard>
   </VDialog>
   <!-- 站点资源弹窗 -->
-  <SiteSearchDialog v-if="resourceDialog" v-model="resourceDialog" :site="getSelectedSite()"
+  <SiteSearchDialog
+    v-if="resourceDialog"
+    v-model="resourceDialog"
+    :site="getSelectedSite()"
     :keyword="task?.cn_title || task?.title || task?.name"
-    @close="onSiteResourceDone" />
+    @close="onSiteResourceDone"
+  />
   <!-- 合并打包弹窗 -->
   <MergeCollectDialog v-model="showMergeDialog" :collect-id="task.id" @merged="emit('remove')" />
   <!-- 转移目录弹窗 -->
@@ -636,7 +684,7 @@ onUnmounted(() => {
 </template>
 <style scoped>
 .task-menu-list {
-  max-height: 70vh;
+  max-block-size: 70vh;
   overflow-y: auto;
 }
 
@@ -684,7 +732,9 @@ onUnmounted(() => {
   background-color: rgb(var(--v-theme-surface));
   box-shadow: 0 1px 4px rgba(0, 0, 0, 2%);
   opacity: 1;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .torrent-item {
@@ -704,9 +754,9 @@ onUnmounted(() => {
 }
 
 .meta-chip {
-  margin: 0 !important;
   border-color: rgba(var(--v-theme-on-surface), 0.22) !important;
   border-radius: 999px !important;
+  margin: 0 !important;
   background-color: transparent !important;
   color: rgba(var(--v-theme-on-surface), 0.78) !important;
   font-size: 0.74rem !important;
