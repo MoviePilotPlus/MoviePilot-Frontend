@@ -1,8 +1,9 @@
 <script lang="ts" setup>
 import api from '@/api'
 import type { WorkflowShare } from '@/api/types'
-import NoDataFound from '@/components/NoDataFound.vue'
+import NoDataFound from '@/components/states/NoDataFound.vue'
 import WorkflowShareCard from '@/components/cards/WorkflowShareCard.vue'
+import ProgressiveCardGrid from '@/components/misc/ProgressiveCardGrid.vue'
 import { useI18n } from 'vue-i18n'
 
 // 国际化
@@ -30,6 +31,7 @@ const page = ref(1)
 
 // 搜索关键字
 const keyword = ref(props.keyword)
+const currentKey = ref(0)
 
 // 是否加载中
 const loading = ref(false)
@@ -52,6 +54,17 @@ async function loadEventTypes() {
     console.error('Failed to load event types:', error)
   }
 }
+
+watch(
+  () => props.keyword,
+  newKeyword => {
+    keyword.value = newKeyword || ''
+    page.value = 1
+    dataList.value = []
+    isRefreshed.value = false
+    currentKey.value++
+  },
+)
 
 // 拼装参数
 function getParams() {
@@ -97,6 +110,7 @@ async function fetchData({ done }: { done: any }) {
         page.value++
         // 返回加载成功
         done('ok')
+        await nextTick()
       }
     } else {
       // 设置加载中
@@ -132,28 +146,34 @@ function removeData(id: string) {
   dataList.value = dataList.value.filter(item => item.id !== id)
 }
 
-onActivated(() => {
+onMounted(() => {
   loadEventTypes()
-  fetchData({ done: () => {} })
 })
 </script>
 
 <template>
   <VPageContentTitle v-if="keyword" :title="`${t('common.search')}：${keyword}`" />
   <LoadingBanner v-if="!isRefreshed" class="mt-12" />
-  <VInfiniteScroll mode="intersect" side="end" :items="dataList" class="overflow-visible px-2" @load="fetchData">
+  <VInfiniteScroll mode="intersect" side="end" :items="dataList" class="overflow-visible px-2" @load="fetchData" :key="currentKey">
     <template #loading />
     <template #empty />
-    <div v-if="dataList.length > 0" class="grid gap-4 grid-workflow-share-card" tabindex="0">
-      <div v-for="data in dataList" :key="data.id">
+    <ProgressiveCardGrid
+      v-if="dataList.length > 0"
+      :items="dataList"
+      :get-item-key="item => item.id"
+      :min-item-width="288"
+      :estimated-item-height="220"
+      tabindex="0"
+    >
+      <template #default="{ item }">
         <WorkflowShareCard
-          :workflow="data"
+          :workflow="item"
           :event-types="eventTypes"
-          @delete="removeData(data.id || '')"
+          @delete="removeData(item.id || '')"
           @update="emit('update')"
         />
-      </div>
-    </div>
+      </template>
+    </ProgressiveCardGrid>
     <NoDataFound
       v-if="dataList.length === 0 && isRefreshed"
       error-code="404"

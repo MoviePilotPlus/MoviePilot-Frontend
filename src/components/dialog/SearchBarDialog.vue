@@ -7,7 +7,8 @@ import { useUserStore, useGlobalSettingsStore } from '@/stores'
 import SearchSiteDialog from '@/components/dialog/SearchSiteDialog.vue'
 import { useI18n } from 'vue-i18n'
 import { useDisplay } from 'vuetify'
-import { hasPermission, filterMenusByPermission } from '@/utils/permission'
+import { VDialog, VMenu } from 'vuetify/components'
+import { buildUserPermissionContext, hasPermission, filterMenusByPermission } from '@/utils/permission'
 
 // 显示器宽度
 const display = useDisplay()
@@ -15,10 +16,16 @@ const display = useDisplay()
 // 多语言支持
 const { t } = useI18n()
 
-// 定义props，接收modelValue
-const props = defineProps<{
-  modelValue: boolean
-}>()
+// 定义 props，接收浮层状态及是否显示响应式入口。
+const props = withDefaults(
+  defineProps<{
+    modelValue: boolean
+    showActivator?: boolean
+  }>(),
+  {
+    showActivator: false,
+  },
+)
 
 // 路由
 const router = useRouter()
@@ -30,41 +37,29 @@ const userStore = useUserStore()
 const globalSettingsStore = useGlobalSettingsStore()
 const globalSettings = globalSettingsStore.globalSettings
 
-// 超级用户
-const superUser = userStore.superUser
-
 // 当前用户名
 const userName = userStore.userName
+const userPermissions = computed(() => buildUserPermissionContext(userStore.superUser, userStore.permissions))
 
 // 权限检查
 const hasSearchPermission = computed(() => {
-  return hasPermission(
-    {
-      is_superuser: userStore.superUser,
-      ...userStore.permissions,
-    },
-    'search',
-  )
+  return hasPermission(userPermissions.value, 'search')
+})
+
+const hasDiscoveryPermission = computed(() => {
+  return hasPermission(userPermissions.value, 'discovery')
 })
 
 const hasSubscribePermission = computed(() => {
-  return hasPermission(
-    {
-      is_superuser: userStore.superUser,
-      ...userStore.permissions,
-    },
-    'subscribe',
-  )
+  return hasPermission(userPermissions.value, 'subscribe')
 })
 
 const hasManagePermission = computed(() => {
-  return hasPermission(
-    {
-      is_superuser: userStore.superUser,
-      ...userStore.permissions,
-    },
-    'manage',
-  )
+  return hasPermission(userPermissions.value, 'manage')
+})
+
+const hasAdminPermission = computed(() => {
+  return hasPermission(userPermissions.value, 'admin')
 })
 
 // 是否显示合集搜索项（当SEARCH_SOURCE包含themoviedb时显示）
@@ -79,6 +74,7 @@ const SubscribeItems = ref<Subscribe[]>([])
 const chooseSiteDialog = ref(false)
 const selectedSites = ref<number[]>([])
 const allSites = ref<Site[]>([])
+const siteSearchType = ref<'torrent' | 'subtitle'>('torrent')
 
 // 定义事件
 const emit = defineEmits(['close', 'update:modelValue'])
@@ -89,16 +85,33 @@ const dialog = computed({
   set: val => emit('update:modelValue', val),
 })
 
+// 桌面使用锚定下拉，小屏继续使用原有搜索弹窗。
+const searchOverlay = computed(() => (display.mdAndUp.value ? VMenu : VDialog))
+const searchOverlayProps = computed(() =>
+  display.mdAndUp.value
+    ? {
+        closeOnContentClick: false,
+        location: 'bottom start' as const,
+        offset: 8,
+        scrollStrategy: 'reposition' as const,
+      }
+    : {
+        fullscreen: true,
+        maxWidth: '40rem',
+        scrollable: true,
+      },
+)
+
 // 搜索词
 const searchWord = ref<string | null>(null)
 
-// ref
-const searchWordInput = ref<HTMLElement | null>(null)
+// 当前尺寸下可见的搜索输入框。
+const searchWordInput = ref<HTMLInputElement | null>(null)
 
 // 近期搜索词条
 const recentSearches = ref<string[]>([])
 
-// 检测操作系统是否是Mac
+/** 检测操作系统是否为 macOS。 */
 function isMac() {
   return navigator.platform.toUpperCase().indexOf('MAC') >= 0
 }
@@ -106,7 +119,7 @@ function isMac() {
 // 计算属性：根据操作系统显示不同的按键提示
 const metaKey = computed(() => (isMac() ? '⌘+K' : 'Ctrl+K'))
 
-// 保存近期搜索到本地
+/** 将有效关键词保存到近期搜索记录。 */
 function saveRecentSearches(keyword: string) {
   if (!keyword) return
   if (recentSearches.value.includes(keyword)) return
@@ -114,7 +127,7 @@ function saveRecentSearches(keyword: string) {
   localStorage.setItem('MP_RecentSearches', JSON.stringify(recentSearches.value))
 }
 
-// 从本地加载近期搜索
+/** 从本地存储加载并裁剪近期搜索记录。 */
 function loadRecentSearches() {
   const recentSearchesStr = localStorage.getItem('MP_RecentSearches')
   if (recentSearchesStr) {
@@ -126,7 +139,7 @@ function loadRecentSearches() {
   }
 }
 
-// 所有菜单功能
+/** 获取可参与全局搜索的导航菜单和设置入口。 */
 function getMenus(): NavMenu[] {
   let menus: NavMenu[] = []
   // 导航菜单
@@ -139,6 +152,7 @@ function getMenus(): NavMenu[] {
         to: item.to,
         header: item.header,
         admin: item.admin,
+        permission: item.permission,
       }),
   )
   // 设置标签页
@@ -151,18 +165,13 @@ function getMenus(): NavMenu[] {
         to: `/setting?tab=${item.tab}`,
         header: '',
         admin: true,
+        permission: 'admin',
         description: item.description,
       }),
   )
 
   return menus
 }
-
-// 获取用户权限信息
-const userPermissions = computed(() => ({
-  is_superuser: userStore.superUser,
-  ...userStore.permissions,
-}))
 
 // 匹配的菜单列表
 const matchedMenuItems = computed(() => {
@@ -185,7 +194,7 @@ const matchedMenuItems = computed(() => {
 // 所有插件（已安装）
 const pluginItems = ref<Plugin[]>([])
 
-// 获取插件列表数据
+/** 加载已安装插件，供搜索结果匹配。 */
 async function fetchInstalledPlugins() {
   try {
     pluginItems.value = await api.get('plugin/', {
@@ -201,7 +210,7 @@ async function fetchInstalledPlugins() {
 // 匹配的插件列表
 const matchedPluginItems = computed(() => {
   if (!searchWord.value) return []
-  if (!hasManagePermission.value) return []
+  if (!hasAdminPermission.value) return []
   const lowerWord = (searchWord.value as string).toLowerCase()
   return pluginItems.value.filter((item: Plugin) => {
     if (!item.plugin_name && !item.plugin_desc) return false
@@ -209,7 +218,7 @@ const matchedPluginItems = computed(() => {
   })
 })
 
-// 获取订阅列表数据
+/** 加载订阅列表，供搜索结果匹配。 */
 async function fetchSubscribes() {
   try {
     SubscribeItems.value = await api.get('subscribe/')
@@ -218,10 +227,10 @@ async function fetchSubscribes() {
   }
 }
 
-// 从接口加载用户站点偏好设置
+/** 从接口加载用户的站点搜索偏好。 */
 const loadUserSitePreferences = async () => {
   try {
-    const result = await api.get('system/setting/IndexerSites')
+    const result = await api.get('system/setting/public/IndexerSites')
     if (result && result.data && result.data.value) {
       selectedSites.value = result.data.value
       return
@@ -231,7 +240,7 @@ const loadUserSitePreferences = async () => {
   }
 }
 
-// 查询所有站点
+/** 查询所有启用站点，并初始化默认选择。 */
 async function queryAllSites() {
   try {
     const data: Site[] = await api.get('site/')
@@ -246,8 +255,9 @@ async function queryAllSites() {
   }
 }
 
-// 打开站点选择对话框
-const openSiteDialog = () => {
+/** 打开指定资源类型的站点选择对话框。 */
+const openSiteDialog = (type: 'torrent' | 'subtitle' = 'torrent') => {
+  siteSearchType.value = type
   chooseSiteDialog.value = true
 }
 
@@ -257,20 +267,24 @@ const matchedSubscribeItems = computed(() => {
   if (!hasSubscribePermission.value) return []
   const lowerWord = (searchWord.value as string).toLowerCase()
   return SubscribeItems.value.filter((item: Subscribe) => {
-    return (item.name.toLowerCase().includes(lowerWord) && (superUser || userName === item.username)) || false
+    return (item.name.toLowerCase().includes(lowerWord) && (userStore.superUser || userName === item.username)) || false
   })
 })
 
-// 搜索多站点
+/** 使用选中的站点执行当前资源类型搜索。 */
 function searchSites(sites: number[]) {
   chooseSiteDialog.value = false
   selectedSites.value = sites
+  if (siteSearchType.value === 'subtitle') {
+    searchSubtitle()
+    return
+  }
   searchTorrent()
 }
 
-// 搜索资源
+/** 使用当前关键词搜索站点资源。 */
 function searchTorrent() {
-  if (!searchWord.value) return
+  if (!searchWord.value || !hasSearchPermission.value) return
   // 记录搜索词
   saveRecentSearches(searchWord.value)
   // 跳转到搜索页面
@@ -279,18 +293,33 @@ function searchTorrent() {
     query: {
       keyword: searchWord.value,
       area: 'title',
+      result_type: 'torrent',
       sites: selectedSites.value.join(','),
     },
   })
-  // 关闭搜索对话框
-  dialog.value = false
-  emit('close')
+  closeSearch()
 }
 
-// 跳转媒体搜索页面
+/** 使用当前关键词搜索字幕资源。 */
+function searchSubtitle() {
+  if (!searchWord.value || !hasSearchPermission.value) return
+  saveRecentSearches(searchWord.value)
+  router.push({
+    path: '/resource',
+    query: {
+      keyword: searchWord.value,
+      area: 'title',
+      result_type: 'subtitle',
+      sites: selectedSites.value.join(','),
+    },
+  })
+  closeSearch()
+}
+
+/** 跳转到指定类型的媒体搜索结果页。 */
 function searchMedia(searchType: string) {
   // 搜索类型 media/person
-  if (!searchWord.value) return
+  if (!searchWord.value || !hasDiscoveryPermission.value) return
   saveRecentSearches(searchWord.value)
   router.push({
     path: '/browse/media/search',
@@ -299,10 +328,10 @@ function searchMedia(searchType: string) {
       type: searchType,
     },
   })
-  emit('close')
+  closeSearch()
 }
 
-// 跳转到历史记录页面
+/** 跳转到包含当前关键词的历史记录页。 */
 function searchHistory() {
   if (!searchWord.value) return
   saveRecentSearches(searchWord.value)
@@ -312,10 +341,10 @@ function searchHistory() {
       search: searchWord.value,
     },
   })
-  emit('close')
+  closeSearch()
 }
 
-// 跳转到订阅分享页面
+/** 跳转到包含当前关键词的订阅分享页。 */
 function searchSubscribeShares() {
   if (!searchWord.value) return
   saveRecentSearches(searchWord.value)
@@ -325,10 +354,10 @@ function searchSubscribeShares() {
       keyword: searchWord.value,
     },
   })
-  emit('close')
+  closeSearch()
 }
 
-// 跳转插件页面
+/** 打开匹配插件的已安装详情。 */
 function showPlugin(pluginId: string) {
   router.push({
     path: `/plugins/`,
@@ -337,16 +366,16 @@ function showPlugin(pluginId: string) {
       id: pluginId,
     },
   })
-  emit('close')
+  closeSearch()
 }
 
-// 跳转菜单页面
+/** 跳转到匹配的功能菜单。 */
 function goPage(to: string) {
   router.push(to)
-  emit('close')
+  closeSearch()
 }
 
-// 跳转订阅页面
+/** 根据订阅类型跳转到对应订阅详情。 */
 function goSubscribe(subscribe: Subscribe) {
   if (subscribe.type === '电影') {
     router.push({
@@ -363,15 +392,31 @@ function goSubscribe(subscribe: Subscribe) {
       },
     })
   }
+  closeSearch()
+}
+
+/** 关闭搜索浮层并通知外层入口同步状态。 */
+function closeSearch() {
+  dialog.value = false
   emit('close')
 }
 
+/** 聚焦当前可见输入框，供快捷键入口复用。 */
+function focusSearchInput() {
+  searchWordInput.value?.focus()
+}
+
+watch(dialog, async isOpen => {
+  if (!isOpen) return
+  await nextTick()
+  focusSearchInput()
+})
+
+defineExpose({ focusSearchInput })
+
 onMounted(() => {
-  setTimeout(() => {
-    searchWordInput.value?.focus()
-  }, 500)
   // 根据权限加载不同的数据
-  if (hasManagePermission.value) {
+  if (hasAdminPermission.value) {
     fetchInstalledPlugins()
   }
   if (hasSubscribePermission.value) {
@@ -387,10 +432,20 @@ onMounted(() => {
 })
 </script>
 <template>
-  <VDialog v-model="dialog" max-width="40rem" scrollable :fullscreen="!display.mdAndUp.value">
-    <VCard class="search-dialog">
-      <!-- 搜索输入框区域 -->
-      <div class="search-header">
+  <component :is="searchOverlay" v-model="dialog" v-bind="searchOverlayProps">
+    <template v-if="showActivator" #activator="{ props: activatorProps }">
+      <!-- 小屏入口保持图标形态，点击后打开全屏搜索弹窗。 -->
+      <IconBtn
+        v-if="!display.mdAndUp.value"
+        v-bind="activatorProps"
+        class="search-icon-trigger"
+        :aria-label="t('dialog.searchBar.openSearch')"
+      >
+        <VIcon class="search-icon-trigger__icon" icon="mdi-magnify" />
+      </IconBtn>
+
+      <!-- 中屏及以上常驻搜索输入框，输入时直接在下方展示同一组选项。 -->
+      <div v-else v-bind="activatorProps" class="search-desktop-activator">
         <div class="search-input-wrapper">
           <VIcon icon="mdi-magnify" size="22" class="search-input-icon" />
           <input
@@ -400,7 +455,26 @@ onMounted(() => {
             class="search-native-input"
             :placeholder="t('dialog.searchBar.searchPlaceholder')"
             @keydown.enter="searchMedia('media')"
-            @keydown.escape="emit('close')"
+            @keydown.escape.stop="closeSearch"
+          />
+          <kbd class="search-shortcut-badge">{{ metaKey }}</kbd>
+        </div>
+      </div>
+    </template>
+
+    <VCard class="search-dialog" :class="{ 'search-dialog--dropdown': display.mdAndUp.value }">
+      <!-- 弹窗模式保留原有搜索输入区。 -->
+      <div v-if="!display.mdAndUp.value" class="search-header">
+        <div class="search-input-wrapper">
+          <VIcon icon="mdi-text" size="22" class="search-input-icon" />
+          <input
+            ref="searchWordInput"
+            v-model="searchWord"
+            type="text"
+            class="search-native-input"
+            :placeholder="t('dialog.searchBar.searchPlaceholder')"
+            @keydown.enter="searchMedia('media')"
+            @keydown.escape.stop="closeSearch"
           />
           <VBtn icon size="small" variant="text" class="search-submit-btn" @click="searchMedia('media')">
             <VIcon icon="mdi-magnify" size="20" />
@@ -413,58 +487,60 @@ onMounted(() => {
         <!-- 有搜索词时显示搜索入口和匹配结果 -->
         <VList lines="two" v-if="searchWord" class="search-list pa-0 py-2">
           <!-- 媒体搜索入口 -->
-          <VListSubheader class="font-weight-medium text-uppercase px-4">
-            {{ t('common.media') }}
-          </VListSubheader>
+          <template v-if="hasDiscoveryPermission">
+            <VListSubheader class="font-weight-medium text-uppercase px-4">
+              {{ t('common.media') }}
+            </VListSubheader>
 
-          <VListItem density="comfortable" link @click="searchMedia('media')" class="search-result-item mx-2 my-1">
-            <template #prepend>
-              <div class="result-icon-wrapper">
-                <VIcon icon="mdi-movie-search" size="small" color="medium-emphasis" />
-              </div>
-            </template>
-            <VListItemTitle class="font-weight-medium text-body-2">
-              {{ t('recommend.categoryMovie') }}、{{ t('recommend.categoryTV') }}
-            </VListItemTitle>
-            <VListItemSubtitle class="text-caption text-medium-emphasis">
-              {{ t('common.search') }} <span class="primary-text font-weight-medium">{{ searchWord }}</span>
-              {{ t('resource.title') }}
-            </VListItemSubtitle>
-          </VListItem>
+            <VListItem density="comfortable" link @click="searchMedia('media')" class="search-result-item mx-2 my-1">
+              <template #prepend>
+                <div class="result-icon-wrapper">
+                  <VIcon icon="mdi-movie-search" size="small" color="medium-emphasis" />
+                </div>
+              </template>
+              <VListItemTitle class="font-weight-medium text-body-2">
+                {{ t('recommend.categoryMovie') }}、{{ t('recommend.categoryTV') }}
+              </VListItemTitle>
+              <VListItemSubtitle class="text-caption text-medium-emphasis">
+                {{ t('common.search') }} <span class="primary-text font-weight-medium">{{ searchWord }}</span>
+                {{ t('resource.title') }}
+              </VListItemSubtitle>
+            </VListItem>
 
-          <VListItem
-            v-if="showCollectionSearch"
-            density="comfortable"
-            link
-            @click="searchMedia('collection')"
-            class="search-result-item mx-2 my-1"
-          >
-            <template #prepend>
-              <div class="result-icon-wrapper">
-                <VIcon icon="mdi-movie-filter" size="small" color="medium-emphasis" />
-              </div>
-            </template>
-            <VListItemTitle class="font-weight-medium text-body-2">{{
-              t('dialog.searchBar.collections')
-            }}</VListItemTitle>
-            <VListItemSubtitle class="text-caption text-medium-emphasis">
-              {{ t('common.search') }} <span class="primary-text font-weight-medium">{{ searchWord }}</span>
-              {{ t('dialog.searchBar.collectionSearch') }}
-            </VListItemSubtitle>
-          </VListItem>
+            <VListItem
+              v-if="showCollectionSearch"
+              density="comfortable"
+              link
+              @click="searchMedia('collection')"
+              class="search-result-item mx-2 my-1"
+            >
+              <template #prepend>
+                <div class="result-icon-wrapper">
+                  <VIcon icon="mdi-movie-filter" size="small" color="medium-emphasis" />
+                </div>
+              </template>
+              <VListItemTitle class="font-weight-medium text-body-2">{{
+                t('dialog.searchBar.collections')
+              }}</VListItemTitle>
+              <VListItemSubtitle class="text-caption text-medium-emphasis">
+                {{ t('common.search') }} <span class="primary-text font-weight-medium">{{ searchWord }}</span>
+                {{ t('dialog.searchBar.collectionSearch') }}
+              </VListItemSubtitle>
+            </VListItem>
 
-          <VListItem density="comfortable" link @click="searchMedia('person')" class="search-result-item mx-2 my-1">
-            <template #prepend>
-              <div class="result-icon-wrapper">
-                <VIcon icon="mdi-account-search" size="small" color="medium-emphasis" />
-              </div>
-            </template>
-            <VListItemTitle class="font-weight-medium text-body-2">{{ t('browse.actor') }}</VListItemTitle>
-            <VListItemSubtitle class="text-caption text-medium-emphasis">
-              {{ t('common.search') }} <span class="primary-text font-weight-medium">{{ searchWord }}</span>
-              {{ t('dialog.searchBar.actorSearch') }}
-            </VListItemSubtitle>
-          </VListItem>
+            <VListItem density="comfortable" link @click="searchMedia('person')" class="search-result-item mx-2 my-1">
+              <template #prepend>
+                <div class="result-icon-wrapper">
+                  <VIcon icon="mdi-account-search" size="small" color="medium-emphasis" />
+                </div>
+              </template>
+              <VListItemTitle class="font-weight-medium text-body-2">{{ t('browse.actor') }}</VListItemTitle>
+              <VListItemSubtitle class="text-caption text-medium-emphasis">
+                {{ t('common.search') }} <span class="primary-text font-weight-medium">{{ searchWord }}</span>
+                {{ t('dialog.searchBar.actorSearch') }}
+              </VListItemSubtitle>
+            </VListItem>
+          </template>
 
           <VListItem
             v-if="hasSubscribePermission"
@@ -622,7 +698,34 @@ onMounted(() => {
                   variant="tonal"
                   color="primary"
                   rounded="pill"
-                  @click.stop="openSiteDialog"
+                  @click.stop="openSiteDialog('torrent')"
+                >
+                  {{ t('dialog.searchBar.selectSites') }}
+                </VBtn>
+              </template>
+            </VListItem>
+
+            <VListItem density="comfortable" link @click="searchSubtitle" class="search-result-item mx-2 my-1">
+              <template #prepend>
+                <div class="result-icon-wrapper">
+                  <VIcon icon="mdi-subtitles-outline" size="small" color="medium-emphasis" />
+                </div>
+              </template>
+              <VListItemTitle class="font-weight-medium text-body-2">{{
+                t('dialog.searchBar.searchSubtitlesInSites')
+              }}</VListItemTitle>
+              <VListItemSubtitle class="text-caption text-medium-emphasis">
+                {{ t('common.search') }} <span class="primary-text font-weight-medium">{{ searchWord }}</span>
+                {{ t('dialog.searchBar.relatedSubtitles') }}
+              </VListItemSubtitle>
+              <template #append>
+                <VBtn
+                  v-if="hasManagePermission"
+                  size="x-small"
+                  variant="tonal"
+                  color="primary"
+                  rounded="pill"
+                  @click.stop="openSiteDialog('subtitle')"
                 >
                   {{ t('dialog.searchBar.selectSites') }}
                 </VBtn>
@@ -660,26 +763,14 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 底部区域 -->
-      <!-- 桌面端：快捷键提示 -->
-      <div v-if="display.mdAndUp.value" class="search-footer">
-        <div class="shortcut-group">
-          <kbd>Esc</kbd>
-          <span class="shortcut-label">{{ t('dialog.searchBar.escClose') }}</span>
-        </div>
-        <div class="shortcut-group">
-          <kbd>{{ metaKey }}</kbd>
-          <span class="shortcut-label">{{ t('dialog.searchBar.openSearch') }}</span>
-        </div>
-      </div>
-      <!-- 移动端：关闭图标 -->
-      <div v-else class="search-footer-mobile">
-        <VBtn icon variant="tonal" @click="emit('close')">
+      <!-- 弹窗形态保留底部关闭按钮，桌面下拉不显示页脚。 -->
+      <div v-if="!display.mdAndUp.value" class="search-footer-mobile">
+        <VBtn icon variant="tonal" @click="closeSearch">
           <VIcon icon="mdi-close" size="20" />
         </VBtn>
       </div>
     </VCard>
-  </VDialog>
+  </component>
 
   <!-- 站点选择对话框 -->
   <SearchSiteDialog
@@ -694,12 +785,44 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* stylelint-disable no-descending-specificity */
+
 .search-dialog {
   display: flex;
   overflow: hidden;
   flex-direction: column;
-  border-radius: 16px !important;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 12%) !important;
+}
+
+.search-dialog--dropdown {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  inline-size: min(32rem, calc(100vw - 2rem));
+  max-block-size: min(72vh, 42rem);
+}
+
+.search-desktop-activator {
+  flex: 0 1 22rem;
+  inline-size: clamp(15rem, 32vw, 22rem);
+  max-inline-size: calc(100vw - 10rem);
+}
+
+.search-desktop-activator .search-input-wrapper {
+  border-color: rgba(var(--v-theme-on-surface), 0.12);
+  background: rgba(var(--v-theme-surface), 0.72);
+  block-size: 42px;
+  padding-inline: 14px 8px;
+}
+
+html[data-theme='transparent'] .search-desktop-activator .search-input-wrapper,
+.v-theme--transparent .search-desktop-activator .search-input-wrapper {
+  background: rgba(var(--v-theme-surface), var(--transparent-opacity-light, 0.2));
+}
+
+.search-icon-trigger {
+  flex: 0 0 auto;
+}
+
+.search-icon-trigger__icon {
+  transform: scaleX(-1);
 }
 
 /* 搜索头部区域 */
@@ -712,19 +835,19 @@ onMounted(() => {
 .search-input-wrapper {
   display: flex;
   align-items: center;
-  border: 1.5px solid rgba(var(--v-theme-on-surface), 0.15);
-  border-radius: 28px;
+  border: 1.5px solid rgba(var(--v-theme-primary), 0.4);
+  border-radius: var(--app-vuetify-rounded-pill);
   background-color: rgba(var(--v-theme-surface-variant), 0.04);
   block-size: 48px;
   padding-inline: 14px 6px;
   transition:
     border-color 0.2s ease,
+    border-radius 0.2s ease,
     box-shadow 0.2s ease;
 }
 
 .search-input-wrapper:focus-within {
-  border-color: rgba(var(--v-theme-on-surface), 0.3);
-  box-shadow: 0 0 0 3px rgba(var(--v-theme-on-surface), 0.04);
+  border-color: rgb(var(--v-theme-primary));
 }
 
 .search-input-icon {
@@ -762,11 +885,22 @@ onMounted(() => {
   background-color: rgba(var(--v-theme-on-surface), 0.12) !important;
 }
 
+.search-shortcut-badge {
+  flex-shrink: 0;
+  margin-inline-start: 10px;
+  white-space: nowrap;
+}
+
 /* 主内容区域 */
 .search-content {
   max-block-size: 600px;
   min-block-size: 150px;
+  overscroll-behavior-y: contain;
   overflow-y: auto;
+}
+
+.search-dialog--dropdown .search-content {
+  max-block-size: min(58vh, 34rem);
 }
 
 .search-list {
@@ -774,7 +908,6 @@ onMounted(() => {
 }
 
 .search-result-item {
-  border-radius: 10px !important;
   margin-block-end: 2px;
   transition: background-color 0.15s ease;
 }
@@ -814,26 +947,11 @@ onMounted(() => {
 
 .recent-searches-section {
   inline-size: 100%;
+  padding-block-start: 1rem;
 }
 
 .empty-hint {
   text-align: center;
-}
-
-/* 底部快捷键提示 */
-.search-footer {
-  display: flex;
-  align-items: center;
-  border-block-start: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  gap: 16px;
-  padding-block: 10px;
-  padding-inline: 16px;
-}
-
-.shortcut-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 kbd {
@@ -847,11 +965,6 @@ kbd {
   line-height: 1;
   padding-block: 3px;
   padding-inline: 6px;
-}
-
-.shortcut-label {
-  color: rgba(var(--v-theme-on-surface), 0.45);
-  font-size: 12px;
 }
 
 /* 移动端底部关闭图标 */
@@ -877,11 +990,6 @@ kbd {
 
   .search-native-input {
     font-size: 14px;
-  }
-
-  .search-footer {
-    padding-block: 8px;
-    padding-inline: 12px;
   }
 }
 </style>

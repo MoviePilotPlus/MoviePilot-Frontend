@@ -1,5 +1,6 @@
 import type { Component, Ref, VNode } from 'vue'
 import type { RouteLocationRaw } from 'vue-router'
+import type { UserPermissionKey } from '@/utils/permission'
 import { ContentWidth, FooterType, NavbarType } from './enums'
 
 export interface UserConfig {
@@ -119,6 +120,14 @@ export interface NavLink extends NavLinkProps, Partial<AclProperties> {
   badgeContent?: string
   badgeClass?: string
   disable?: boolean
+  permission?: UserPermissionKey
+}
+
+export interface NavMenuTabItem {
+  title: string
+  icon?: string
+  tab: string
+  description?: string
 }
 
 export interface NavMenu extends NavLink {
@@ -126,6 +135,8 @@ export interface NavMenu extends NavLink {
   description?: string
   admin?: boolean
   footer?: boolean
+  // 水平三级菜单和页面动态标签页共用的静态标签定义。
+  tabs?: NavMenuTabItem[]
 }
 
 // 👉 Vertical nav group

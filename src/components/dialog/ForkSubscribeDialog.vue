@@ -7,6 +7,7 @@ import { useToast } from 'vue-toastification'
 import { VBtn } from 'vuetify/lib/components/index.mjs'
 import { useI18n } from 'vue-i18n'
 import { useGlobalSettingsStore } from '@/stores'
+import { getDisplayImageUrl } from '@/utils/imageUtils'
 
 // 国际化
 const { t } = useI18n()
@@ -50,7 +51,7 @@ function toggleExpand() {
 // 加载follow用户列表
 async function queryFollowUsers() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/FollowSubscribers')
+    const result: { [key: string]: any } = await api.get('system/setting/public/FollowSubscribers')
     followUsers.value = result.data?.value ?? []
   } catch (error) {
     console.log(error)
@@ -88,10 +89,7 @@ async function unfollowUser() {
 // 计算海报图片地址
 const posterUrl = computed(() => {
   const url = props.media?.poster
-  // 使用图片缓存
-  if (globalSettings.GLOBAL_IMAGE_CACHE && url)
-    return `${import.meta.env.VITE_API_BASE_URL}system/cache/image?url=${encodeURIComponent(url)}`
-  return url
+  return getDisplayImageUrl(url || '', globalSettings.GLOBAL_IMAGE_CACHE)
 })
 
 // 获得mediaid
@@ -203,7 +201,7 @@ onMounted(() => {
                 >
                   {{ props.media?.share_comment }}
                 </VCardSubtitle>
-                <VList lines="one">
+                <VList lines="one" class="border-0">
                   <VListItem class="ps-0">
                     <VListItemTitle class="text-center text-md-left">
                       <span class="font-weight-medium">{{ t('subscribe.sharer') }}：</span>

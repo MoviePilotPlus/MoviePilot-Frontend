@@ -5,9 +5,11 @@ import { useUserStore } from '@/stores'
 import avatar1 from '@images/avatars/avatar-1.png'
 import { useToast } from 'vue-toastification'
 import { useConfirm } from '@/composables/useConfirm'
-import UserAddEditDialog from '@/components/dialog/UserAddEditDialog.vue'
 import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
+import { openSharedDialog } from '@/composables/useSharedDialog'
+
+const UserAddEditDialog = defineAsyncComponent(() => import('@/components/dialog/UserAddEditDialog.vue'))
 
 // 国际化
 const { t } = useI18n()
@@ -45,9 +47,6 @@ const emit = defineEmits(['remove', 'save'])
 
 // 确认框
 const createConfirm = useConfirm()
-
-// 用户信息弹窗
-const userEditDialog = ref(false)
 
 // 提示框
 const $toast = useToast()
@@ -104,12 +103,22 @@ async function removeUser() {
 
 // 编辑用户
 function editUser() {
-  userEditDialog.value = true
+  openSharedDialog(
+    UserAddEditDialog,
+    {
+      username: props.user?.name,
+      usernames: props.users.map(item => item.name),
+      oper: 'edit',
+    },
+    {
+      save: onUserUpdate,
+    },
+    { closeOn: ['close', 'save'] },
+  )
 }
 
 // 用户更新完成时
 function onUserUpdate() {
-  userEditDialog.value = false
   emit('save')
 }
 
@@ -118,15 +127,17 @@ onMounted(() => {
 })
 </script>
 <template>
-  <VCard
-    :class="[
-      'transition-transform duration-300 hover:-translate-y-1',
-      !props.user.is_active ? 'opacity-85 bg-surface-lighten-1' : '',
-    ]"
-    class="flex flex-column"
-    @click="userEditDialog = true"
-  >
-    <div class="flex-grow">
+  <!-- Hover 命中区域保持静止，避免卡片上浮后底边反复触发 mouseleave。 -->
+  <div class="user-card-hover-area h-full">
+    <VCard
+      :class="[
+        'app-hover-lift-card',
+        !props.user.is_active ? 'opacity-85 bg-surface-lighten-1' : '',
+      ]"
+      class="user-card flex flex-column h-full"
+      @click="editUser"
+    >
+    <div class="user-card__body flex-grow flex-grow-1">
       <!-- 用户头像和基本信息 -->
       <VCardItem :class="[user.is_superuser ? 'admin-header' : '']">
         <template v-slot:prepend>
@@ -247,7 +258,7 @@ onMounted(() => {
     </div>
     <!-- 独立的邮箱显示 -->
     <VDivider class="mx-4" />
-    <div>
+    <div class="user-card__footer">
       <VCardText class="d-flex align-center py-2 px-4 text-medium-emphasis">
         <VIcon icon="mdi-email-outline" size="small" color="primary" class="mr-2 opacity-70" />
         <span class="text-body-2 truncate">{{ user.email || t('user.noEmail') }}</span>
@@ -293,21 +304,29 @@ onMounted(() => {
         </div>
       </VCardText>
     </div>
-  </VCard>
-
-  <!-- 用户编辑弹窗 -->
-  <UserAddEditDialog
-    v-if="userEditDialog"
-    v-model="userEditDialog"
-    :username="props.user?.name"
-    :usernames="props.users.map(item => item.name)"
-    oper="edit"
-    @save="onUserUpdate"
-    @close="userEditDialog = false"
-  />
+    </VCard>
+  </div>
 </template>
 
 <style scoped>
+.user-card-hover-area {
+  inline-size: 100%;
+}
+
+.user-card-hover-area:hover .user-card {
+  transform: translate3d(0, -0.25rem, 0);
+}
+
+.user-card {
+  block-size: 100%;
+}
+
+/* 让邮箱和订阅统计固定在卡片底部，保证同一行用户卡片视觉等高。 */
+.user-card__footer {
+  flex-shrink: 0;
+  margin-block-start: auto;
+}
+
 .admin-decoration {
   position: absolute;
   z-index: 1;

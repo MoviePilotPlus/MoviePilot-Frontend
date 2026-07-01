@@ -3,8 +3,13 @@ import type { PropType } from 'vue'
 import { formatFileSize, formatDateDifference } from '@/@core/utils/formatters'
 import api from '@/api'
 import type { Context } from '@/api/types'
-import AddDownloadDialog from '../dialog/AddDownloadDialog.vue'
 import { isNullOrEmptyObject } from '@/@core/utils'
+import { getCachedSiteIcon } from '@/utils/siteIconCache'
+import { downloadedTorrentMap, markTorrentDownloaded } from '@/utils/torrentDownloadCache'
+import { openSharedDialog } from '@/composables/useSharedDialog'
+
+const AddDownloadDialog = defineAsyncComponent(() => import('../dialog/AddDownloadDialog.vue'))
+const TorrentMoreSourcesDialog = defineAsyncComponent(() => import('../dialog/TorrentMoreSourcesDialog.vue'))
 
 // 输入参数
 const props = defineProps({
@@ -13,9 +18,6 @@ const props = defineProps({
   width: String,
   height: String,
 })
-
-// 更多来源界面
-const showMoreTorrents = ref(false)
 
 // 种子信息
 const torrent = ref(props.torrent?.torrent_info)
@@ -32,31 +34,36 @@ const downloadItem = ref(props.torrent)
 // 站点图标
 const siteIcons = ref<Record<number, string>>({})
 
-// 存储是否已经下载过的记录
-const downloaded = ref<string[]>([])
-
-// 添加下载对话框
-const addDownloadDialog = ref(false)
+const isDownloaded = computed(() => Boolean(torrent.value?.enclosure && downloadedTorrentMap[torrent.value.enclosure]))
 
 // 添加下载成功
 function addDownloadSuccess(url: string) {
-  addDownloadDialog.value = false
-  // 添加下载成功
-  downloaded.value.push(url)
+  markTorrentDownloaded(url)
 }
 
 // 添加下载失败
 function addDownloadError(error: string) {
-  addDownloadDialog.value = false
+  console.error(error)
 }
 
 // 查询站点图标
 async function getSiteIcon(site: number | undefined) {
   if (!site) return
+
   try {
-    siteIcons.value[site] = (await api.get(`site/icon/${site}`)).data.icon
+    siteIcons.value[site] = await getCachedSiteIcon(site, async () => {
+      try {
+        const response = await api.get(`site/icon/${site}`)
+
+        return response?.data?.icon || ''
+      } catch (error) {
+        console.error(error)
+        return ''
+      }
+    })
   } catch (error) {
     console.error(error)
+    siteIcons.value[site] = ''
   }
 }
 
@@ -66,7 +73,21 @@ async function handleAddDownload(item: Context | null = null) {
     downloadItem.value = item
   }
   // 打开下载对话框
-  addDownloadDialog.value = true
+  openSharedDialog(
+    AddDownloadDialog,
+    {
+      title: `${downloadItem.value?.media_info?.title_year || downloadItem.value?.meta_info?.name} ${
+        downloadItem.value?.meta_info?.season_episode
+      }`,
+      media: downloadItem.value?.media_info,
+      torrent: downloadItem.value?.torrent_info,
+    },
+    {
+      done: addDownloadSuccess,
+      error: addDownloadError,
+    },
+    { closeOn: ['close', 'done', 'error'] },
+  )
 }
 
 // 打开种子详情页面
@@ -92,37 +113,47 @@ function getPromotionClass(downloadVolumeFactor: number | undefined, uploadVolum
   else return ''
 }
 
-// 获取优惠标签类
-function getPromotionChipClass(downloadVolumeFactor: number | undefined, uploadVolumeFactor: number | undefined) {
-  if (!downloadVolumeFactor) return 'chip-free'
-  if (downloadVolumeFactor === 0) return 'chip-free'
-  else if (downloadVolumeFactor < 1) return 'chip-discount'
-  else if (uploadVolumeFactor !== undefined && uploadVolumeFactor > 1) return 'chip-bonus'
-  else return ''
-}
-
 // 打开更多来源对话框
 async function openMoreTorrentsDialog() {
   props.more?.forEach(t => {
     return getSiteIcon(t.torrent_info?.site)
   })
-  showMoreTorrents.value = true
+  openSharedDialog(
+    TorrentMoreSourcesDialog,
+    {
+      items: props.more || [],
+      siteIcons: siteIcons.value,
+    },
+    {
+      download: handleAddDownload,
+      detail: openTorrentDetail,
+    },
+    { closeOn: ['close', 'update:modelValue'] },
+  )
 }
 
-// 装载时查询站点图标
-onMounted(() => {
-  getSiteIcon(props.torrent?.torrent_info?.site)
-})
+watch(
+  () => props.torrent,
+  value => {
+    torrent.value = value?.torrent_info
+    media.value = value?.media_info
+    meta.value = value?.meta_info
+    downloadItem.value = value
+    getSiteIcon(value?.torrent_info?.site)
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
-  <div class="h-full">
+  <!-- Hover 命中区域保持静止，避免卡片上浮后底边反复触发 mouseleave。 -->
+  <div class="torrent-card-hover-area h-full">
     <VCard
       :width="props.width || '100%'"
-      :variant="downloaded.includes(torrent?.enclosure || '') ? 'outlined' : 'flat'"
+      :variant="isDownloaded ? 'outlined' : 'flat'"
       @click="handleAddDownload(props.torrent)"
-      class="h-full cursor-pointer transition-transform hover:-translate-y-1 duration-300 d-flex flex-column overflow-hidden torrent-card"
-      :class="{ 'border-success border-2 opacity-85': downloaded.includes(torrent?.enclosure || '') }"
+      class="app-hover-lift-card h-full cursor-pointer d-flex flex-column overflow-hidden torrent-card"
+      :class="{ 'border-success border-2 opacity-85': isDownloaded }"
       hover
     >
       <!-- 优惠标签 -->
@@ -258,7 +289,7 @@ onMounted(() => {
             class="pa-1 d-flex align-center"
             @click.stop="openMoreTorrentsDialog"
           >
-            <VIcon :icon="showMoreTorrents ? 'mdi-chevron-up' : 'mdi-chevron-down'" size="small" class="mr-1"></VIcon>
+            <VIcon icon="mdi-chevron-down" size="small" class="mr-1"></VIcon>
             更多来源 ({{ props.more.length }})
           </VBtn>
         </div>
@@ -276,105 +307,6 @@ onMounted(() => {
         </div>
       </VCardActions>
     </VCard>
-
-    <!-- 更多来源对话框 -->
-    <VDialog v-model="showMoreTorrents" max-width="25rem" location="center">
-      <VCard>
-        <VCardTitle class="py-3 d-flex align-center">
-          <span>其他来源</span>
-          <VSpacer />
-          <VBtn variant="text" size="small" icon="mdi-close" @click.stop="showMoreTorrents = false"></VBtn>
-        </VCardTitle>
-
-        <VDivider />
-
-        <VCardText class="more-sources-content pa-0">
-          <VList lines="one" density="compact">
-            <VListItem
-              v-for="(item, index) in props.more"
-              :key="index"
-              @click.stop="handleAddDownload(item)"
-              class="hover:bg-primary-lighten-5"
-            >
-              <template v-slot:prepend>
-                <div class="d-flex align-center gap-1">
-                  <VImg
-                    v-if="siteIcons[item.torrent_info?.site || 0]"
-                    :src="siteIcons[item.torrent_info?.site || 0]"
-                    :alt="item.torrent_info?.site_name"
-                    width="16"
-                    height="16"
-                    class="rounded"
-                  />
-                  <VAvatar v-else size="16" class="text-caption bg-surface-variant">
-                    {{ item.torrent_info?.site_name?.substring(0, 1) }}
-                  </VAvatar>
-                  <span class="text-body-2 font-weight-bold">{{ item.torrent_info.site_name }}</span>
-
-                  <VChip
-                    v-if="item.meta_info?.season_episode"
-                    class="chip-season rounded-sm ml-1"
-                    size="x-small"
-                    variant="elevated"
-                  >
-                    {{ item.meta_info.season_episode }}
-                  </VChip>
-
-                  <VChip
-                    v-if="item.torrent_info?.downloadvolumefactor !== 1 || item.torrent_info?.uploadvolumefactor !== 1"
-                    :class="
-                      getPromotionChipClass(
-                        item.torrent_info?.downloadvolumefactor,
-                        item.torrent_info?.uploadvolumefactor,
-                      )
-                    "
-                    size="x-small"
-                    variant="elevated"
-                    class="rounded-sm ml-1"
-                  >
-                    {{ item.torrent_info?.volume_factor }}
-                  </VChip>
-                </div>
-              </template>
-
-              <template v-slot:append>
-                <div class="d-flex align-center gap-2">
-                  <span class="text-caption font-weight-bold text-primary">
-                    {{ formatFileSize(item.torrent_info?.size) }}
-                  </span>
-                  <span class="d-flex align-center text-caption font-weight-bold">
-                    <VIcon size="small" color="success" icon="mdi-arrow-up" class="mr-1"></VIcon>
-                    {{ item.torrent_info?.seeders }}
-                  </span>
-                  <span>
-                    <VIcon
-                      @click.stop="openTorrentDetail(item)"
-                      size="small"
-                      color="secondary"
-                      icon="mdi-arrow-top-right"
-                      class="mr-1"
-                    ></VIcon>
-                  </span>
-                </div>
-              </template>
-            </VListItem>
-          </VList>
-        </VCardText>
-      </VCard>
-    </VDialog>
-
-    <AddDownloadDialog
-      v-if="addDownloadDialog"
-      v-model="addDownloadDialog"
-      :title="`${downloadItem?.media_info?.title_year || downloadItem?.meta_info?.name} ${
-        downloadItem?.meta_info?.season_episode
-      }`"
-      :media="downloadItem?.media_info"
-      :torrent="downloadItem?.torrent_info"
-      @done="addDownloadSuccess"
-      @error="addDownloadError"
-      @close="addDownloadDialog = false"
-    />
   </div>
 </template>
 
@@ -385,18 +317,18 @@ onMounted(() => {
   inset-inline-end: 0;
 }
 
-.more-sources-content {
-  max-block-size: 60vh;
-  overflow-y: auto;
+.torrent-card-hover-area {
+  inline-size: 100%;
 }
 
 /* 卡片悬停效果 */
 .torrent-card {
-  border: 1px solid transparent;
+  border: var(--app-card-light-border);
 }
 
-.torrent-card:hover {
+.torrent-card-hover-area:hover .torrent-card {
   border-color: rgba(var(--v-theme-primary), 0.3);
+  transform: translate3d(0, -0.25rem, 0);
 }
 
 /* 优惠标签样式 */

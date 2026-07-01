@@ -7,7 +7,7 @@ import { tagOptions, mediaCateOptions, categoryOptions } from '@/api/constants'
 import type { VideoInfo, CollectCreate, Site, PtgenInfo, VideoEpisode } from '@/api/types'
 import GroupTile from '@/components/GroupTitle.vue'
 import EpisodeCard from '@/components/cards/EpisodeCard.vue'
-import SlideView from '@/components/slide/SlideView.vue'
+import VirtualSlideView from '@/components/slide/VirtualSlideView.vue'
 import SiteSearchDialog from '@/components/dialog/SiteSearchDialog.vue'
 import VideoScreenshotDialog from '@/components/dialog/VideoScreenshotDialog.vue'
 import { doneNProgress, startNProgress } from '@/api/nprogress'
@@ -15,6 +15,17 @@ import router from '@/router'
 import { useUserStore, useGlobalSettingsStore } from '@/stores'
 import { add } from 'lodash-es'
 
+// 组件加载完成
+const componentLoaded = ref(false)
+
+// 是否已尝试加载
+const hasTriedLoading = ref(false)
+
+// 数据列表
+const dataList = shallowRef<Person[]>([])
+
+// 容器引用
+const containerRef = ref<HTMLElement | null>(null)
 // 输入参数
 const mediaProps = defineProps({
   source: String,
@@ -218,6 +229,7 @@ async function getMediaDetail() {
         cid: mediaProps.mediaid,
       },
     })
+    componentLoaded.value = true
     // 默认选中所有剧集
     let episodeIndex = 0
     mediaDetail.value.episode_list?.forEach(episode => {
@@ -1490,13 +1502,23 @@ function handleIgnore() {
           <VBtn color="#5865f2" size="x-small" variant="flat" @click="autoSetEpisodeNumbers"> 自动设置集数 </VBtn>
         </div>
 
-        <SlideView>
-          <template #content>
-            <template v-for="data in mediaDetail.episode_list" :key="data.vid">
-              <EpisodeCard v-if="data.show" :episode="data" height="9rem" width="16rem" />
-            </template>
+        <VirtualSlideView
+          :items="mediaDetail.episode_list"
+          :itemWidth="260"
+          :loading="!componentLoaded"
+          :get-item-key="item => item.vid"
+        >
+          <template #item="{ item }">
+            <EpisodeCard v-if="item.show" :episode="item" height="9rem" width="16rem" />
           </template>
-        </SlideView>
+          <template #loading>
+            <div v-for="i in 10" :key="i" style="inline-size: 20rem">
+              <VCard class="outline-none overflow-hidden">
+                <div style="padding-block-end: 55%"></div>
+              </VCard>
+            </div>
+          </template>
+        </VirtualSlideView>
       </div>
     </div>
   </div>

@@ -5,8 +5,20 @@ import { nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storageRemoteDict } from '@/api/constants'
 
+const DEFAULT_DIRECTORY_ACCENT_RGB = '145, 85, 253'
+const STORAGE_ACCENT_COLOR_MAP = {
+  local: '#FFB400',
+  alipan: '#00A7F2',
+  u115: '#17B26A',
+  rclone: '#6675FF',
+  alist: '#12B8D7',
+  smb: '#3B82F6',
+}
+
 // 国际化
 const { t } = useI18n()
+const downloadAccentRgb = ref(DEFAULT_DIRECTORY_ACCENT_RGB)
+const libraryAccentRgb = ref(DEFAULT_DIRECTORY_ACCENT_RGB)
 
 // 输入参数
 const props = defineProps({
@@ -62,6 +74,47 @@ const transferSourceItems = computed(() => [
   { title: t('directory.directoryMonitor'), value: 'monitor' },
   { title: t('directory.manualTransfer'), value: 'manual' },
 ])
+
+function hasKnownStorageType(storageType?: string): storageType is keyof typeof STORAGE_ACCENT_COLOR_MAP {
+  return !!storageType && Object.prototype.hasOwnProperty.call(STORAGE_ACCENT_COLOR_MAP, storageType)
+}
+
+function hexToRgbString(hexColor: string) {
+  const normalizedColor = hexColor.replace('#', '')
+  const colorValue = Number.parseInt(normalizedColor, 16)
+
+  if (Number.isNaN(colorValue) || normalizedColor.length !== 6) return DEFAULT_DIRECTORY_ACCENT_RGB
+
+  return `${(colorValue >> 16) & 255}, ${(colorValue >> 8) & 255}, ${colorValue & 255}`
+}
+
+function getCustomStoragePaletteColor(storageType?: string) {
+  const customStorageIndex = Math.max(Number(storageType?.match(/\d+$/)?.[0] ?? 1) - 1, 0)
+  const customStorageColors = ['#F97316', '#8B5CF6', '#06B6D4', '#84CC16', '#EC4899', '#14B8A6']
+
+  return customStorageColors[customStorageIndex % customStorageColors.length]
+}
+
+function getStorageAccentColor(storageType?: string) {
+  if (hasKnownStorageType(storageType)) return STORAGE_ACCENT_COLOR_MAP[storageType]
+
+  // 自定义存储没有固定品牌图标，使用离散调色板，保证连续 custom1/custom2 也能明显区分。
+  return getCustomStoragePaletteColor(storageType)
+}
+
+// 目录卡片用下载存储和媒体库存储两端的图标主色生成轻渐变，体现整理链路的两个存储端点。
+const directoryAccentStyle = computed(() => ({
+  '--app-card-accent-rgb': downloadAccentRgb.value,
+  '--app-card-accent-end-rgb': libraryAccentRgb.value,
+}))
+
+function updateDirectoryAccentColors() {
+  const downloadStorage = props.directory.storage
+  const libraryStorage = props.directory.library_storage || props.directory.storage
+
+  downloadAccentRgb.value = hexToRgbString(getStorageAccentColor(downloadStorage))
+  libraryAccentRgb.value = hexToRgbString(getStorageAccentColor(libraryStorage))
+}
 
 // 监控模式下拉字典
 const MonitorModeItems = computed(() => [
@@ -168,6 +221,15 @@ watch(
   { immediate: true },
 )
 
+// 存储类型切换后主动重新提取图标色，避免图片缓存导致 load 事件不触发。
+watch(
+  [() => props.directory.storage, () => props.directory.library_storage],
+  () => {
+    updateDirectoryAccentColors()
+  },
+  { immediate: true },
+)
+
 // 媒体类别和类型变更非空时，将按类型分类和按类别分类置为false
 watch(
   [() => props.directory.media_type, () => props.directory.media_category],
@@ -195,7 +257,13 @@ watch(
 </script>
 
 <template>
-  <VCard variant="tonal" :width="props.width" :height="props.height">
+  <VCard
+    variant="tonal"
+    class="app-card-shell app-card-colorful"
+    :style="directoryAccentStyle"
+    :width="props.width"
+    :height="props.height"
+  >
     <VDialogCloseBtn @click="onClose" />
     <VCardItem>
       <VTextField
@@ -204,8 +272,8 @@ watch(
         :label="t('directory.alias')"
         class="me-20 text-high-emphasis font-weight-bold"
       />
-      <span class="absolute top-3 right-12">
-        <IconBtn>
+      <span class="app-card-top-action absolute top-3 right-12">
+        <IconBtn @click.stop>
           <VIcon class="cursor-move" icon="mdi-drag" />
         </IconBtn>
       </span>

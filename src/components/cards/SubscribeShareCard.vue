@@ -2,9 +2,12 @@
 import { formatDateDifference } from '@/@core/utils/formatters'
 import type { SubscribeShare } from '@/api/types'
 import router from '@/router'
-import SubscribeEditDialog from '../dialog/SubscribeEditDialog.vue'
-import ForkSubscribeDialog from '../dialog/ForkSubscribeDialog.vue'
 import { useGlobalSettingsStore } from '@/stores'
+import { openSharedDialog } from '@/composables/useSharedDialog'
+import { getDisplayImageUrl } from '@/utils/imageUtils'
+
+const ForkSubscribeDialog = defineAsyncComponent(() => import('../dialog/ForkSubscribeDialog.vue'))
+const SubscribeEditDialog = defineAsyncComponent(() => import('../dialog/SubscribeEditDialog.vue'))
 
 // 输入参数
 const props = defineProps({
@@ -22,15 +25,6 @@ const globalSettings = globalSettingsStore.globalSettings
 // 图片是否加载完成
 const imageLoaded = ref(false)
 
-// 订阅编辑弹窗
-const subscribeEditDialog = ref(false)
-
-// 复用订阅弹窗
-const forkSubscribeDialog = ref(false)
-
-// 订阅ID
-const subscribeId = ref<number>()
-
 // 图片加载完成响应
 function imageLoadHandler() {
   imageLoaded.value = true
@@ -42,19 +36,13 @@ const dateText = ref(props.media && props.media?.date ? formatDateDifference(pro
 // 计算backdrop图片地址
 const backdropUrl = computed(() => {
   const url = props.media?.backdrop || props.media?.poster
-  // 使用图片缓存
-  if (globalSettings.GLOBAL_IMAGE_CACHE && url)
-    return `${import.meta.env.VITE_API_BASE_URL}system/cache/image?url=${encodeURIComponent(url)}`
-  return url
+  return getDisplayImageUrl(url || '', globalSettings.GLOBAL_IMAGE_CACHE)
 })
 
 // 计算海报图片地址
 const posterUrl = computed(() => {
   const url = props.media?.poster
-  // 使用图片缓存
-  if (globalSettings.GLOBAL_IMAGE_CACHE && url)
-    return `${import.meta.env.VITE_API_BASE_URL}system/cache/image?url=${encodeURIComponent(url)}`
-  return url
+  return getDisplayImageUrl(url || '', globalSettings.GLOBAL_IMAGE_CACHE)
 })
 
 // 获得mediaid
@@ -78,19 +66,24 @@ async function viewMediaDetail() {
 
 // 复用订阅
 function showForkSubscribe() {
-  forkSubscribeDialog.value = true
+  openSharedDialog(
+    ForkSubscribeDialog,
+    { media: props.media },
+    {
+      fork: finishForkSubscribe,
+      delete: doDelete,
+    },
+    { closeOn: ['close', 'fork', 'delete'] },
+  )
 }
 
 // 完成复用订阅
 function finishForkSubscribe(subid: number) {
-  subscribeId.value = subid
-  forkSubscribeDialog.value = false
-  subscribeEditDialog.value = true
+  openSharedDialog(SubscribeEditDialog, { subid }, {}, { closeOn: ['close', 'save', 'remove'] })
 }
 
 // 删除订阅分享时处理
 function doDelete() {
-  forkSubscribeDialog.value = false
   // 通知父组件刷新
   emit('delete')
 }
@@ -100,17 +93,17 @@ function doDelete() {
   <div class="h-full">
     <VHover>
       <template #default="hover">
-        <div
-          class="w-full h-full rounded-lg overflow-hidden"
-          :class="{
-            'transition transform-cpu duration-300 -translate-y-1': hover.isHovering,
-          }"
-        >
+        <!-- Hover 命中区域保持静止，避免卡片上浮后底边反复触发 mouseleave。 -->
+        <div v-bind="hover.props" class="subscribe-share-card-hover-area w-full h-full">
+          <div
+            class="app-hover-lift-card w-full h-full overflow-hidden"
+            :class="{
+              'app-hover-lift-card--hovering': hover.isHovering,
+            }"
+          >
           <VCard
-            v-bind="hover.props"
             :key="props.media?.id"
-            class="flex flex-col h-full"
-            rounded="0"
+            class="app-hover-lift-card flex flex-col h-full"
             min-height="150"
             @click="showForkSubscribe"
           >
@@ -163,31 +156,18 @@ function doDelete() {
                 {{ dateText }}
               </VCardText>
             </div>
-          </VCard>
+            </VCard>
+          </div>
         </div>
       </template>
     </VHover>
-    <!-- 订阅编辑弹窗 -->
-    <SubscribeEditDialog
-      v-if="subscribeEditDialog"
-      v-model="subscribeEditDialog"
-      :subid="subscribeId"
-      @close="subscribeEditDialog = false"
-      @save="subscribeEditDialog = false"
-      @remove="subscribeEditDialog = false"
-    />
-    <!-- 复用订阅弹窗 -->
-    <ForkSubscribeDialog
-      v-if="forkSubscribeDialog"
-      v-model="forkSubscribeDialog"
-      :media="props.media"
-      @close="forkSubscribeDialog = false"
-      @fork="finishForkSubscribe"
-      @delete="doDelete"
-    />
   </div>
 </template>
 <style lang="scss" scoped>
+.subscribe-share-card-hover-area {
+  inline-size: 100%;
+}
+
 .subscribe-card-background {
   background-image: linear-gradient(180deg, rgba(31, 41, 55, 47%) 0%, rgb(31, 41, 55) 100%);
 }

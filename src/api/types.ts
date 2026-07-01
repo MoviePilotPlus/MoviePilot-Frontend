@@ -46,8 +46,10 @@ export interface Subscribe {
   start_episode?: number
   // 缺失集数
   lack_episode?: number
+  // 已完成集数（普通订阅 = 已入库集数，洗版订阅 = 起始集前 + [start, total] 范围内 priority==100 命中数）
+  completed_episode?: number
   // 附加信息
-  note?: string
+  note?: string | number[]
   // 状态：N-新建 R-订阅中 P-待定 S-暂停
   state: string
   // 最后更新时间
@@ -58,10 +60,14 @@ export interface Subscribe {
   sites: number[]
   // 是否洗版，数字或者boolean
   best_version: any
+  // 是否只洗全集整包，数字或者boolean
+  best_version_full?: any
   // 使用 imdbid 搜索
   search_imdbid?: any
   // 当前优先级
   current_priority: number
+  // 洗版时已下载剧集的优先级状态
+  episode_priority?: Record<string, number>
   // 保存目录
   save_path?: string
   // 时间
@@ -644,6 +650,14 @@ export interface Plugin {
   has_page?: boolean
   // 是否有新版本
   has_update?: boolean
+  // 主系统版本是否兼容
+  system_version_compatible?: boolean
+  // 主系统版本兼容提示
+  system_version_message?: string
+  // 主系统版本限定范围
+  system_version?: string
+  // 是否声明支持通过 GitHub Release 资产安装
+  release?: boolean
   // 是否本地插件
   is_local?: boolean
   // 插件仓库地址
@@ -654,6 +668,38 @@ export interface Plugin {
   add_time?: number
   // 页面打开状态
   page_open?: boolean
+}
+
+// 插件 Release 可安装版本
+export interface PluginReleaseVersion {
+  // 插件版本
+  version: string
+  // GitHub Release tag
+  tag_name: string
+  // Release 标题
+  name?: string
+  // 发布时间
+  published_at?: string
+  // Release 说明
+  body?: string
+  // 匹配到的资产文件名
+  asset_name?: string
+  // 是否为当前市场最新版本
+  is_latest?: boolean
+  // 是否为本地已安装版本
+  is_current?: boolean
+}
+
+// 插件 Release 可安装版本响应
+export interface PluginReleaseVersionsResponse {
+  // 当前插件是否存在可直接安装的 Release 资产
+  release_supported: boolean
+  // 当前市场 package 声明的最新版本
+  latest_version?: string | null
+  // 本地已安装版本
+  current_version?: string | null
+  // 可安装版本列表
+  items: PluginReleaseVersion[]
 }
 
 // 插件侧栏全页导航项（与后端 PluginSidebarNavItem 对齐）
@@ -690,6 +736,8 @@ export interface DashboardItem {
   attrs: { [key: string]: any }
   // col列数
   cols: { [key: string]: number }
+  // Grid行数
+  rows?: number
   // 页面元素
   elements: RenderProps[]
   // 渲染方式
@@ -752,6 +800,58 @@ export interface TorrentInfo {
   freedate_diff: string
   // 种子类型
   category: string
+}
+
+// 字幕信息
+export interface SubtitleInfo {
+  // 站点ID
+  site?: number
+  // 站点名称
+  site_name?: string
+  // 站点Cookie
+  site_cookie?: string
+  // 站点UA
+  site_ua?: string
+  // 站点是否使用代理
+  site_proxy?: boolean
+  // 站点优先级
+  site_order?: number
+  // 字幕标题
+  title?: string
+  // 字幕描述
+  description?: string
+  // 字幕下载链接
+  enclosure?: string
+  // 详情页面
+  page_url?: string
+  // 语言
+  language?: string
+  // 语言图标
+  language_icon?: string
+  // 字幕大小
+  size?: number
+  // 发布时间
+  pubdate?: string
+  // 已过时间
+  date_elapsed?: string
+  // 点击/下载次数
+  grabs?: number
+  // 上传者
+  uploader?: string
+  // 举报页面
+  report_url?: string
+  // 种子ID
+  torrent_id?: string
+  // 字幕ID
+  subtitle_id?: string
+  // 下载文件名
+  file_name?: string
+  // 识别元数据
+  meta_info?: MetaInfo
+  // SxxExx
+  season_episode?: string
+  // 集列表
+  episode_list?: number[]
 }
 
 // 识别元数据
@@ -900,6 +1000,12 @@ export interface MediaStatistic {
   episode_count: number
   // 用户数量
   user_count: number
+  // 本月新增电影数量
+  movie_count_month: number
+  // 本月新增电视剧数量
+  tv_count_month: number
+  // 本月新增剧集数量
+  episode_count_month: number
 }
 
 // 后台进程
@@ -920,6 +1026,18 @@ export interface Process {
   memory: number
 }
 
+// 仪表板系统摘要
+export interface DashboardSystemInfo {
+  // 主机名称
+  hostname: string
+  // 操作系统名称
+  operating_system: string
+  // MoviePilot 运行时间，单位秒
+  runtime: number
+  // MoviePilot 后端版本
+  version: string
+}
+
 // 下载器信息
 export interface DownloaderInfo {
   // 下载速度
@@ -934,6 +1052,48 @@ export interface DownloaderInfo {
   free_space: number
 }
 
+// 仪表板系统内存信息
+export interface DashboardMemoryInfo {
+  // 总内存字节数
+  total: number
+  // 已使用内存字节数，不包含缓存
+  used: number
+  // 缓存与缓冲区占用字节数
+  cached: number
+  // 可用内存字节数
+  available: number
+  // 已使用内存占总内存百分比，不包含缓存
+  usage: number
+}
+
+// 定时服务进度信息
+export interface ScheduleProgress {
+  // ID
+  id?: string
+  // 名称
+  name?: string
+  // 提供者
+  provider?: string
+  // 是否正在执行
+  enable?: boolean
+  // 当前完成百分比
+  value?: number
+  // 当前进度文本
+  text?: string
+  // 执行状态
+  status?: string
+  // 最近一次执行是否成功
+  success?: boolean
+  // 最近一次开始时间
+  started_at?: string
+  // 最近一次结束时间
+  finished_at?: string
+  // 最近一次错误信息
+  error?: string
+  // 扩展数据
+  data?: Record<string, unknown>
+}
+
 // 定时服务信息
 export interface ScheduleInfo {
   // ID
@@ -946,6 +1106,14 @@ export interface ScheduleInfo {
   status: string
   // 下次运行时间
   next_run: string
+  // 当前完成百分比
+  progress?: number
+  // 进度文本
+  progress_text?: string
+  // 是否正在更新进度
+  progress_enable?: boolean
+  // 进度详情
+  progress_detail?: ScheduleProgress
 }
 
 // 消息通知
@@ -1013,6 +1181,10 @@ export interface FileItem {
 export interface MediaServerPlayItem {
   // ID
   id?: string | number
+  // 媒体服务器项目ID
+  item_id?: string | number
+  // 媒体服务器ID
+  server_id?: string
   // 标题
   title: string
   // 副标题
@@ -1037,12 +1209,18 @@ export interface MediaServerLibrary {
   server: string
   // ID
   id?: string | number
+  // 媒体服务器项目ID
+  item_id?: string | number
+  // 媒体服务器ID
+  server_id?: string
   // 名称
   name: string
   // 路径
   path?: string
   // 类型
   type?: string
+  // 库内媒体数量
+  item_count?: number
   // 图片
   image?: string
   // 图片列表
@@ -1057,6 +1235,12 @@ export interface MediaServerLibrary {
 
 // 消息通知
 export interface Message {
+  // 消息ID
+  id?: number
+  // 消息渠道
+  channel?: string
+  // 消息来源
+  source?: string
   // 消息类型
   mtype?: string
   // 消息标题
@@ -1076,19 +1260,15 @@ export interface Message {
   // 消息方向：0-接收，1-发送
   action?: number
   // JSON
-  note?: string
+  note?: string | any[] | Record<string, any>
 }
 
 // 系统通知
-export interface SystemNotification {
-  // 通知类型 user/system/plugin
-  type: string
-  // 通知标题
-  title: string
-  // 通知内容
-  text: string
+export interface SystemNotification extends Message {
+  // 通知类型 user/system/plugin/notification
+  type?: string
   // 通知时间
-  date: string
+  date?: string
   // 是否已读
   read?: boolean
 }
@@ -1145,7 +1325,7 @@ export interface StorageConf {
 export interface MediaServerConf {
   // 名称
   name: string
-  // 类型 emby/jellyfin/plex
+  // 类型 emby/zspace/jellyfin/plex/trimemedia/ugreen
   type: string
   // 配置
   config: { [key: string]: any }
@@ -1278,9 +1458,9 @@ export interface TransferForm {
   // 历史ID
   logid: number
   // 目标存储
-  target_storage: string
+  target_storage: string | null
   // 目标路径
-  target_path: string
+  target_path: string | null
   // TMDB ID
   tmdbid?: number
   // 豆瓣 ID
@@ -1290,7 +1470,7 @@ export interface TransferForm {
   // 类型
   type_name?: string
   // 整理方式
-  transfer_type: string
+  transfer_type: string | null
   // 自定义格式
   episode_format?: string
   // 指定集数
@@ -1302,15 +1482,95 @@ export interface TransferForm {
   // 最小文件大小
   min_filesize: number
   // 刮削
-  scrape: boolean
+  scrape: boolean | null
   // 复用历史识别信息
   from_history: boolean
   // 媒体库类型子目录
-  library_type_folder?: boolean
+  library_type_folder?: boolean | null
   // 媒体库类别子目录
-  library_category_folder?: boolean
+  library_category_folder?: boolean | null
   // 剧集组编号
-  episode_group?: string
+  episode_group?: string | null
+  // 预览模式
+  preview?: boolean
+}
+
+// 手动整理请求
+export interface ManualTransferPayload extends Omit<TransferForm, 'fileitem'> {
+  // 文件项
+  fileitem?: FileItem
+  // 多选文件批量请求
+  fileitems?: FileItem[]
+}
+
+// 手动整理目的路径匹配结果
+export interface ManualTransferTargetPathData {
+  // 目标存储
+  target_storage?: string | null
+  // 目标路径
+  target_path?: string | null
+  // 整理方式
+  transfer_type?: string | null
+  // 刮削
+  scrape?: boolean | null
+  // 媒体库类型子目录
+  library_type_folder?: boolean | null
+  // 媒体库类别子目录
+  library_category_folder?: boolean | null
+}
+
+// 手动整理预览统计
+export interface ManualTransferPreviewSummary {
+  // 总数
+  total: number
+  // 成功数
+  success: number
+  // 失败数
+  failed: number
+}
+
+// 手动整理预览项
+export interface ManualTransferPreviewItem {
+  // 原始路径
+  source?: string
+  // 目标路径
+  target?: string
+  // 目标目录
+  target_dir?: string
+  // 是否成功
+  success?: boolean
+  // 提示信息
+  message?: string
+  // 媒体类型
+  type?: string
+  // 媒体标题
+  title?: string
+  // 季
+  season?: number | string
+  // 开始集
+  episode?: number | string
+  // 结束集
+  episode_end?: number | string
+  // Part
+  part?: string
+  // 原始识别字符串
+  org_string?: string
+  // 应用的自定义识别词
+  apply_words?: string[]
+  // 制作组/字幕组
+  resource_team?: string
+  // 自定义占位符
+  customization?: string
+}
+
+// 手动整理预览数据
+export interface ManualTransferPreviewData {
+  // 统计信息
+  summary: ManualTransferPreviewSummary
+  // 预览结果
+  items: ManualTransferPreviewItem[]
+  // 额外消息
+  message?: string
 }
 
 // 整理队列
@@ -1389,6 +1649,10 @@ export interface Workflow {
   actions?: any[]
   // 动作流
   flows?: any[]
+  // 工作流执行配置
+  execution_config?: { [key: string]: any }
+  // 工作流结构化执行状态
+  execution_state?: { [key: string]: any }
   // 创建时间
   add_time?: string
   // 最后执行时间

@@ -2,7 +2,8 @@
 import api from '@/api'
 import type { MediaInfo } from '@/api/types'
 import MediaCard from '@/components/cards/MediaCard.vue'
-import NoDataFound from '@/components/NoDataFound.vue'
+import NoDataFound from '@/components/states/NoDataFound.vue'
+import ProgressiveCardGrid from '@/components/misc/ProgressiveCardGrid.vue'
 import { useI18n } from 'vue-i18n'
 
 // 国际化
@@ -45,6 +46,13 @@ const filterParams = reactive({
 
 // 当前Key（用于重新加载数据）
 const currentKey = ref(0)
+
+function resetData() {
+  dataList.value = []
+  page.value = 1
+  isRefreshed.value = false
+  currentKey.value++
+}
 
 // TMDB电影风格字典
 const tmdbMovieGenreDict: Record<string, string> = {
@@ -98,11 +106,7 @@ const currentGenreDict = computed(() => {
 watch(
   filterParams,
   () => {
-    // 重置数据
-    dataList.value = []
-    page.value = 1
-    isRefreshed.value = false
-    currentKey.value++
+    resetData()
   },
   { deep: true },
 )
@@ -169,6 +173,7 @@ async function fetchData({ done }: { done: any }) {
         page.value++
         // 返回加载成功
         done('ok')
+        await nextTick()
       }
     } else {
       // 设置加载中
@@ -274,15 +279,24 @@ async function fetchData({ done }: { done: any }) {
   >
     <template #loading />
     <template #empty />
-    <div v-if="dataList.length > 0" class="grid gap-4 grid-media-card" tabindex="0">
-      <div v-for="data in dataList" :key="data.tmdb_id || data.douban_id">
-        <MediaCard :media="data" />
-        <div v-if="data.popularity" class="mt-2 flex flex-row justify-center align-center text-subtitle-2">
-          <VIcon icon="mdi-fire" color="error" />
-          <span> {{ data.popularity.toLocaleString() }}</span>
+    <ProgressiveCardGrid
+      v-if="dataList.length > 0"
+      :items="dataList"
+      :get-item-key="item => item.tmdb_id || item.douban_id || item.bangumi_id || item.media_id || item.title"
+      :min-item-width="144"
+      :estimated-item-height="320"
+      tabindex="0"
+    >
+      <template #default="{ item }">
+        <div>
+          <MediaCard :media="item" />
+          <div v-if="item.popularity" class="mt-2 flex flex-row justify-center align-center text-subtitle-2">
+            <VIcon icon="mdi-fire" color="error" />
+            <span> {{ item.popularity.toLocaleString() }}</span>
+          </div>
         </div>
-      </div>
-    </div>
+      </template>
+    </ProgressiveCardGrid>
     <NoDataFound
       v-if="dataList.length === 0 && isRefreshed"
       error-code="404"

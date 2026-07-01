@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import api from '@/api'
-import NoDataFound from '@/components/NoDataFound.vue'
+import NoDataFound from '@/components/states/NoDataFound.vue'
 import noImage from '@images/no-image.jpeg'
 import type { TencentEpisodeInfo, TencentVideoDetailInfo } from './types'
 import { useI18n } from 'vue-i18n'

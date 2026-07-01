@@ -3,16 +3,19 @@ import type { PropType } from 'vue'
 import { getLogoUrl } from '@/utils/imageUtils'
 import { useToast } from 'vue-toastification'
 import { useI18n } from 'vue-i18n'
-import SiteAddEditDialog from '../dialog/SiteAddEditDialog.vue'
-import SiteUserDataDialog from '../dialog/SiteUserDataDialog.vue'
-import SiteResourceDialog from '../dialog/SiteResourceDialog.vue'
-import SiteCookieUpdateDialog from '../dialog/SiteCookieUpdateDialog.vue'
 import api from '@/api'
 import type { Site, SiteStatistic, SiteUserData } from '@/api/types'
 import { isNullOrEmptyObject } from '@/@core/utils'
 import { formatFileSize } from '@/@core/utils/formatters'
 import { useConfirm } from '@/composables/useConfirm'
+import { getCachedSiteIcon } from '@/utils/siteIconCache'
 import { useDisplay } from 'vuetify'
+import { openSharedDialog } from '@/composables/useSharedDialog'
+
+const SiteAddEditDialog = defineAsyncComponent(() => import('../dialog/SiteAddEditDialog.vue'))
+const SiteCookieUpdateDialog = defineAsyncComponent(() => import('../dialog/SiteCookieUpdateDialog.vue'))
+const SiteResourceDialog = defineAsyncComponent(() => import('../dialog/SiteResourceDialog.vue'))
+const SiteUserDataDialog = defineAsyncComponent(() => import('../dialog/SiteUserDataDialog.vue'))
 
 // 显示器宽度
 const display = useDisplay()
@@ -25,6 +28,10 @@ const cardProps = defineProps({
   site: Object as PropType<Site>,
   data: Object as PropType<SiteUserData>,
   stats: Object as PropType<SiteStatistic>,
+  sortable: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 // 定义触发的自定义事件
@@ -34,7 +41,8 @@ const emit = defineEmits(['update', 'remove', 'refresh-stats'])
 const createConfirm = useConfirm()
 
 // 图标
-const siteIcon = ref<string>('')
+const defaultSiteIcon = getLogoUrl('site')
+const siteIcon = ref<string>(defaultSiteIcon)
 
 // 提示框
 const $toast = useToast()
@@ -45,26 +53,22 @@ const testButtonText = ref(t('site.testConnectivity'))
 // 测试按钮可用性
 const testButtonDisable = ref(false)
 
-// 更新站点Cookie UA弹窗
-const siteCookieDialog = ref(false)
-
-// 站点编辑弹窗
-const siteEditDialog = ref(false)
-
-// 资源浏览弹窗
-const resourceDialog = ref(false)
-
-// 用户数据弹窗
-const siteUserDataDialog = ref(false)
-
 // 查询站点图标
 async function getSiteIcon() {
+  const siteId = cardProps.site?.id
+  if (!siteId) {
+    siteIcon.value = defaultSiteIcon
+    return
+  }
+
   try {
-    siteIcon.value = (await api.get(`site/icon/${cardProps.site?.id}`)).data.icon
-    if (!siteIcon.value) {
-      siteIcon.value = getLogoUrl('site')
-    }
+    siteIcon.value = await getCachedSiteIcon(siteId, async () => {
+      const response = await api.get(`site/icon/${siteId}`)
+
+      return response?.data?.icon || defaultSiteIcon
+    })
   } catch (error) {
+    siteIcon.value = defaultSiteIcon
     console.error(error)
   }
 }
@@ -91,22 +95,65 @@ async function testSite() {
 
 // 打开更新站点Cookie UA弹窗
 async function handleSiteUpdate() {
-  siteCookieDialog.value = true
+  openSharedDialog(
+    SiteCookieUpdateDialog,
+    { site: cardProps.site },
+    {
+      done: onSiteCookieUpdated,
+    },
+    { closeOn: ['close', 'done'] },
+  )
 }
 
 // 打开资源浏览弹窗
 async function handleResourceBrowse() {
-  resourceDialog.value = true
+  openSharedDialog(
+    SiteResourceDialog,
+    { site: cardProps.site },
+    {
+      close: onSiteResourceDone,
+    },
+    { closeOn: ['close'] },
+  )
 }
 
 // 打开站点用户数据弹窗
 async function handleSiteUserData() {
-  siteUserDataDialog.value = true
+  openSharedDialog(SiteUserDataDialog, { site: cardProps.site }, {}, { closeOn: ['close'] })
+}
+
+// 打开站点编辑弹窗
+function handleSiteEdit() {
+  openSharedDialog(
+    SiteAddEditDialog,
+    { siteid: cardProps.site?.id },
+    {
+      save: saveSite,
+      remove: () => emit('remove'),
+    },
+    { closeOn: ['close', 'save', 'remove'] },
+  )
 }
 
 // 打开站点页面
 function openSitePage() {
   window.open(cardProps.site?.url, '_blank')
+}
+
+function handleCardClick() {
+  if (cardProps.sortable) {
+    return
+  }
+
+  handleResourceBrowse()
+}
+
+function handleSiteUrlClick() {
+  if (cardProps.sortable) {
+    return
+  }
+
+  openSitePage()
 }
 
 // 调用API删除站点信息
@@ -169,20 +216,17 @@ const getDownloadPercent = computed(() => {
 
 // 保存站点
 function saveSite() {
-  siteEditDialog.value = false
   emit('update')
 }
 
 // 更新站点Cookie UA后的回调
 function onSiteCookieUpdated() {
-  siteCookieDialog.value = false
   // Cookie更新后刷新统计数据
   emit('refresh-stats', cardProps.site?.domain)
 }
 
 // 资源浏览弹窗关闭后的回调
 function onSiteResourceDone() {
-  resourceDialog.value = false
   // 资源操作完成后刷新统计数据
   emit('refresh-stats', cardProps.site?.domain)
 }
@@ -195,32 +239,42 @@ onMounted(() => {
 
 <template>
   <div>
-    <VCard
-      class="site-card relative h-full flex flex-col overflow-hidden group transition-all duration-300 cursor-pointer hover:-translate-y-1"
-      :class="[
-        cardProps.site?.is_active ? '' : 'opacity-70',
-        {
-          'border-error': statColor === 'error',
-          'border-warning': statColor === 'warning',
-          'border-success': statColor === 'success',
-        },
-      ]"
-      :ripple="false"
-      variant="flat"
-      elevation="0"
-      rounded="lg"
-      hover
-      @click="handleResourceBrowse"
-    >
+    <!-- Hover 命中区域保持静止，避免卡片上浮后底边反复触发 mouseleave。 -->
+    <div class="site-card-hover-area h-full">
+      <VCard
+        class="site-card app-hover-lift-card relative h-full flex flex-col overflow-hidden group"
+        :class="[
+          cardProps.site?.is_active ? '' : 'opacity-70',
+          {
+            'border-error': statColor === 'error',
+            'border-warning': statColor === 'warning',
+            'border-success': statColor === 'success',
+            'cursor-pointer site-card--hoverable': !cardProps.sortable,
+            'cursor-move': cardProps.sortable,
+            'site-card--sortable': cardProps.sortable,
+          },
+        ]"
+        :ripple="false"
+        variant="flat"
+        elevation="0"
+        :hover="!cardProps.sortable"
+        @click="handleCardClick"
+      >
       <!-- 装饰性状态指示器 -->
       <div v-if="cardProps.site?.is_active" class="site-status-indicator" :class="statColor"></div>
 
       <!-- 主体部分 -->
-      <div class="relative flex-1 flex flex-col p-3 z-1">
+      <div class="relative z-1 flex flex-1 flex-col p-3 pr-12">
         <!-- 顶部：图标和站点名称 -->
-        <div class="flex items-center mb-1">
+        <div class="mb-1 flex min-w-0 items-center gap-2">
           <!-- 站点图标 -->
-          <VAvatar tile rounded="lg" size="32" class="me-2" :class="{ 'cursor-move': display.mdAndUp.value }">
+          <VAvatar
+            tile
+            rounded="lg"
+            size="32"
+            class="shrink-0"
+            :class="{ 'cursor-move': cardProps.sortable && display.mdAndUp.value }"
+          >
             <VImg :src="siteIcon" class="w-full h-full" :alt="cardProps.site?.name" cover>
               <template #placeholder>
                 <div class="w-full h-full">
@@ -231,22 +285,42 @@ onMounted(() => {
           </VAvatar>
 
           <!-- 站点名称和特性图标 -->
-          <div class="flex-1 min-w-0 flex items-center">
-            <h3 class="text-lg font-semibold leading-tight truncate">{{ cardProps.site?.name }}</h3>
+          <div class="flex min-w-0 flex-1 items-center gap-2">
+            <h3 class="min-w-0 flex-1 truncate text-lg font-semibold leading-tight">{{ cardProps.site?.name }}</h3>
 
             <!-- 站点特性图标 -->
-            <div class="flex items-center gap-2 ml-auto mr-10">
-              <div v-if="cardProps.site?.limit_interval" class="hover:bg-primary/8 transition-colors">
-                <VIcon icon="mdi-speedometer" size="16" color="primary" class="opacity-85 hover:opacity-100" />
+            <div class="ml-auto flex shrink-0 items-center gap-2">
+              <div v-if="cardProps.site?.limit_interval" :class="cardProps.sortable ? '' : 'hover:bg-primary/8 transition-colors'">
+                <VIcon
+                  icon="mdi-speedometer"
+                  size="16"
+                  color="primary"
+                  :class="cardProps.sortable ? 'opacity-85' : 'opacity-85 hover:opacity-100'"
+                />
               </div>
-              <div v-if="cardProps.site?.proxy" class="hover:bg-primary/8 transition-colors">
-                <VIcon icon="mdi-network-outline" size="16" color="primary" class="opacity-85 hover:opacity-100" />
+              <div v-if="cardProps.site?.proxy" :class="cardProps.sortable ? '' : 'hover:bg-primary/8 transition-colors'">
+                <VIcon
+                  icon="mdi-network-outline"
+                  size="16"
+                  color="primary"
+                  :class="cardProps.sortable ? 'opacity-85' : 'opacity-85 hover:opacity-100'"
+                />
               </div>
-              <div v-if="cardProps.site?.render" class="hover:bg-primary/8 transition-colors">
-                <VIcon icon="mdi-apple-safari" size="16" color="primary" class="opacity-85 hover:opacity-100" />
+              <div v-if="cardProps.site?.render" :class="cardProps.sortable ? '' : 'hover:bg-primary/8 transition-colors'">
+                <VIcon
+                  icon="mdi-apple-safari"
+                  size="16"
+                  color="primary"
+                  :class="cardProps.sortable ? 'opacity-85' : 'opacity-85 hover:opacity-100'"
+                />
               </div>
-              <div v-if="cardProps.site?.filter" class="hover:bg-primary/8 transition-colors">
-                <VIcon icon="mdi-filter-cog-outline" size="16" color="primary" class="opacity-85 hover:opacity-100" />
+              <div v-if="cardProps.site?.filter" :class="cardProps.sortable ? '' : 'hover:bg-primary/8 transition-colors'">
+                <VIcon
+                  icon="mdi-filter-cog-outline"
+                  size="16"
+                  color="primary"
+                  :class="cardProps.sortable ? 'opacity-85' : 'opacity-85 hover:opacity-100'"
+                />
               </div>
             </div>
           </div>
@@ -254,10 +328,10 @@ onMounted(() => {
 
         <!-- 中间部分：网址 -->
         <div class="my-3">
-          <div class="text-sm text-medium-emphasis truncate" @click.stop="openSitePage">
-            {{ cardProps.site?.url }}
+            <div class="min-w-0 truncate text-sm text-medium-emphasis" @click.stop="handleSiteUrlClick">
+              {{ cardProps.site?.url }}
+            </div>
           </div>
-        </div>
 
         <!-- 底部：数据统计 -->
         <div class="flex-1 flex flex-col justify-end">
@@ -289,7 +363,7 @@ onMounted(() => {
       </div>
 
       <!-- 右侧操作按钮区 -->
-      <VSheet class="site-card-actions absolute inset-y-0 right-0 z-20 flex flex-col py-2 px-1">
+      <VSheet v-if="!cardProps.sortable" class="site-card-actions absolute inset-y-0 right-0 z-20 flex flex-col py-2 px-1">
         <!-- 测试按钮 -->
         <VBtn
           icon
@@ -327,11 +401,11 @@ onMounted(() => {
         </VBtn>
 
         <!-- 更多选项按钮 -->
-        <VBtn icon variant="text" class="mt-auto" size="36">
+        <VBtn icon variant="text" class="mt-auto" size="36" @click.stop>
           <VIcon icon="mdi-dots-vertical" size="20" />
           <VMenu :activator="'parent'" :close-on-content-click="true" :location="'left'">
             <VList>
-              <VListItem @click="siteEditDialog = true" base-color="info">
+              <VListItem @click="handleSiteEdit" base-color="info">
                 <template #prepend>
                   <VIcon icon="mdi-file-edit-outline" size="20" />
                 </template>
@@ -347,40 +421,20 @@ onMounted(() => {
           </VMenu>
         </VBtn>
       </VSheet>
-    </VCard>
-
-    <!-- 对话框组件 -->
-    <SiteCookieUpdateDialog
-      v-if="siteCookieDialog"
-      v-model="siteCookieDialog"
-      :site="cardProps.site"
-      @close="siteCookieDialog = false"
-      @done="onSiteCookieUpdated"
-    />
-    <SiteAddEditDialog
-      v-if="siteEditDialog"
-      v-model="siteEditDialog"
-      :siteid="cardProps.site?.id"
-      @save="saveSite"
-      @remove="emit('remove')"
-      @close="siteEditDialog = false"
-    />
-    <SiteUserDataDialog
-      v-if="siteUserDataDialog"
-      v-model="siteUserDataDialog"
-      :site="cardProps.site"
-      @close="siteUserDataDialog = false"
-    />
-    <SiteResourceDialog
-      v-if="resourceDialog"
-      v-model="resourceDialog"
-      :site="cardProps.site"
-      @close="onSiteResourceDone"
-    />
+      </VCard>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.site-card-hover-area {
+  inline-size: 100%;
+}
+
+.site-card-hover-area:hover .site-card--hoverable {
+  transform: translate3d(0, -0.25rem, 0);
+}
+
 .site-status-indicator {
   position: absolute;
   z-index: 1;
@@ -412,7 +466,7 @@ onMounted(() => {
 }
 
 /* 站点卡片悬停时状态指示器变化 */
-.site-card:hover .site-status-indicator {
+.site-card-hover-area:hover .site-card:not(.site-card--sortable) .site-status-indicator {
   block-size: 2px;
   opacity: 0.8;
 }
@@ -601,7 +655,7 @@ onMounted(() => {
   visibility: hidden;
 }
 
-.site-card:hover .site-card-actions {
+.site-card-hover-area:hover .site-card-actions {
   opacity: 1;
   transform: translateX(0);
   visibility: visible;

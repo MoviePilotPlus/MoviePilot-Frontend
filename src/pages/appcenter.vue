@@ -4,7 +4,7 @@ import { getNavMenus } from '@/router/i18n-menu'
 import { usePluginSidebarNavStore, useUserStore } from '@/stores'
 import { useI18n } from 'vue-i18n'
 import { filterPluginSidebarNavEntries } from '@/utils/pluginSidebarNav'
-import { filterMenusByPermission } from '@/utils/permission'
+import { buildUserPermissionContext, filterMenusByPermission } from '@/utils/permission'
 
 // 国际化
 const { t } = useI18n()
@@ -13,10 +13,7 @@ const userStore = useUserStore()
 const pluginSidebarNavStore = usePluginSidebarNavStore()
 
 // 获取用户权限信息
-const userPermissions = computed(() => ({
-  is_superuser: userStore.superUser,
-  ...userStore.permissions,
-}))
+const userPermissions = computed(() => buildUserPermissionContext(userStore.superUser, userStore.permissions))
 
 // 应用分组（以header分组）
 const appGroups = ref<Record<string, NavMenu[]>>({})
@@ -107,9 +104,11 @@ onMounted(() => {
 
 .settings-section-card {
   overflow: hidden;
+  border: var(--app-surface-border);
   backdrop-filter: blur(10px);
   background-color: rgb(var(--v-theme-surface));
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 8%);
+  box-shadow: var(--app-surface-shadow);
+  transition: border-color 0.2s ease, border-width 0.2s ease, box-shadow 0.2s ease;
 }
 
 .settings-list {

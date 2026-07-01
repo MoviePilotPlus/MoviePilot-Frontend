@@ -391,8 +391,6 @@ onMounted(() => {
 
 .stat-card {
   padding: 16px;
-  border: 1px solid var(--v-border-color);
-  border-radius: 8px;
   background: var(--v-theme-surface);
   min-inline-size: 100px;
   text-align: center;

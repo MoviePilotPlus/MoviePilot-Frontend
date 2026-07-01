@@ -1,18 +1,27 @@
 <script lang="ts" setup>
 import api from '@/api'
 import type { User } from '@/api/types'
-import NoDataFound from '@/components/NoDataFound.vue'
+import NoDataFound from '@/components/states/NoDataFound.vue'
 import UserCard from '@/components/cards/UserCard.vue'
-import UserAddEditDialog from '@/components/dialog/UserAddEditDialog.vue'
+import ProgressiveCardGrid from '@/components/misc/ProgressiveCardGrid.vue'
 import { useDynamicButton } from '@/composables/useDynamicButton'
 import { useI18n } from 'vue-i18n'
 import { usePWA } from '@/composables/usePWA'
+import { openSharedDialog } from '@/composables/useSharedDialog'
+import { useUserStore } from '@/stores'
+import { buildUserPermissionContext, hasPermission } from '@/utils/permission'
+
+const UserAddEditDialog = defineAsyncComponent(() => import('@/components/dialog/UserAddEditDialog.vue'))
 
 // 国际化
 const { t } = useI18n()
 
 // 路由
 const route = useRoute()
+const userStore = useUserStore()
+const canAdmin = computed(() =>
+  hasPermission(buildUserPermissionContext(userStore.superUser, userStore.permissions), 'admin'),
+)
 
 // PWA模式检测
 const { appMode } = usePWA()
@@ -22,9 +31,6 @@ const isRefreshed = ref(false)
 
 // 是否加载中
 const loading = ref(false)
-
-// 新增用户窗口
-const addUserDialog = ref(false)
 
 // 所有用户信息
 const allUsers = ref<User[]>([])
@@ -44,13 +50,22 @@ async function loadAllUsers() {
 
 // 用户新增完成
 const onUserAdd = () => {
-  addUserDialog.value = false
   loadAllUsers()
 }
 
 // 打开添加用户对话框
 const openAddUserDialog = () => {
-  addUserDialog.value = true
+  openSharedDialog(
+    UserAddEditDialog,
+    {
+      oper: 'add',
+      maxWidth: '45rem',
+    },
+    {
+      save: onUserAdd,
+    },
+    { closeOn: ['close', 'save'] },
+  )
 }
 
 // 加载当前用户数据
@@ -70,27 +85,32 @@ useDynamicButton({
   onClick: () => {
     openAddUserDialog()
   },
+  permission: 'admin',
 })
 </script>
 
 <template>
   <!-- 页面标题 -->
-  <VPageContentTitle :title="t('user.management')" />
+  <div class="d-flex justify-space-between align-center mb-3">
+    <VPageContentTitle :title="t('user.management')" />
+  </div>
   <div class="card-list-container">
     <!-- 加载中提示 -->
     <LoadingBanner v-if="!isRefreshed" class="mt-12" />
     <!-- 用户卡片网格 -->
-    <div v-if="allUsers.length > 0 && isRefreshed" class="grid gap-4 grid-user-card px-2">
+    <ProgressiveCardGrid
+      v-if="allUsers.length > 0 && isRefreshed"
+      :items="allUsers"
+      :min-item-width="288"
+      :estimated-item-height="260"
+      :get-item-key="user => user.id"
+      class="px-2"
+    >
       <!-- 普通用户卡片 -->
-      <UserCard
-        v-for="user in allUsers"
-        :key="user.id"
-        :user="user"
-        :users="allUsers"
-        @remove="loadAllUsers"
-        @save="loadAllUsers"
-      />
-    </div>
+      <template #default="{ item }">
+        <UserCard :user="item" :users="allUsers" @remove="loadAllUsers" @save="loadAllUsers" />
+      </template>
+    </ProgressiveCardGrid>
 
     <!-- 无数据提示 -->
     <div v-if="allUsers.length === 0 && isRefreshed">
@@ -99,27 +119,15 @@ useDynamicButton({
 
     <!-- 新增用户按钮 -->
     <Teleport to="body" v-if="route.path === '/user'">
-      <VFab
-        v-if="isRefreshed && !appMode"
-        icon="mdi-account-plus"
-        location="bottom"
-        size="x-large"
-        fixed
-        app
-        appear
-        @click="openAddUserDialog"
-        :class="{ 'mb-12': appMode }"
-      />
+      <div v-if="isRefreshed && !appMode && canAdmin" class="compact-fab-stack">
+        <VFab
+          icon="mdi-account-plus"
+          color="primary"
+          appear
+          class="compact-fab compact-fab--primary"
+          @click="openAddUserDialog"
+        />
+      </div>
     </Teleport>
-
-    <!-- 用户添加弹窗 -->
-    <UserAddEditDialog
-      v-if="addUserDialog"
-      v-model="addUserDialog"
-      oper="add"
-      max-width="45rem"
-      @save="onUserAdd"
-      @close="addUserDialog = false"
-    />
   </div>
 </template>

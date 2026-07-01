@@ -2,9 +2,10 @@
 import api from '@/api'
 import { DownloaderConf } from '@/api/types'
 import DownloadingListView from '@/views/reorganize/DownloadingListView.vue'
-import NoDataFound from '@/components/NoDataFound.vue'
+import NoDataFound from '@/components/states/NoDataFound.vue'
 import { useI18n } from 'vue-i18n'
 import { useDynamicHeaderTab } from '@/composables/useDynamicHeaderTab'
+import { useKeepAliveRefresh } from '@/composables/useKeepAliveRefresh'
 
 // 国际化
 const { t } = useI18n()
@@ -52,7 +53,7 @@ onMounted(async () => {
   registerTabs()
 })
 
-onActivated(async () => {
+useKeepAliveRefresh(async () => {
   await loadDownloaderSetting()
   registerTabs()
 })
@@ -61,10 +62,10 @@ onActivated(async () => {
 <template>
   <div v-if="downloaders.length > 0">
     <VWindow v-model="activeTab" class="disable-tab-transition" :touch="false">
-      <VWindowItem v-for="item in downloaders" :value="item.name">
+      <VWindowItem v-for="item in downloaders" :key="item.name" :value="item.name">
         <transition name="fade-slide" appear>
           <div>
-            <DownloadingListView :name="item.name" />
+            <DownloadingListView :name="item.name" :active="activeTab === item.name" />
           </div>
         </transition>
       </VWindowItem>

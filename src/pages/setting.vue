@@ -1,17 +1,6 @@
 <script lang="ts" setup>
 import { useRoute } from 'vue-router'
 import router from '@/router'
-import AccountSettingNotification from '@/views/setting/AccountSettingNotification.vue'
-import AccountSettingSite from '@/views/setting/AccountSettingSite.vue'
-import AccountSettingWords from '@/views/setting/AccountSettingWords.vue'
-import AccountSettingAbout from '@/views/setting/AccountSettingAbout.vue'
-import AccountSettingSearch from '@/views/setting/AccountSettingSearch.vue'
-import AccountSettingSubscribe from '@/views/setting/AccountSettingSubscribe.vue'
-import AccountSettingCollect from '@/views/setting/AccountSettingCollect.vue'
-import AccountSettingSystem from '@/views/setting/AccountSettingSystem.vue'
-import AccountSettingDirectory from '@/views/setting/AccountSettingDirectory.vue'
-import AccountSettingRule from '@/views/setting/AccountSettingRule.vue'
-import AccountSettingCache from '@/views/setting/AccountSettingCache.vue'
 import { getSettingTabs } from '@/router/i18n-menu'
 import { useDynamicHeaderTab } from '@/composables/useDynamicHeaderTab'
 
@@ -21,12 +10,43 @@ const route = useRoute()
 const activeTab = ref((route.query.tab as string) || '')
 const settingTabs = computed(() => getSettingTabs(t))
 
+// 设置页的每个大类都很重，按标签页拆包，避免进入设置时一次性下载全部配置面板。
+const AccountSettingSystem = defineAsyncComponent(() => import('@/views/setting/AccountSettingSystem.vue'))
+const AccountSettingCollect = defineAsyncComponent(() => import('@/views/setting/AccountSettingCollect.vue'))
+const AccountSettingDirectory = defineAsyncComponent(() => import('@/views/setting/AccountSettingDirectory.vue'))
+const AccountSettingSite = defineAsyncComponent(() => import('@/views/setting/AccountSettingSite.vue'))
+const AccountSettingRule = defineAsyncComponent(() => import('@/views/setting/AccountSettingRule.vue'))
+const AccountSettingSearch = defineAsyncComponent(() => import('@/views/setting/AccountSettingSearch.vue'))
+const AccountSettingSubscribe = defineAsyncComponent(() => import('@/views/setting/AccountSettingSubscribe.vue'))
+const AccountSettingNotification = defineAsyncComponent(() => import('@/views/setting/AccountSettingNotification.vue'))
+
+const visitedTabs = ref(new Set<string>())
+
+const settingTabComponents = [
+  { value: 'system', component: AccountSettingSystem },
+  { value: 'directory', component: AccountSettingDirectory },
+  { value: 'site', component: AccountSettingSite },
+  { value: 'rule', component: AccountSettingRule },
+  { value: 'search', component: AccountSettingSearch },
+  { value: 'subscribe', component: AccountSettingSubscribe },
+  { value: 'notification', component: AccountSettingNotification },
+  { value: 'collect', component: AccountSettingCollect },
+]
+
+function markTabVisited(tab: string) {
+  if (!tab) return
+
+  const nextTabs = new Set(visitedTabs.value)
+  nextTabs.add(tab)
+  visitedTabs.value = nextTabs
+}
+
 // 使用动态标签页
 const { registerHeaderTab } = useDynamicHeaderTab()
 
 // 注册动态标签页
 registerHeaderTab({
-  items: settingTabs.value,
+  items: settingTabs,
   modelValue: activeTab,
 })
 
@@ -36,80 +56,19 @@ onMounted(() => {
   if (!activeTab.value && settingTabs.value.length > 0) {
     activeTab.value = settingTabs.value[0].tab
   }
+  markTabVisited(activeTab.value)
 })
+
+watch(activeTab, markTabVisited, { immediate: true })
 </script>
 
 <template>
   <div>
     <VWindow v-model="activeTab" class="disable-tab-transition" :touch="false">
-      <!-- 系统 -->
-      <VWindowItem value="system">
+      <VWindowItem v-for="item in settingTabComponents" :key="item.value" :value="item.value">
         <transition name="fade-slide" appear>
           <div>
-            <AccountSettingSystem />
-          </div>
-        </transition>
-      </VWindowItem>
-
-      <!-- 采集 -->
-      <VWindowItem value="collect">
-        <transition name="fade-slide" appear>
-          <div>
-            <AccountSettingCollect />
-          </div>
-        </transition>
-      </VWindowItem>
-
-      <!-- 目录 -->
-      <VWindowItem value="directory">
-        <transition name="fade-slide" appear>
-          <div>
-            <AccountSettingDirectory />
-          </div>
-        </transition>
-      </VWindowItem>
-
-      <!-- 站点 -->
-      <VWindowItem value="site">
-        <transition name="fade-slide" appear>
-          <div>
-            <AccountSettingSite />
-          </div>
-        </transition>
-      </VWindowItem>
-
-      <!-- 规则 -->
-      <VWindowItem value="rule">
-        <transition name="fade-slide" appear>
-          <div>
-            <AccountSettingRule />
-          </div>
-        </transition>
-      </VWindowItem>
-
-      <!-- 搜索 -->
-      <VWindowItem value="search">
-        <transition name="fade-slide" appear>
-          <div>
-            <AccountSettingSearch />
-          </div>
-        </transition>
-      </VWindowItem>
-
-      <!-- 订阅 -->
-      <VWindowItem value="subscribe">
-        <transition name="fade-slide" appear>
-          <div>
-            <AccountSettingSubscribe />
-          </div>
-        </transition>
-      </VWindowItem>
-
-      <!-- 通知 -->
-      <VWindowItem value="notification">
-        <transition name="fade-slide" appear>
-          <div>
-            <AccountSettingNotification />
+            <component :is="item.component" v-if="visitedTabs.has(item.value)" :active="activeTab === item.value" />
           </div>
         </transition>
       </VWindowItem>

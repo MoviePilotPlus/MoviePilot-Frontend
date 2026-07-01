@@ -193,7 +193,7 @@ async function doDelete() {
                 >
                   {{ props.workflow?.share_comment }}
                 </VCardSubtitle>
-                <VList lines="one">
+                <VList lines="one" class="border-0">
                   <VListItem class="ps-0">
                     <VListItemTitle class="text-center text-md-left">
                       <span class="font-weight-medium">{{ t('workflow.sharer') }}：</span>
@@ -277,8 +277,6 @@ async function doDelete() {
 .workflow-preview {
   position: relative;
   overflow: hidden;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 8px;
   background-color: rgba(var(--v-theme-surface), 0.8);
   block-size: 280px;
   inline-size: 240px;
@@ -289,8 +287,6 @@ async function doDelete() {
   inline-size: 100%;
 
   .vue-flow__node {
-    border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-    border-radius: 8px;
     font-size: 10px;
 
     &:hover {

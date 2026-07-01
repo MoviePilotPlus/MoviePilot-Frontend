@@ -1,6 +1,6 @@
 /**
  * 通用APP深度链接工具类
- * 支持媒体服务器（Plex、Jellyfin、Emby）和豆瓣的APP跳转和网页跳转
+ * 支持媒体服务器（Plex、Jellyfin、Emby、极影视、飞牛影视）和豆瓣的APP跳转和网页跳转
  *
  * 深度链接格式参考：
  * - Plex: https://forums.plex.tv/t/plex-mobile-app-deep-linking/123456
@@ -12,7 +12,7 @@
 import { isMobileDevice, isIOSDevice, isAndroidDevice } from '@/@core/utils'
 
 // APP类型
-export type AppType = 'plex' | 'jellyfin' | 'emby' | 'trimemedia' | 'douban'
+export type AppType = 'plex' | 'jellyfin' | 'emby' | 'zspace' | 'trimemedia' | 'douban'
 
 // 深度链接配置
 interface DeepLinkConfig {
@@ -38,6 +38,11 @@ const DEEP_LINK_CONFIGS: Record<AppType, DeepLinkConfig> = {
     webUrl: 'https://emby.media',
     timeout: 2000,
   },
+  zspace: {
+    appScheme: 'emby://',
+    webUrl: 'https://www.zspace.com.cn',
+    timeout: 2000,
+  },
   trimemedia: {
     appScheme: 'trimemedia://',
     webUrl: 'https://trimemedia.com',
@@ -57,6 +62,149 @@ interface DoubanAppParams {
   title?: string
   year?: string
   fallbackUrl?: string
+}
+
+// 媒体服务器卡片跳转所需的最小字段集合
+interface MediaServerLinkTarget {
+  id?: string | number
+  item_id?: string | number
+  itemId?: string | number
+  server_id?: string
+  serverId?: string
+  link?: string
+  server_type?: string
+}
+
+// Emby hash 路由中的目标参数
+interface EmbyHashTarget {
+  mediaId: string | null
+  serverId: string | null
+}
+
+/**
+ * 判断链接参数是否为有效值。
+ * @param value 待检查的链接参数
+ */
+function getValidLinkValue(value?: string | number | null): string | null {
+  if (value === undefined || value === null) return null
+  const stringValue = String(value).trim()
+  if (!stringValue || ['none', 'null', 'undefined'].includes(stringValue.toLowerCase())) return null
+  return stringValue
+}
+
+/**
+ * 获取媒体服务器条目的真实项目ID。
+ * @param target 媒体服务器跳转目标
+ */
+function getTargetItemId(target?: MediaServerLinkTarget): string | null {
+  return getValidLinkValue(target?.item_id ?? target?.itemId)
+}
+
+/**
+ * 获取媒体服务器条目的真实服务器ID。
+ * @param target 媒体服务器跳转目标
+ */
+function getTargetServerId(target?: MediaServerLinkTarget): string | null {
+  return getValidLinkValue(target?.server_id ?? target?.serverId)
+}
+
+/**
+ * 解析媒体服务器网页链接中的 hash 查询参数。
+ * @param playUrl 原始播放链接
+ */
+function getHashRouteParams(playUrl: string): { hashPath: string; params: URLSearchParams } | null {
+  const url = new URL(playUrl)
+  const hash = url.hash || ''
+  const queryIndex = hash.indexOf('?')
+  if (queryIndex === -1) return null
+  return {
+    hashPath: hash.slice(0, queryIndex),
+    params: new URLSearchParams(hash.slice(queryIndex + 1)),
+  }
+}
+
+/**
+ * 从 Emby 网页链接中提取 App 跳转需要的媒体ID和服务器ID。
+ * @param playUrl 原始播放链接
+ */
+function getEmbyHashTarget(playUrl: string): EmbyHashTarget {
+  const hashRoute = getHashRouteParams(playUrl)
+  if (!hashRoute) return { mediaId: null, serverId: null }
+
+  const serverId = getValidLinkValue(hashRoute.params.get('serverId'))
+  if (hashRoute.hashPath.includes('/videos')) {
+    return {
+      mediaId: getValidLinkValue(hashRoute.params.get('parentId')),
+      serverId,
+    }
+  }
+
+  return {
+    mediaId: getValidLinkValue(hashRoute.params.get('id')),
+    serverId,
+  }
+}
+
+/**
+ * 使用后端返回的真实ID修正Emby网页链接。
+ * @param playUrl 原始播放链接
+ * @param target 媒体服务器跳转目标
+ */
+function normalizeEmbyWebUrl(playUrl: string, target?: MediaServerLinkTarget): string {
+  try {
+    const url = new URL(playUrl)
+    const hashRoute = getHashRouteParams(playUrl)
+    if (!hashRoute) return playUrl
+
+    const { hashPath, params } = hashRoute
+    const itemId = getTargetItemId(target)
+    const serverId = getTargetServerId(target)
+
+    if (itemId && (hashPath.includes('/item') || params.has('id'))) {
+      params.set('id', itemId)
+    }
+
+    if (itemId && (hashPath.includes('/videos') || params.has('parentId'))) {
+      params.set('parentId', itemId)
+    }
+
+    if (serverId) {
+      params.set('serverId', serverId)
+    } else if (params.has('serverId') && !getValidLinkValue(params.get('serverId'))) {
+      params.delete('serverId')
+    }
+
+    url.hash = `${hashPath}?${params.toString()}`
+    return url.toString()
+  } catch (error) {
+    console.warn('修正Emby网页链接失败:', error)
+    return playUrl
+  }
+}
+
+/**
+ * 获取媒体服务器卡片可用的跳转链接。
+ * @param target 媒体服务器跳转目标
+ */
+function getMediaServerPlayUrl(target: MediaServerLinkTarget): string | null {
+  const playUrl = getValidLinkValue(target.link)
+  if (!playUrl) return null
+
+  const serverType = target.server_type?.toLowerCase()
+  if (serverType === 'emby' || serverType === 'zspace') {
+    return normalizeEmbyWebUrl(playUrl, target)
+  }
+  return playUrl
+}
+
+/**
+ * 打开媒体服务器卡片对应的播放页面。
+ * @param target 媒体服务器跳转目标
+ */
+export async function openMediaServerItem(target: MediaServerLinkTarget): Promise<void> {
+  const playUrl = getMediaServerPlayUrl(target)
+  if (!playUrl) return
+  await openMediaServerWithAutoDetect(playUrl, undefined, target.server_type)
 }
 
 /**
@@ -133,6 +281,9 @@ function buildDeepLinkUrl(appType: AppType, params: string | DoubanAppParams): s
       return buildJellyfinDeepLink(params as string)
 
     case 'emby':
+      return buildEmbyDeepLink(params as string)
+
+    case 'zspace':
       return buildEmbyDeepLink(params as string)
 
     case 'trimemedia':
@@ -400,26 +551,27 @@ function buildEmbyDeepLink(playUrl: string): string {
     const serverAddress = url.hostname + (url.port ? `:${url.port}` : '')
 
     // 尝试多种格式提取媒体ID
-    let mediaId: string | null = null
-    let serverId: string | null = null
+    const hashTarget = getEmbyHashTarget(playUrl)
+    let mediaId: string | null = hashTarget.mediaId
+    let serverId: string | null = hashTarget.serverId
 
     // 格式1: /web/index.html#!/item?id=xxx&context=home&serverId=xxx (后台返回的格式)
-    const itemHashMatch = playUrl.match(/\/item\?id=([^&]+)/)
-    if (itemHashMatch) {
+    const itemHashMatch = !mediaId ? playUrl.match(/\/item\?id=([^&]+)/) : null
+    if (!mediaId && itemHashMatch) {
       mediaId = itemHashMatch[1]
       // 提取serverId
       const serverIdMatch = playUrl.match(/serverId=([^&]+)/)
       if (serverIdMatch) {
-        serverId = serverIdMatch[1]
+        serverId = getValidLinkValue(serverIdMatch[1])
       }
     }
 
     // 格式2: /web/index.html#!/videos?serverId=xxx&parentId=xxx (后台返回的格式)
-    const videosHashMatch = playUrl.match(/\/videos\?serverId=([^&]+)&parentId=([^&]+)/)
-    if (videosHashMatch) {
+    const videosHashMatch = !mediaId ? playUrl.match(/\/videos\?serverId=([^&]+)&parentId=([^&]+)/) : null
+    if (!mediaId && videosHashMatch) {
       // 对于videos格式，我们使用parentId作为媒体ID
       mediaId = videosHashMatch[2]
-      serverId = videosHashMatch[1]
+      serverId = getValidLinkValue(videosHashMatch[1])
     }
 
     // 格式3: ?id=xxx (通用格式)
@@ -456,22 +608,22 @@ function buildEmbyDeepLink(playUrl: string): string {
 
     if (mediaId) {
       let deepLink: string
+      const encodedMediaId = encodeURIComponent(mediaId)
+      const encodedServerId = serverId ? encodeURIComponent(serverId) : null
 
       // 根据设备类型使用不同的深度链接格式
       if (isIOSDevice()) {
         // iOS格式: emby://items?serverId={SERVER_ID}&itemId={ITEM_ID}
-        if (serverId) {
-          deepLink = `emby://items?serverId=${serverId}&itemId=${mediaId}`
+        if (encodedServerId) {
+          deepLink = `emby://items?serverId=${encodedServerId}&itemId=${encodedMediaId}`
         } else {
-          // 如果没有serverId，尝试使用服务器地址作为serverId
-          deepLink = `emby://items?serverId=${serverAddress}&itemId=${mediaId}`
+          deepLink = `emby://items?itemId=${encodedMediaId}`
         }
+      } else if (encodedServerId) {
+        // Android格式: emby://items/{SERVER_ID}/{ITEM_ID}
+        deepLink = `emby://items/${encodedServerId}/${encodedMediaId}`
       } else {
-        // Android格式: emby://{服务器地址}/item/{媒体ID}
-        deepLink = `emby://${serverAddress}/item/${mediaId}`
-        if (serverId) {
-          deepLink += `?serverId=${serverId}`
-        }
+        deepLink = `emby://${serverAddress}/item/${encodedMediaId}`
       }
 
       console.log('Emby深度链接构建成功:', {
@@ -634,7 +786,7 @@ export async function openMediaServerWithAutoDetect(
   // 优先使用传入的 serverType 参数
   if (serverType) {
     const type = serverType.toLowerCase()
-    if (type === 'plex' || type === 'jellyfin' || type === 'emby' || type === 'trimemedia') {
+    if (type === 'plex' || type === 'jellyfin' || type === 'emby' || type === 'zspace' || type === 'trimemedia') {
       detectedServerType = type as AppType
     }
   }
@@ -649,6 +801,8 @@ export async function openMediaServerWithAutoDetect(
       detectedServerType = 'jellyfin'
     } else if (url.includes('emby')) {
       detectedServerType = 'emby'
+    } else if (url.includes('zspace')) {
+      detectedServerType = 'zspace'
     }
   }
 
@@ -698,6 +852,8 @@ export function getAppDownloadUrl(appType: AppType): string {
       return 'https://jellyfin.org/downloads/'
     case 'emby':
       return 'https://emby.media/download.html'
+    case 'zspace':
+      return 'https://www.zspace.com.cn/'
     case 'trimemedia':
       return 'https://trimemedia.com/download'
     case 'douban':

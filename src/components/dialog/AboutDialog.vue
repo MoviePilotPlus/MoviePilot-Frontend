@@ -1,7 +1,8 @@
 <script lang="ts" setup>
 import { formatDateDifference } from '@/@core/utils/formatters'
 import api from '@/api'
-import { clearCachesAndServiceWorker, reloadWithTimestamp } from '@/composables/useVersionChecker'
+import type { Process as SystemProcess } from '@/api/types'
+import { clearCacheAndReload } from '@/composables/useVersionChecker'
 import MarkdownIt from 'markdown-it'
 import mdLinkAttributes from 'markdown-it-link-attributes'
 import { useI18n } from 'vue-i18n'
@@ -36,6 +37,12 @@ md.use(mdLinkAttributes, {
 
 // 系统环境变量
 const systemEnv = ref<any>({})
+
+// 系统运行时间的基准秒数和同步时间，用于在弹窗打开后实时递增展示。
+const systemUptimeBaseSeconds = ref<number | null>(null)
+const systemUptimeSyncedAt = ref(0)
+const systemUptimeNow = ref(Date.now())
+let systemUptimeTimer: ReturnType<typeof setInterval> | null = null
 
 // 所有Release
 const allRelease = ref<any>([])
@@ -84,11 +91,155 @@ const releaseDialogTitle = ref('')
 // 变更日志对话框内容
 const releaseDialogBody = ref('')
 
+// 版本统计对话框
+const versionStatisticDialog = ref(false)
+
+// 版本统计加载状态
+const versionStatisticLoading = ref(false)
+
+// 版本统计数据
+const versionStatistic = ref<any>({})
+
+// 后端版本统计
+const backendVersionStatistics = computed(() => versionStatistic.value?.backend_versions ?? [])
+
+// 前端版本统计
+const frontendVersionStatistics = computed(() => versionStatistic.value?.frontend_versions ?? [])
+
+// 活跃用户统计
+const activeUsers = computed(() => versionStatistic.value?.active_users ?? {})
+
+// 系统运行秒数
+const systemUptimeSeconds = computed(() => {
+  if (systemUptimeBaseSeconds.value === null) return null
+
+  const elapsedSeconds = Math.floor((systemUptimeNow.value - systemUptimeSyncedAt.value) / 1000)
+
+  return Math.max(0, systemUptimeBaseSeconds.value + elapsedSeconds)
+})
+
+// 友好的系统运行时间文本
+const systemUptimeText = computed(() => {
+  if (systemUptimeSeconds.value === null) return ''
+
+  return formatUptimeDuration(systemUptimeSeconds.value)
+})
+
+/** 格式化版本安装统计数字为千分位展示。 */
+function formatVersionStatisticNumber(value: unknown) {
+  const numberValue = Number(value ?? 0)
+
+  if (!Number.isFinite(numberValue)) return '0'
+
+  return numberValue.toLocaleString()
+}
+
+/** 将秒数保存为运行时间基准，并记录本地同步时间。 */
+function syncSystemUptime(seconds: number | null) {
+  if (seconds === null) return
+
+  const now = Date.now()
+
+  systemUptimeBaseSeconds.value = seconds
+  systemUptimeSyncedAt.value = now
+  systemUptimeNow.value = now
+}
+
+/** 将接口返回值规范化为可展示的秒数。 */
+function normalizeUptimeSeconds(value: unknown) {
+  const numberValue = Number(value)
+
+  if (!Number.isFinite(numberValue) || numberValue < 0) return null
+
+  return Math.floor(numberValue)
+}
+
+/** 从进程创建时间推导运行秒数；兼容秒级和毫秒级时间戳。 */
+function uptimeSecondsFromCreateTime(value: unknown) {
+  const timestamp = Number(value)
+
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return null
+
+  const timestampMs = timestamp > 1_000_000_000_000 ? timestamp : timestamp * 1000
+
+  return Math.max(0, Math.floor((Date.now() - timestampMs) / 1000))
+}
+
+/** 获取单个进程的运行秒数，优先使用创建时间以保留跨天运行时长。 */
+function getProcessUptimeSeconds(process: SystemProcess) {
+  return uptimeSecondsFromCreateTime(process.create_time) ?? normalizeUptimeSeconds(process.run_time)
+}
+
+/** 从进程列表中挑选 MoviePilot 主进程，找不到时使用运行时间最长的进程兜底。 */
+function resolveSystemUptimeSeconds(processes: SystemProcess[]) {
+  const availableProcesses = processes
+    .map(process => ({
+      process,
+      uptimeSeconds: getProcessUptimeSeconds(process),
+    }))
+    .filter((item): item is { process: SystemProcess; uptimeSeconds: number } => item.uptimeSeconds !== null)
+
+  if (!availableProcesses.length) return null
+
+  const preferredProcesses = availableProcesses.filter(({ process }) =>
+    /moviepilot|python|uvicorn|gunicorn|hypercorn/i.test(process.name ?? ''),
+  )
+  const targetProcesses = preferredProcesses.length ? preferredProcesses : availableProcesses
+
+  return targetProcesses.reduce((max, item) => (item.uptimeSeconds > max.uptimeSeconds ? item : max)).uptimeSeconds
+}
+
+/** 格式化单个运行时间单位。 */
+function formatUptimeUnit(value: number, unit: 'day' | 'hour' | 'minute' | 'second') {
+  const unitKey = value === 1 ? unit : `${unit}s`
+
+  return t(`setting.about.uptimeUnits.${unitKey}`, { count: value })
+}
+
+/** 将运行秒数格式化为两段以内的友好文本，例如“3天 2小时”。 */
+function formatUptimeDuration(totalSeconds: number) {
+  const normalizedSeconds = Math.max(0, Math.floor(totalSeconds))
+  const days = Math.floor(normalizedSeconds / 86400)
+  const hours = Math.floor((normalizedSeconds % 86400) / 3600)
+  const minutes = Math.floor((normalizedSeconds % 3600) / 60)
+  const seconds = normalizedSeconds % 60
+  const parts: string[] = []
+
+  if (days > 0) parts.push(formatUptimeUnit(days, 'day'))
+  if (hours > 0) parts.push(formatUptimeUnit(hours, 'hour'))
+  if (minutes > 0 && parts.length < 2) parts.push(formatUptimeUnit(minutes, 'minute'))
+  if (!parts.length) parts.push(formatUptimeUnit(seconds, 'second'))
+
+  return parts.slice(0, 2).join(' ')
+}
+
 // 打开日志对话框
 function showReleaseDialog(title: string, body: string) {
   releaseDialogTitle.value = title
   releaseDialogBody.value = body ? md.render(body) : ''
   releaseDialog.value = true
+}
+
+// 查询版本统计
+async function queryVersionStatistic() {
+  if (!systemEnv.value.USAGE_STATISTIC_SHARE) return
+  versionStatisticLoading.value = true
+  try {
+    const result: { [key: string]: any } = await api.get('system/usage/statistic')
+
+    versionStatistic.value = result.data ?? {}
+  } catch (error) {
+    console.log(error)
+    versionStatistic.value = {}
+  } finally {
+    versionStatisticLoading.value = false
+  }
+}
+
+// 打开版本统计对话框
+async function showVersionStatisticDialog() {
+  versionStatisticDialog.value = true
+  await queryVersionStatistic()
 }
 
 // 查询系统环境变量
@@ -97,6 +248,17 @@ async function querySystemEnv() {
     const result: { [key: string]: any } = await api.get('system/env')
 
     systemEnv.value = result.data
+  } catch (error) {
+    console.log(error)
+  }
+}
+
+// 查询系统运行时间
+async function querySystemUptime() {
+  try {
+    const processes: SystemProcess[] = await api.get('dashboard/processes')
+
+    syncSystemUptime(resolveSystemUptimeSeconds(processes))
   } catch (error) {
     console.log(error)
   }
@@ -138,15 +300,22 @@ function releaseTime(releaseDate: string) {
 
 // 强制清除缓存
 async function clearCache() {
-  await clearCachesAndServiceWorker()
-  // 刷新页面，添加时间戳参数以强制更新
-  reloadWithTimestamp()
+  await clearCacheAndReload()
 }
 
 onMounted(() => {
   querySystemEnv()
+  querySystemUptime()
   queryAllRelease()
   querySupportingSites()
+
+  systemUptimeTimer = setInterval(() => {
+    if (systemUptimeBaseSeconds.value !== null) systemUptimeNow.value = Date.now()
+  }, 1000)
+})
+
+onBeforeUnmount(() => {
+  if (systemUptimeTimer) clearInterval(systemUptimeTimer)
 })
 </script>
 
@@ -184,6 +353,18 @@ onMounted(() => {
                             {{ t('setting.about.latest') }}
                           </span>
                         </a>
+                        <VTooltip v-if="systemEnv.USAGE_STATISTIC_SHARE" :text="t('setting.about.versionStatistic')">
+                          <template #activator="{ props }">
+                            <VBtn
+                              v-bind="props"
+                              icon="mdi-chart-bar"
+                              size="x-small"
+                              variant="text"
+                              class="ms-2 flex-shrink-0"
+                              @click="showVersionStatisticDialog"
+                            />
+                          </template>
+                        </VTooltip>
                       </span>
                     </dd>
                   </div>
@@ -204,12 +385,7 @@ onMounted(() => {
                     <dd class="flex text-sm sm:col-span-2 sm:mt-0">
                       <span class="flex-grow flex flex-row items-center truncate">
                         <code class="truncate">{{ appVersion }}</code>
-                        <VBtn
-                          size="x-small"
-                          variant="tonal"
-                          class="ms-2"
-                          @click="clearCache"
-                        >
+                        <VBtn size="x-small" variant="tonal" class="ms-2" @click="clearCache">
                           <template #prepend>
                             <VIcon icon="mdi-refresh" size="14" />
                           </template>
@@ -263,6 +439,16 @@ onMounted(() => {
                     <dd class="flex text-sm sm:col-span-2 sm:mt-0">
                       <span class="flex-grow break-all">
                         <code>{{ systemEnv.TZ }}</code>
+                      </span>
+                    </dd>
+                  </div>
+                </div>
+                <div v-if="systemUptimeText">
+                  <div class="max-w-6xl py-4 sm:grid sm:grid-cols-3 sm:gap-4">
+                    <dt class="block text-sm font-bold">{{ t('setting.about.systemUptime') }}</dt>
+                    <dd class="flex text-sm sm:col-span-2 sm:mt-0">
+                      <span class="flex-grow flex flex-row items-center truncate">
+                        <code class="truncate">{{ systemUptimeText }}</code>
                       </span>
                     </dd>
                   </div>
@@ -404,13 +590,93 @@ onMounted(() => {
         </div>
       </VCardText>
     </VCard>
-    <VDialog v-if="releaseDialog" v-model="releaseDialog" width="600" scrollable>
+    <VDialog v-if="releaseDialog" v-model="releaseDialog" width="600" scrollable max-height="85vh">
       <VCard>
         <VCardItem>
           <VDialogCloseBtn @click="releaseDialog = false" />
           <VCardTitle>{{ releaseDialogTitle }} {{ t('setting.about.changelog') }}</VCardTitle>
         </VCardItem>
         <VCardText class="markdown-body" v-html="releaseDialogBody" />
+      </VCard>
+    </VDialog>
+    <VDialog v-if="versionStatisticDialog" v-model="versionStatisticDialog" width="680" scrollable max-height="85vh">
+      <VCard>
+        <VCardItem>
+          <VDialogCloseBtn @click="versionStatisticDialog = false" />
+          <VCardTitle>
+            <VIcon icon="mdi-chart-bar" class="me-2" />
+            {{ t('setting.about.versionStatisticTitle') }}
+          </VCardTitle>
+        </VCardItem>
+        <VDivider />
+        <VProgressLinear v-if="versionStatisticLoading" indeterminate color="primary" />
+        <VCardText>
+          <div class="version-stat-summary">
+            <div>
+              <div class="text-caption text-medium-emphasis">{{ t('setting.about.totalInstallUsers') }}</div>
+              <div class="version-stat-number">{{ formatVersionStatisticNumber(versionStatistic.total_users) }}</div>
+            </div>
+            <div>
+              <div class="text-caption text-medium-emphasis">{{ t('setting.about.activeToday') }}</div>
+              <div class="version-stat-number">{{ formatVersionStatisticNumber(activeUsers.today) }}</div>
+            </div>
+            <div>
+              <div class="text-caption text-medium-emphasis">{{ t('setting.about.active7Days') }}</div>
+              <div class="version-stat-number">{{ formatVersionStatisticNumber(activeUsers.last_7_days) }}</div>
+            </div>
+            <div>
+              <div class="text-caption text-medium-emphasis">{{ t('setting.about.active30Days') }}</div>
+              <div class="version-stat-number">{{ formatVersionStatisticNumber(activeUsers.last_30_days) }}</div>
+            </div>
+          </div>
+          <div class="mt-5">
+            <div class="text-subtitle-2 mb-2">{{ t('setting.about.backendVersionStatistic') }}</div>
+            <VTable density="compact">
+              <thead>
+                <tr>
+                  <th>{{ t('setting.about.version') }}</th>
+                  <th class="text-end">{{ t('setting.about.users') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in backendVersionStatistics" :key="`backend-${item.version}`">
+                  <td>
+                    <code>{{ item.version }}</code>
+                  </td>
+                  <td class="text-end">{{ formatVersionStatisticNumber(item.count) }}</td>
+                </tr>
+                <tr v-if="!backendVersionStatistics.length">
+                  <td colspan="2" class="text-medium-emphasis">{{ t('setting.about.noVersionStatisticData') }}</td>
+                </tr>
+              </tbody>
+            </VTable>
+          </div>
+          <div class="mt-5">
+            <div class="text-subtitle-2 mb-2">{{ t('setting.about.frontendVersionStatistic') }}</div>
+            <VTable density="compact">
+              <thead>
+                <tr>
+                  <th>{{ t('setting.about.version') }}</th>
+                  <th class="text-end">{{ t('setting.about.users') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in frontendVersionStatistics" :key="`frontend-${item.version}`">
+                  <td>
+                    <code>{{ item.version }}</code>
+                  </td>
+                  <td class="text-end">{{ formatVersionStatisticNumber(item.count) }}</td>
+                </tr>
+                <tr v-if="!frontendVersionStatistics.length">
+                  <td colspan="2" class="text-medium-emphasis">{{ t('setting.about.noVersionStatisticData') }}</td>
+                </tr>
+              </tbody>
+            </VTable>
+          </div>
+          <div v-if="versionStatistic.updated_at" class="mt-4 text-caption text-medium-emphasis">
+            {{ t('setting.about.lastUpdated') }}: {{ versionStatistic.updated_at }}
+          </div>
+        </VCardText>
       </VCard>
     </VDialog>
   </VDialog>
@@ -429,11 +695,23 @@ onMounted(() => {
   margin-block: 0.5rem 2.5rem;
 }
 
+.version-stat-summary {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+}
+
+.version-stat-number {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 2rem;
+}
+
 .markdown-body :deep(h1),
 .markdown-body :deep(h2),
 .markdown-body :deep(h3) {
-  margin-block: 0.5rem;
   font-weight: 600;
+  margin-block: 0.5rem;
 }
 
 .markdown-body :deep(h1) {
@@ -450,8 +728,8 @@ onMounted(() => {
 
 .markdown-body :deep(ul),
 .markdown-body :deep(ol) {
-  padding-inline-start: 1.5rem;
   margin-block: 0.5rem;
+  padding-inline-start: 1.5rem;
 }
 
 .markdown-body :deep(li) {
@@ -472,18 +750,20 @@ onMounted(() => {
 }
 
 .markdown-body :deep(code) {
-  padding: 0.15rem 0.4rem;
   border-radius: 0.25rem;
+  background-color: rgba(127, 127, 127, 15%);
   font-size: 0.875em;
-  background-color: rgba(127, 127, 127, 0.15);
+  padding-block: 0.15rem;
+  padding-inline: 0.4rem;
 }
 
 .markdown-body :deep(pre) {
-  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  background-color: rgba(127, 127, 127, 15%);
   margin-block: 0.5rem;
   overflow-x: auto;
-  border-radius: 0.375rem;
-  background-color: rgba(127, 127, 127, 0.15);
+  padding-block: 0.75rem;
+  padding-inline: 1rem;
 }
 
 .markdown-body :deep(pre code) {
@@ -492,37 +772,38 @@ onMounted(() => {
 }
 
 .markdown-body :deep(blockquote) {
-  padding-inline-start: 1rem;
+  border-inline-start: 3px solid rgba(127, 127, 127, 40%);
+  color: rgba(127, 127, 127, 80%);
   margin-block: 0.5rem;
-  border-inline-start: 3px solid rgba(127, 127, 127, 0.4);
-  color: rgba(127, 127, 127, 0.8);
+  padding-inline-start: 1rem;
 }
 
 .markdown-body :deep(hr) {
-  margin-block: 1rem;
   border: none;
-  border-block-start: 1px solid rgba(127, 127, 127, 0.3);
+  border-block-start: 1px solid rgba(127, 127, 127, 30%);
+  margin-block: 1rem;
 }
 
 .markdown-body :deep(table) {
-  width: 100%;
-  margin-block: 0.5rem;
   border-collapse: collapse;
+  inline-size: 100%;
+  margin-block: 0.5rem;
 }
 
 .markdown-body :deep(th),
 .markdown-body :deep(td) {
-  padding: 0.4rem 0.75rem;
-  border: 1px solid rgba(127, 127, 127, 0.3);
+  border: 1px solid rgba(127, 127, 127, 30%);
+  padding-block: 0.4rem;
+  padding-inline: 0.75rem;
 }
 
 .markdown-body :deep(th) {
+  background-color: rgba(127, 127, 127, 10%);
   font-weight: 600;
-  background-color: rgba(127, 127, 127, 0.1);
 }
 
 .markdown-body :deep(img) {
-  max-width: 100%;
-  height: auto;
+  block-size: auto;
+  max-inline-size: 100%;
 }
 </style>

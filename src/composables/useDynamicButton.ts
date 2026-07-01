@@ -1,10 +1,44 @@
-import { ref, inject, nextTick, onMounted, onActivated, onDeactivated, onUnmounted } from 'vue'
+import {
+  computed,
+  inject,
+  nextTick,
+  onActivated,
+  onDeactivated,
+  onMounted,
+  onUnmounted,
+  ref,
+  unref,
+  watch,
+  type ComputedRef,
+  type Ref,
+} from 'vue'
+import type { UserPermissionKey } from '@/utils/permission'
 
 // 声明全局变量类型
 declare global {
   interface Window {
     __VUE_INJECT_DYNAMIC_BUTTON__?: (button: any) => void
+    __VUE_UNINJECT_DYNAMIC_BUTTON__?: () => void
   }
+}
+
+type MaybeRefValue<T> = T | Ref<T> | ComputedRef<T>
+
+export interface DynamicButtonMenuItem {
+  title?: string
+  titleKey?: string
+  titleParams?: Record<string, unknown>
+  icon?: string
+  color?: string
+  permission?: UserPermissionKey
+  disabled?: boolean
+  action: () => void
+}
+
+function resolveMaybeRef<T>(value: MaybeRefValue<T> | undefined): T | undefined
+function resolveMaybeRef<T>(value: MaybeRefValue<T> | undefined, fallback: T): T
+function resolveMaybeRef<T>(value: MaybeRefValue<T> | undefined, fallback?: T) {
+  return value !== undefined ? unref(value) : fallback
 }
 
 /**
@@ -23,12 +57,15 @@ declare global {
  * })
  */
 export function useDynamicButton(options: {
-  icon: string
-  onClick: () => void
+  icon: MaybeRefValue<string>
+  onClick?: () => void
+  menuItems?: MaybeRefValue<DynamicButtonMenuItem[] | undefined>
+  permission?: UserPermissionKey
+  show?: MaybeRefValue<boolean>
   autoRegister?: boolean // 是否自动注册，默认为true
 }) {
   // 提取配置
-  const { icon, onClick, autoRegister = true } = options
+  const { icon, onClick, menuItems, permission, show, autoRegister = true } = options
 
   // 动态按钮相关
   const registerDynamicButton = inject<((button: any) => void) | null>('registerDynamicButton', null)
@@ -36,22 +73,43 @@ export function useDynamicButton(options: {
 
   // 按钮注册状态
   const dynamicButtonRegistered = ref(false)
+  const componentActive = ref(false)
+
+  const resolvedIcon = computed(() => resolveMaybeRef(icon, 'mdi-plus'))
+  const resolvedShow = computed(() => resolveMaybeRef(show, true))
+  const resolvedMenuItems = computed(() => resolveMaybeRef(menuItems))
+
+  function buildDynamicButton() {
+    const buttonMenuItems = resolvedMenuItems.value
+
+    return {
+      icon: resolvedIcon.value,
+      action: onClick || (() => {}),
+      permission,
+      show: resolvedShow.value,
+      menuItems: buttonMenuItems && buttonMenuItems.length > 0 ? buttonMenuItems : undefined,
+    }
+  }
 
   // 注册动态按钮
   function setupDynamicButton() {
-    // 避免重复注册
-    if (dynamicButtonRegistered.value) return
+    if (!componentActive.value) return
+
+    const button = buildDynamicButton()
+
+    if (!button.show) {
+      cleanupDynamicButton()
+      return
+    }
 
     // 确保注册方法存在
     if (!registerDynamicButton) {
       // 尝试获取全局注册方法
       const tryUseGlobalMethod = () => {
+        if (!componentActive.value) return false
+
         if (typeof window !== 'undefined' && window.__VUE_INJECT_DYNAMIC_BUTTON__) {
-          window.__VUE_INJECT_DYNAMIC_BUTTON__({
-            icon,
-            action: onClick,
-            show: true,
-          })
+          window.__VUE_INJECT_DYNAMIC_BUTTON__(button)
           dynamicButtonRegistered.value = true
           return true
         }
@@ -68,11 +126,9 @@ export function useDynamicButton(options: {
 
     // 如果注册方法存在，直接注册
     nextTick(() => {
-      registerDynamicButton({
-        icon,
-        action: onClick,
-        show: true,
-      })
+      if (!componentActive.value) return
+
+      registerDynamicButton(button)
       dynamicButtonRegistered.value = true
     })
   }
@@ -82,17 +138,24 @@ export function useDynamicButton(options: {
     if (unregisterDynamicButton && dynamicButtonRegistered.value) {
       unregisterDynamicButton()
       dynamicButtonRegistered.value = false
+      return
+    }
+
+    if (typeof window !== 'undefined' && window.__VUE_UNINJECT_DYNAMIC_BUTTON__) {
+      window.__VUE_UNINJECT_DYNAMIC_BUTTON__()
+      dynamicButtonRegistered.value = false
     }
   }
 
   // 暴露方法：手动打开对话框
   function openDialog() {
-    onClick()
+    onClick?.()
   }
 
   // 生命周期钩子
   if (autoRegister) {
     onMounted(() => {
+      componentActive.value = true
       // 延迟执行，确保Footer组件已加载
       setTimeout(() => {
         setupDynamicButton()
@@ -100,18 +163,27 @@ export function useDynamicButton(options: {
     })
 
     onActivated(() => {
+      componentActive.value = true
       // 重置注册状态，确保每次激活时都重新注册
       dynamicButtonRegistered.value = false
       setupDynamicButton()
     })
 
     onDeactivated(() => {
+      componentActive.value = false
       cleanupDynamicButton()
     })
 
     onUnmounted(() => {
+      componentActive.value = false
       cleanupDynamicButton()
     })
+
+    watch([resolvedIcon, resolvedShow, resolvedMenuItems, () => permission], () => {
+      if (!componentActive.value) return
+
+      setupDynamicButton()
+    }, { deep: true })
   }
 
   // 返回控制函数和状态

@@ -2,7 +2,7 @@
 import api from '@/api'
 import type { MediaInfo } from '@/api/types'
 import MediaCard from '@/components/cards/MediaCard.vue'
-import SlideView from '@/components/slide/SlideView.vue'
+import VirtualSlideView from '@/components/slide/VirtualSlideView.vue'
 import { useI18n } from 'vue-i18n'
 import { useIntersectionObserver, until } from '@vueuse/core'
 
@@ -26,15 +26,19 @@ provide('rankingPropsKey', reactive({ ...props }))
 const componentLoaded = ref(false)
 // 是否已尝试加载
 const hasTriedLoading = ref(false)
+const loadingStarted = ref(false)
 
-// 数据列表
-const dataList = ref<MediaInfo[]>([])
+// 使用 shallowRef 避免横向卡片区的大数组深层代理
+const dataList = shallowRef<MediaInfo[]>([])
 
 // 容器引用
 const containerRef = ref<HTMLElement | null>(null)
 
 // 获取订阅列表数据
 async function fetchData() {
+  if (loadingStarted.value) return
+
+  loadingStarted.value = true
   try {
     if (!props.apipath) return
     dataList.value = await api.get(props.apipath)
@@ -47,7 +51,26 @@ async function fetchData() {
     console.error(error)
     componentLoaded.value = true
   } finally {
+    loadingStarted.value = false
     hasTriedLoading.value = true
+  }
+}
+
+function isNearViewport(element: HTMLElement, rootMargin = 300) {
+  const rect = element.getBoundingClientRect()
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight
+
+  return rect.bottom >= -rootMargin && rect.top <= viewportHeight + rootMargin
+}
+
+/** IntersectionObserver 未及时回调时，首屏附近内容仍需主动发起数据请求。 */
+function loadIfNearViewport() {
+  const element = containerRef.value
+  if (!element || loadingStarted.value || hasTriedLoading.value) return
+
+  if (isNearViewport(element)) {
+    fetchData()
+    stop()
   }
 }
 
@@ -65,7 +88,13 @@ const { stop } = useIntersectionObserver(
   },
 )
 
+onMounted(() => {
+  requestAnimationFrame(loadIfNearViewport)
+  window.setTimeout(loadIfNearViewport, 600)
+})
+
 onActivated(() => {
+  loadIfNearViewport()
   if (dataList.value.length == 0 && hasTriedLoading.value) {
     fetchData()
   }
@@ -74,21 +103,21 @@ onActivated(() => {
 
 <template>
   <div ref="containerRef">
-    <SlideView v-if="componentLoaded">
-      <template #content>
-        <template v-for="data in dataList" :key="data.tmdb_id || data.douban_id || data.bangumi_id">
-          <MediaCard :media="data" width="9rem" />
-        </template>
+    <VirtualSlideView
+      :items="dataList"
+      :loading="!componentLoaded"
+      :get-item-key="item => item.tmdb_id || item.douban_id || item.bangumi_id || item.media_id || item.title"
+    >
+      <template #item="{ item }">
+        <MediaCard :media="item" width="9rem" />
       </template>
-    </SlideView>
-    <SlideView v-else-if="!componentLoaded">
-      <template #content>
+      <template #loading>
         <div v-for="i in 10" :key="i" style="width: 9rem">
           <VCard class="outline-none overflow-hidden">
             <div style="padding-bottom: 150%"></div>
           </VCard>
         </div>
       </template>
-    </SlideView>
+    </VirtualSlideView>
   </div>
 </template>

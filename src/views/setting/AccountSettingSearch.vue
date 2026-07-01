@@ -3,9 +3,17 @@ import { useToast } from 'vue-toastification'
 import api from '@/api'
 import type { FilterRuleGroup, Site } from '@/api/types'
 import { useI18n } from 'vue-i18n'
+import { useSilentSettingRefresh } from '@/composables/useSilentSettingRefresh'
 
 // 国际化
 const { t } = useI18n()
+
+const props = defineProps({
+  active: {
+    type: Boolean,
+    default: true,
+  },
+})
 
 // 提示框
 const $toast = useToast()
@@ -84,7 +92,7 @@ async function queryFilterRuleGroups() {
 // 查询用户选中的站点
 async function querySelectedSites() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/IndexerSites')
+    const result: { [key: string]: any } = await api.get('system/setting/public/IndexerSites')
 
     selectedSites.value = result.data?.value ?? []
   } catch (error) {
@@ -176,12 +184,16 @@ async function loadSystemSettings() {
   }
 }
 
+async function loadPageData() {
+  await Promise.all([querySites(), queryFilterRuleGroups(), querySelectedSites(), loadSearchSetting(), loadSystemSettings()])
+}
+
 onMounted(() => {
-  querySites()
-  queryFilterRuleGroups()
-  querySelectedSites()
-  loadSearchSetting()
-  loadSystemSettings()
+  loadPageData()
+})
+
+useSilentSettingRefresh(loadPageData, {
+  active: computed(() => props.active),
 })
 </script>
 

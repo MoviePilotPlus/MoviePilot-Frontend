@@ -4,7 +4,7 @@ import api from '@/api'
 import { DownloaderConf } from '@/api/types'
 import CollectListView from '@/views/collect/TaskListView.vue'
 import router from '@/router'
-import NoDataFound from '@/components/NoDataFound.vue'
+import NoDataFound from '@/components/states/NoDataFound.vue'
 
 const route = useRoute()
 const activeTab = ref(route.query.tab)

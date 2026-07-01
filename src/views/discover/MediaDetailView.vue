@@ -3,23 +3,32 @@ import { useToast } from 'vue-toastification'
 import PersonCardSlideView from './PersonCardSlideView.vue'
 import MediaCardSlideView from './MediaCardSlideView.vue'
 import api from '@/api'
-import type { MediaInfo, NotExistMediaInfo, Site, Subscribe, TmdbEpisode } from '@/api/types'
-import NoDataFound from '@/components/NoDataFound.vue'
-import { doneNProgress, startNProgress } from '@/api/nprogress'
-import { formatSeason } from '@/@core/utils/formatters'
+import type { MediaInfo, MediaRelease, NotExistMediaInfo, Site, Subscribe, TmdbEpisode } from '@/api/types'
+import NoDataFound from '@/components/states/NoDataFound.vue'
+import { formatSeasonLabel } from '@/@core/utils/season'
 import router from '@/router'
 import { isNullOrEmptyObject } from '@/@core/utils'
 import { useUserStore } from '@/stores'
-import SubscribeEditDialog from '@/components/dialog/SubscribeEditDialog.vue'
-import SearchSiteDialog from '@/components/dialog/SearchSiteDialog.vue'
 import { useTheme } from 'vuetify'
 import { useI18n } from 'vue-i18n'
-import { hasPermission } from '@/utils/permission'
+import { buildUserPermissionContext, hasPermission } from '@/utils/permission'
 import { useGlobalSettingsStore } from '@/stores'
-import { openMediaServerWithAutoDetect, openDoubanApp } from '@/utils/appDeepLink'
+import { openMediaServerItem, openDoubanApp } from '@/utils/appDeepLink'
+import { openSharedDialog } from '@/composables/useSharedDialog'
+import { getDisplayImageUrl } from '@/utils/imageUtils'
+import {
+  getMediaSubscribeId,
+  getSubscribeMode,
+  useMediaSubscribe,
+  type SeasonSubscribeModes,
+} from '@/composables/useMediaSubscribe'
+
+const SearchSiteDialog = defineAsyncComponent(() => import('@/components/dialog/SearchSiteDialog.vue'))
 
 // 国际化
 const { t } = useI18n()
+
+const $toast = useToast()
 
 // 输入参数
 const mediaProps = defineProps({
@@ -36,18 +45,15 @@ const globalSettings = globalSettingsStore.globalSettings
 
 // 用户 Store
 const userStore = useUserStore()
-
-// 提示框
-const $toast = useToast()
+const userPermissions = computed(() => buildUserPermissionContext(userStore.superUser, userStore.permissions))
+const canSearch = computed(() => hasPermission(userPermissions.value, 'search'))
+const canSubscribe = computed(() => hasPermission(userPermissions.value, 'subscribe'))
 
 // 获取主题信息
 const theme = useTheme()
 
 // 媒体详情
 const mediaDetail = ref<MediaInfo>({} as MediaInfo)
-
-// 订阅编辑弹窗
-const subscribeEditDialog = ref(false)
 
 // 本地是否存在，存在则包括Item信息
 const existsItemId = ref('')
@@ -70,8 +76,8 @@ const seasonsNotExisted = ref<{ [key: number]: number }>({})
 // 各季的订阅状态
 const seasonsSubscribed = ref<{ [key: number]: boolean }>({})
 
-// 订阅编号
-const subscribeId = ref<number>()
+// 各季的订阅模式
+const subscribedSeasonModes = ref<SeasonSubscribeModes>({})
 
 // 所有站点
 const allSites = ref<Site[]>([])
@@ -82,13 +88,36 @@ const selectedSites = ref<number[]>([])
 // 搜索方式 title/imdbid
 const searchType = ref('title')
 
-// 选择站点对话框
-const chooseSiteDialog = ref(false)
+interface MediaSearchOptions {
+  season?: number | null
+  episode?: number | null
+}
+
+// 站点选择后待执行的搜索类型
+const pendingSearchResultType = ref<'torrent' | 'subtitle'>('torrent')
+
+// 站点选择后待执行的季集参数
+const pendingSearchOptions = ref<MediaSearchOptions>({})
 
 // 计算主题是否为透明
 const isTransparentTheme = computed(() => {
   return theme.name.value === 'transparent'
 })
+
+// 打开站点选择弹窗，并把站点选择结果交回详情页执行搜索。
+function openSearchSiteDialog() {
+  openSharedDialog(
+    SearchSiteDialog,
+    {
+      sites: allSites.value,
+      selected: selectedSites.value,
+    },
+    {
+      search: searchSites,
+    },
+    { closeOn: ['close', 'search'] },
+  )
+}
 
 // 查询所有站点
 async function querySites() {
@@ -105,7 +134,7 @@ async function querySites() {
 // 查询用户选中的站点
 async function querySelectedSites() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/IndexerSites')
+    const result: { [key: string]: any } = await api.get('system/setting/public/IndexerSites')
 
     selectedSites.value = result.data?.value ?? []
   } catch (error) {
@@ -115,10 +144,12 @@ async function querySelectedSites() {
 
 // 获得mediaid
 function getMediaId() {
-  if (mediaDetail.value?.tmdb_id) return `tmdb:${mediaDetail.value?.tmdb_id}`
-  else if (mediaDetail.value?.douban_id) return `douban:${mediaDetail.value?.douban_id}`
-  else if (mediaDetail.value?.bangumi_id) return `bangumi:${mediaDetail.value?.bangumi_id}`
-  else return `${mediaDetail.value?.mediaid_prefix}:${mediaDetail.value?.media_id}`
+  return getMediaSubscribeId(mediaDetail.value)
+}
+
+// 生成当前媒体指定季的订阅状态缓存键
+function getSubscribeStatusKey(season: number | null = mediaDetail.value?.season ?? null) {
+  return `${getMediaId()}::${season ?? 'all'}`
 }
 
 // 调用API查询详情
@@ -192,21 +223,24 @@ async function checkExists() {
 // 查询当前媒体是否已订阅
 async function checkSubscribe(season: number | null = null) {
   try {
-    const mediaid = getMediaId()
-
-    const result: Subscribe = await api.get(`subscribe/media/${mediaid}`, {
-      params: {
-        season,
-        title: mediaDetail.value.title,
-      },
-    })
-
-    if (result.id) return true
+    return await subscribeActions.checkSubscribe(season)
   } catch (error) {
     console.error(error)
   }
 
   return false
+}
+
+// 判断订阅记录是否属于当前媒体
+function isSameSubscribeMedia(subscribe: Subscribe) {
+  if (mediaDetail.value?.tmdb_id && subscribe.tmdbid) return mediaDetail.value.tmdb_id === subscribe.tmdbid
+  if (mediaDetail.value?.douban_id && subscribe.doubanid) return mediaDetail.value.douban_id === subscribe.doubanid
+  if (mediaDetail.value?.bangumi_id && subscribe.bangumiid) return mediaDetail.value.bangumi_id === subscribe.bangumiid
+
+  const mediaId = mediaDetail.value?.media_id
+    ? `${mediaDetail.value.mediaid_prefix}:${mediaDetail.value.media_id}`
+    : ''
+  return Boolean(mediaId && subscribe.mediaid === mediaId)
 }
 
 // 检查所有季的缺失状态
@@ -248,100 +282,50 @@ const getMediaSeasons = computed(() => {
 async function checkSeasonsSubscribed() {
   if (mediaDetail.value.type !== '电视剧') return
   try {
-    mediaDetail.value?.season_info?.forEach(async item => {
-      seasonsSubscribed.value[item.season_number ?? 0] = await checkSubscribe(item.season_number ?? null)
+    const subscribes: Subscribe[] = await api.get('subscribe/')
+    const mediaSubscribes = subscribes.filter(
+      item => item.type === '电视剧' && item.season !== undefined && isSameSubscribeMedia(item),
+    )
+    const nextSubscribed: { [key: number]: boolean } = {}
+    const nextModes: SeasonSubscribeModes = {}
+
+    mediaDetail.value?.season_info?.forEach(item => {
+      const season = item.season_number ?? 0
+      nextSubscribed[season] = false
     })
+
+    mediaSubscribes.forEach(item => {
+      const season = item.season as number
+      nextSubscribed[season] = true
+      nextModes[season] = getSubscribeMode(item)
+    })
+
+    seasonsSubscribed.value = nextSubscribed
+    subscribedSeasonModes.value = nextModes
   } catch (error) {
     console.error(error)
   }
 }
 
-// 调用API添加订阅，电视剧的话需要指定季
-async function addSubscribe(season: number | null) {
-  // 开始处理
-  startNProgress()
-  try {
-    // 是否洗版
-    let best_version = existsItemId.value ? 1 : 0
-    if (season !== null)
-      // 全部存在时洗版
-      best_version = !seasonsNotExisted.value[season] ? 1 : 0
-    // 请求API
-    const result: { [key: string]: any } = await api.post('subscribe/', {
-      name: mediaDetail.value?.title,
-      type: mediaDetail.value?.type,
-      year: mediaDetail.value?.year,
-      tmdbid: mediaDetail.value?.tmdb_id,
-      doubanid: mediaDetail.value?.douban_id,
-      bangumiid: mediaDetail.value?.bangumi_id,
-      season: mediaDetail.value?.type === '电影' ? null : season,
-      best_version,
-    })
+const subscribedSeasonNumbers = computed(() =>
+  Object.entries(seasonsSubscribed.value)
+    .filter(([, subscribed]) => subscribed)
+    .map(([season]) => Number(season))
+    .sort((a, b) => a - b),
+)
 
-    // 订阅状态
-    if (result.success) {
-      // 订阅成功
-      isSubscribed.value = true
-      if (season !== null) seasonsSubscribed.value[season] = true
-    }
+const subscribeSeasonTotal = computed(() => getMediaSeasons.value.length)
 
-    // 提示
-    showSubscribeAddToast(result.success, mediaDetail.value?.title ?? '', season, result.message, best_version)
-
-    // 显示编辑弹窗
-    if (result.success) {
-      const show_edit_dialog = await queryDefaultSubscribeConfig()
-      if (show_edit_dialog) {
-        subscribeId.value = result.data.id
-        subscribeEditDialog.value = true
-      }
-    }
-  } catch (error) {
-    console.error(error)
-  }
-  doneNProgress()
-}
-
-// 弹出添加订阅提示
-function showSubscribeAddToast(result: boolean, title: string, season: number | null, message: string, best_version: number) {
-  if (season !== null) title = `${title} ${formatSeason(season.toString())}`
-
-  let subname = t('media.subscribe.normal')
-  if (best_version > 0) subname = t('media.subscribe.bestVersion')
-
-  if (!result) $toast.error(`${title} ${t('media.subscribe.addFailed', { reason: message })}`)
-}
-
-// 调用API取消订阅
-async function removeSubscribe(season: number | null) {
-  // 开始处理
-  startNProgress()
-  try {
-    const mediaid = getMediaId()
-
-    const result: { [key: string]: any } = await api.delete(`subscribe/media/${mediaid}`, {
-      params: {
-        season,
-      },
-    })
-
-    if (result.success) {
-      isSubscribed.value = false
-      if (season !== null) seasonsSubscribed.value[season] = false
-      $toast.success(`${mediaDetail.value?.title} ${t('media.subscribe.canceled')}`)
-    } else {
-      $toast.error(`${mediaDetail.value?.title} ${t('media.subscribe.cancelFailed', { reason: result.message })}`)
-    }
-  } catch (error) {
-    console.error(error)
-  }
-  doneNProgress()
-}
+const isAllSeasonsSubscribed = computed(
+  () =>
+    mediaDetail.value.type === '电视剧' &&
+    subscribeSeasonTotal.value > 0 &&
+    subscribedSeasonNumbers.value.length >= subscribeSeasonTotal.value,
+)
 
 // 订阅按钮响应
 function handleSubscribe(season: number | null = null) {
-  if (isSubscribed.value) removeSubscribe(season)
-  else addSubscribe(season)
+  subscribeActions.handleSubscribe(season)
 }
 
 // 从genres中获取name，使用、分隔
@@ -397,31 +381,19 @@ function getEpisodeImage(stillPath: string) {
 function getW500Image(url = '') {
   if (!url) return ''
   url = url.replace('original', 'w500')
-  // 使用图片缓存
-  if (globalSettings.GLOBAL_IMAGE_CACHE)
-    return `${import.meta.env.VITE_API_BASE_URL}system/cache/image?url=${encodeURIComponent(url)}`
-  return url
+  return getDisplayImageUrl(url, globalSettings.GLOBAL_IMAGE_CACHE)
 }
 
 // 计算Poster地址
 const getPosterUrl: Ref<string> = computed(() => {
   const url = mediaDetail.value.poster_path ?? ''
-  // 使用图片缓存
-  if (globalSettings.GLOBAL_IMAGE_CACHE)
-    return `${import.meta.env.VITE_API_BASE_URL}system/cache/image?url=${encodeURIComponent(url)}`
-  // 如果地址中包含douban则使用中转代理
-  if (url.includes('doubanio.com'))
-    return `${import.meta.env.VITE_API_BASE_URL}system/img/0?imgurl=${encodeURIComponent(url)}`
-  return url
+  return getDisplayImageUrl(url, globalSettings.GLOBAL_IMAGE_CACHE)
 })
 
 // 计算backdrop地址
 const getBackdropUrl: Ref<string> = computed(() => {
   const url = mediaDetail.value.backdrop_path ?? ''
-  // 使用图片缓存
-  if (globalSettings.GLOBAL_IMAGE_CACHE)
-    return `${import.meta.env.VITE_API_BASE_URL}system/cache/image?url=${encodeURIComponent(url)}`
-  return url
+  return getDisplayImageUrl(url, globalSettings.GLOBAL_IMAGE_CACHE)
 })
 
 // 获取发行国家名称
@@ -434,16 +406,22 @@ const getProductionCompanies = computed(() => {
   return mediaDetail.value.production_companies?.map(company => company.name)
 })
 
-// 获取最早实体/数字发行日期
-const getEarliestReleaseDate = computed(() => {
-  const filteredDates = mediaDetail.value.release_dates?.filter(date => [4, 5].includes(date.type))
+// 获取指定类型的最早发行日期
+function getEarliestReleaseDateByType(type: number): MediaRelease | null {
+  const filteredDates = mediaDetail.value.release_dates?.filter(date => date.type === type)
   if (!filteredDates || filteredDates.length === 0)
     return null
 
   return filteredDates.reduce((earliest, current) =>
     new Date(current.date) < new Date(earliest.date) ? current : earliest,
   )
-})
+}
+
+// 获取最早数字发行日期
+const getEarliestDigitalReleaseDate = computed(() => getEarliestReleaseDateByType(4))
+
+// 获取最早实体发行日期
+const getEarliestPhysicalReleaseDate = computed(() => getEarliestReleaseDateByType(5))
 
 // 计算存在状态的颜色
 function getExistColor(season: number) {
@@ -467,14 +445,31 @@ function getExistText(season: number) {
 
 // 计算订阅图标
 const getSubscribeIcon = computed(() => {
+  if (mediaDetail.value.type === '电视剧') return subscribedSeasonNumbers.value.length > 0 ? 'mdi-heart' : 'mdi-heart-outline'
   if (isSubscribed.value) return 'mdi-heart'
   else return 'mdi-heart-outline'
 })
 
 // 计算订阅按钮颜色
 const getSubscribeColor = computed(() => {
+  if (mediaDetail.value.type === '电视剧') {
+    if (isAllSeasonsSubscribed.value) return 'error'
+    if (subscribedSeasonNumbers.value.length > 0) return 'warning'
+    return 'warning'
+  }
   if (isSubscribed.value) return 'error'
   else return 'warning'
+})
+
+const getSubscribeText = computed(() => {
+  if (mediaDetail.value.type === '电视剧') {
+    if (isAllSeasonsSubscribed.value) return t('media.status.allSeasonsSubscribed')
+    if (subscribedSeasonNumbers.value.length > 0) {
+      return t('media.status.seasonsSubscribed', { count: subscribedSeasonNumbers.value.length })
+    }
+    return t('media.actions.subscribe')
+  }
+  return isSubscribed.value ? t('media.status.subscribed') : t('media.actions.subscribe')
 })
 
 // 使用、拼装数组为字符串
@@ -483,8 +478,10 @@ function joinArray(arr: string[]) {
 }
 
 // 开始搜索
-function handleSearch() {
+function handleSearch(resultType: 'torrent' | 'subtitle' = 'torrent', options: MediaSearchOptions = {}) {
   const keyword = getMediaId()
+  const season = options.season ?? mediaDetail.value.season
+  const episode = options.episode ?? null
   router.push({
     path: '/resource',
     query: {
@@ -493,8 +490,10 @@ function handleSearch() {
       area: searchType.value,
       title: mediaDetail.value.title,
       year: mediaDetail.value.year,
-      season: mediaDetail.value.season,
+      season,
+      episode,
       sites: selectedSites.value.join(','),
+      result_type: resultType,
     },
   })
 }
@@ -506,7 +505,12 @@ async function handlePlay() {
     const result: { [key: string]: any } = await api.get(`mediaserver/play/${existsItemId.value}`)
     if (result?.success) {
       // 使用深度链接工具，优先跳转到APP，失败后跳转到网页
-      await openMediaServerWithAutoDetect(result.data.url, undefined, result.data.server_type)
+      await openMediaServerItem({
+        link: result.data.url,
+        item_id: result.data.item_id,
+        server_id: result.data.server_id,
+        server_type: result.data.server_type,
+      })
     } else {
       $toast.error(`获取播放链接失败：${result.message}！`)
     }
@@ -515,49 +519,50 @@ async function handlePlay() {
   }
 }
 
-async function queryDefaultSubscribeConfig() {
-  // 非管理员不显示
-  if (!userStore.superUser) return false
-  try {
-    let subscribe_config_url = ''
-    if (mediaProps.type === '电影') subscribe_config_url = 'system/setting/DefaultMovieSubscribeConfig'
-    else subscribe_config_url = 'system/setting/DefaultTvSubscribeConfig'
-
-    const result: { [key: string]: any } = await api.get(subscribe_config_url)
-
-    if (result.data?.value) return result.data.value.show_edit_dialog
-  } catch (error) {
-    console.log(error)
-  }
-  return false
-}
-
 // 删除订阅处理
 function onSubscribeEditRemove() {
-  subscribeEditDialog.value = false
   if (mediaDetail.value.type === '电影') checkMovieSubscribed()
   else checkSeasonsSubscribed()
 }
 
-// 点击搜索
-async function clickSearch(type: string) {
+const subscribeActions = useMediaSubscribe({
+  media: () => mediaDetail.value,
+  canSubscribe: () => canSubscribe.value,
+  isSubscribed,
+  isExists: () => Boolean(existsItemId.value),
+  seasonsSubscribed,
+  subscribedSeasons: subscribedSeasonNumbers,
+  subscribedSeasonModes,
+  primarySeason: () => mediaDetail.value?.season ?? null,
+  getSubscribeStatusKey,
+  onEditRemove: onSubscribeEditRemove,
+})
+
+// 搜索前弹出站点选择框，确认后执行资源或字幕搜索。
+async function clickSearch(type: string, resultType: 'torrent' | 'subtitle' = 'torrent', options: MediaSearchOptions = {}) {
   searchType.value = type
+  pendingSearchResultType.value = resultType
+  pendingSearchOptions.value = options
   if (allSites.value?.length == 0) {
     await querySites()
     await querySelectedSites()
   }
   if (allSites.value?.length > 0) {
-    chooseSiteDialog.value = true
+    openSearchSiteDialog()
   } else {
-    handleSearch()
+    handleSearch(pendingSearchResultType.value, pendingSearchOptions.value)
   }
 }
 
 // 搜索多站点
 function searchSites(sites: number[]) {
-  chooseSiteDialog.value = false
   selectedSites.value = sites
-  handleSearch()
+  handleSearch(pendingSearchResultType.value, pendingSearchOptions.value)
+}
+
+// 搜索字幕
+async function handleSubtitleSearch() {
+  await clickSearch('title', 'subtitle')
 }
 
 onBeforeMount(() => {
@@ -625,10 +630,10 @@ onBeforeMount(() => {
           <VBtn
             v-if="
               (mediaDetail.tmdb_id || mediaDetail.douban_id || mediaDetail.bangumi_id) &&
-              hasPermission({ is_superuser: userStore.superUser, ...userStore.permissions }, 'search')
+              canSearch
             "
             variant="tonal"
-            color="info"
+            color="primary"
             class="mb-2"
           >
             <template #prepend>
@@ -647,7 +652,22 @@ onBeforeMount(() => {
             </VMenu>
           </VBtn>
           <VBtn
-            v-if="mediaDetail.type === '电影' || mediaDetail.douban_id || mediaDetail.bangumi_id"
+            v-if="
+              (mediaDetail.tmdb_id || mediaDetail.douban_id || mediaDetail.bangumi_id) &&
+              canSearch
+            "
+            variant="tonal"
+            color="info"
+            class="ms-2 mb-2"
+            @click="handleSubtitleSearch"
+          >
+            <template #prepend>
+              <VIcon icon="mdi-subtitles-outline" />
+            </template>
+            {{ t('media.actions.searchSubtitle') }}
+          </VBtn>
+          <VBtn
+            v-if="canSubscribe && (mediaDetail.type === '电影' || mediaDetail.tmdb_id || mediaDetail.douban_id || mediaDetail.bangumi_id)"
             class="ms-2 mb-2"
             :color="getSubscribeColor"
             variant="tonal"
@@ -656,7 +676,7 @@ onBeforeMount(() => {
             <template #prepend>
               <VIcon :icon="getSubscribeIcon" />
             </template>
-            {{ isSubscribed ? t('media.status.subscribed') : t('media.actions.subscribe') }}
+            {{ getSubscribeText }}
           </VBtn>
           <VBtn v-if="existsItemId" class="ms-2 mb-2" variant="tonal" @click="handlePlay()">
             <template #prepend>
@@ -751,8 +771,9 @@ onBeforeMount(() => {
                   <template #default>
                     <div class="flex flex-row items-center justify-between">
                       <span class="font-weight-bold">{{
-                        season.season_number === 0 && season.name ?
-                        season.name : t('media.seasonNumber', { number: season.season_number })
+                        season.season_number === 0
+                          ? season.name || formatSeasonLabel(0, t('media.specials'))
+                          : t('media.seasonNumber', { number: season.season_number })
                         }}</span>
                       <VChip size="small" class="ms-1">
                         {{ t('media.episodeCount', { count: season.episode_count }) }}
@@ -762,6 +783,7 @@ onBeforeMount(() => {
                           {{ getExistText(season.season_number || 0) }}
                         </VChip>
                         <IconBtn
+                          v-if="canSubscribe"
                           class="ms-1"
                           :color="seasonsSubscribed[season.season_number || 0] ? 'error' : 'warning'"
                           variant="text"
@@ -862,14 +884,25 @@ onBeforeMount(() => {
                 </span>
               </span>
             </div>
-            <div v-if="mediaDetail.type === '电影' && getEarliestReleaseDate" class="media-fact">
-              <span>{{ t(getEarliestReleaseDate.type === 4 ? 'media.info.digitalRelease' : 'media.info.physicalRelease') }}</span>
+            <div v-if="mediaDetail.type === '电影' && getEarliestDigitalReleaseDate" class="media-fact">
+              <span>{{ t('media.info.digitalRelease') }}</span>
               <span class="media-fact-value">
                 <span class="flex items-center justify-end">
                   <span class="inline-flex items-center justify-center h-4 w-4 text-[0.6rem] font-bold text-current border border-current leading-none">
-                    {{ getEarliestReleaseDate.iso_code }}
+                    {{ getEarliestDigitalReleaseDate.iso_code }}
                   </span>
-                  <span class="ml-1.5">{{ getEarliestReleaseDate.date.slice(0, 10) }}</span>
+                  <span class="ml-1.5">{{ getEarliestDigitalReleaseDate.date.slice(0, 10) }}</span>
+                </span>
+              </span>
+            </div>
+            <div v-if="mediaDetail.type === '电影' && getEarliestPhysicalReleaseDate" class="media-fact">
+              <span>{{ t('media.info.physicalRelease') }}</span>
+              <span class="media-fact-value">
+                <span class="flex items-center justify-end">
+                  <span class="inline-flex items-center justify-center h-4 w-4 text-[0.6rem] font-bold text-current border border-current leading-none">
+                    {{ getEarliestPhysicalReleaseDate.iso_code }}
+                  </span>
+                  <span class="ml-1.5">{{ getEarliestPhysicalReleaseDate.date.slice(0, 10) }}</span>
                 </span>
               </span>
             </div>
@@ -1020,24 +1053,6 @@ onBeforeMount(() => {
     :error-title="t('media.error.title')"
     :error-description="t('media.error.noMediaInfo')"
   />
-  <!-- 订阅编辑弹窗 -->
-  <SubscribeEditDialog
-    v-if="subscribeEditDialog"
-    v-model="subscribeEditDialog"
-    :subid="subscribeId"
-    @close="subscribeEditDialog = false"
-    @save="subscribeEditDialog = false"
-    @remove="onSubscribeEditRemove"
-  />
-  <!-- 站点选择对话框 -->
-  <SearchSiteDialog
-    v-if="chooseSiteDialog"
-    v-model="chooseSiteDialog"
-    :sites="allSites"
-    :selected="selectedSites"
-    @search="searchSites"
-    @close="chooseSiteDialog = false"
-  />
 </template>
 
 <style lang="scss" scoped>
@@ -1126,9 +1141,10 @@ onBeforeMount(() => {
 
 .media-poster {
   overflow: hidden;
-  border-radius: 0.25rem;
+  border-radius: var(--app-surface-radius);
   box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
   inline-size: 8rem;
+  transition: border-radius 0.2s ease;
 
   --tw-shadow: 0 1px 3px 0 rgba(0, 0, 0, 10%), 0 1px 2px -1px rgba(0, 0, 0, 10%);
   --tw-shadow-colored: 0 1px 3px 0 var(--tw-shadow-color), 0 1px 2px -1px var(--tw-shadow-color);
@@ -1143,7 +1159,6 @@ onBeforeMount(() => {
 
 @media (width >= 768px) {
   .media-poster {
-    border-radius: 0.5rem;
     box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
     inline-size: 11rem;
 

@@ -8,11 +8,14 @@ import qbittorrentLogo from '@/assets/images/logos/qbittorrent.png'
 import transmissionLogo from '@/assets/images/logos/transmission.png'
 import rtorrentLogo from '@/assets/images/logos/rtorrent.png'
 import embyLogo from '@/assets/images/logos/emby.png'
+import zspaceLogo from '@/assets/images/logos/zspace.webp'
 import jellyfinLogo from '@/assets/images/logos/jellyfin.png'
 import plexLogo from '@/assets/images/logos/plex.png'
 import trimemediaLogo from '@/assets/images/logos/trimemedia.png'
 import ugreenLogo from '@/assets/images/logos/ugreen.png'
 import wechatLogo from '@/assets/images/logos/wechat.png'
+import feishuLogo from '@/assets/images/logos/feishu.png'
+import clawbotLogo from '@/assets/images/logos/clawbot.png'
 import telegramLogo from '@/assets/images/logos/telegram.webp'
 import slackLogo from '@/assets/images/logos/slack.webp'
 import discordLogo from '@/assets/images/logos/discord.png'
@@ -39,10 +42,13 @@ const logoMap: Record<string, string> = {
   transmission: transmissionLogo,
   rtorrent: rtorrentLogo,
   emby: embyLogo,
+  zspace: zspaceLogo,
   jellyfin: jellyfinLogo,
   plex: plexLogo,
   trimemedia: trimemediaLogo,
   wechat: wechatLogo,
+  feishu: feishuLogo,
+  wechatclawbot: clawbotLogo,
   telegram: telegramLogo,
   slack: slackLogo,
   discord: discordLogo,
@@ -71,6 +77,39 @@ const logoMap: Record<string, string> = {
  */
 export function getLogoUrl(logoName: string): string {
   return logoMap[logoName] || ''
+}
+
+/**
+ * 判断是否为需要强制走后端代理的 Bangumi 图片。
+ * @param url 图片地址
+ * @returns 是否为 Bangumi 图片地址
+ */
+export function isBangumiImageUrl(url: string): boolean {
+  if (!url) return false
+  try {
+    const hostname = new URL(url).hostname.toLowerCase()
+    return hostname === 'lain.bgm.tv' || hostname.endsWith('.lain.bgm.tv')
+  } catch {
+    return url.includes('lain.bgm.tv')
+  }
+}
+
+/**
+ * 将远程图片地址转换为前端可直接展示的地址。
+ * @param url 原始图片地址
+ * @param useCache 是否使用后端图片缓存
+ * @returns 转换后的图片地址
+ */
+export function getDisplayImageUrl(url: string, useCache = false): string {
+  if (!url || !/^https?:\/\//i.test(url)) return url
+  const encodedUrl = encodeURIComponent(url)
+  if (isBangumiImageUrl(url))
+    return `${import.meta.env.VITE_API_BASE_URL}system/img/1?imgurl=${encodedUrl}${useCache ? '&cache=true' : ''}`
+  if (useCache)
+    return `${import.meta.env.VITE_API_BASE_URL}system/cache/image?url=${encodedUrl}`
+  if (url.includes('doubanio.com'))
+    return `${import.meta.env.VITE_API_BASE_URL}system/img/0?imgurl=${encodedUrl}`
+  return url
 }
 
 /**

@@ -76,12 +76,12 @@ async function loadHistory({ done }: { done: any }) {
       // 返回加载成功
       done('ok')
     }
-    // 取消加载中
-    loading.value = false
   } catch (e) {
     console.error(e)
     // 返回加载失败
     done('error')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -153,72 +153,113 @@ function getMediaTypeText(type: string | undefined) {
       </VCardItem>
       <VDivider />
       <VDialogCloseBtn @click="emit('close')" />
-      <VList lines="two">
-        <VInfiniteScroll mode="intersect" side="end" :items="historyList" class="overflow-visible" @load="loadHistory">
+      <VList lines="two" class="flex-grow-1 min-h-0 py-0">
+        <VInfiniteScroll mode="intersect" side="end" :items="historyList" class="h-100" @load="loadHistory">
           <template #loading>
             <LoadingBanner />
           </template>
           <template #empty />
-          <template v-if="historyList.length > 0">
-            <template v-for="(item, i) in historyList" :key="i">
-              <VListItem>
-                <template #prepend>
-                  <VImg
-                    height="75"
-                    width="50"
-                    :src="item.poster"
-                    aspect-ratio="2/3"
-                    class="object-cover rounded ring-gray-500 me-3"
-                    cover
-                  >
-                    <template #placeholder>
-                      <div class="w-full h-full">
-                        <VSkeletonLoader class="object-cover aspect-w-2 aspect-h-3" />
-                      </div>
-                    </template>
-                  </VImg>
-                </template>
-                <VListItemTitle v-if="item.type == '电视剧'">
-                  {{ item.name }}
-                  <span class="text-sm">{{ t('dialog.subscribeHistory.season', { season: item.season }) }}</span>
-                </VListItemTitle>
-                <VListItemTitle v-else>
-                  {{ item.name }}
-                </VListItemTitle>
-                <VListItemSubtitle class="mt-2">{{ formatDateDifference(item.date) }}</VListItemSubtitle>
-                <VListItemSubtitle class="mt-2">{{ item.description }}</VListItemSubtitle>
-                <template #append>
-                  <div class="me-n3">
-                    <IconBtn>
-                      <VIcon icon="mdi-dots-vertical" />
-                      <VMenu activator="parent" close-on-content-click>
-                        <VList>
-                          <VListItem
-                            v-for="(menu, i) in dropdownItems"
-                            :key="i"
-                            :base-color="menu.color"
-                            @click="menu.props.click(item)"
-                          >
-                            <template #prepend>
-                              <VIcon :icon="menu.props.prependIcon" />
-                            </template>
-                            <VListItemTitle v-text="menu.title" />
-                          </VListItem>
-                        </VList>
-                      </VMenu>
-                    </IconBtn>
-                  </div>
-                </template>
-              </VListItem>
+          <VVirtualScroll v-if="historyList.length > 0" renderless :items="historyList" :item-height="104">
+            <template #default="{ item, itemRef }">
+              <div :ref="itemRef">
+                <VListItem>
+                  <template #prepend>
+                    <VImg
+                      height="75"
+                      width="50"
+                      :src="item.poster"
+                      aspect-ratio="2/3"
+                      class="object-cover rounded ring-gray-500 me-3"
+                      cover
+                    >
+                      <template #placeholder>
+                        <div class="w-full h-full">
+                          <VSkeletonLoader class="object-cover aspect-w-2 aspect-h-3" />
+                        </div>
+                      </template>
+                    </VImg>
+                  </template>
+                  <VListItemTitle v-if="item.type == '电视剧'">
+                    {{ item.name }}
+                    <span class="text-sm">{{ t('dialog.subscribeHistory.season', { season: item.season }) }}</span>
+                  </VListItemTitle>
+                  <VListItemTitle v-else>
+                    {{ item.name }}
+                  </VListItemTitle>
+                  <VListItemSubtitle class="mt-2">{{ formatDateDifference(item.date) }}</VListItemSubtitle>
+                  <VListItemSubtitle class="mt-2">{{ item.description }}</VListItemSubtitle>
+                  <template #append>
+                    <div class="me-n3">
+                      <IconBtn>
+                        <VIcon icon="mdi-dots-vertical" />
+                        <VMenu activator="parent" close-on-content-click>
+                          <VList>
+                            <VListItem
+                              v-for="(menu, i) in dropdownItems"
+                              :key="i"
+                              :base-color="menu.color"
+                              @click="menu.props.click(item)"
+                            >
+                              <template #prepend>
+                                <VIcon :icon="menu.props.prependIcon" />
+                              </template>
+                              <VListItemTitle v-text="menu.title" />
+                            </VListItem>
+                          </VList>
+                        </VMenu>
+                      </IconBtn>
+                    </div>
+                  </template>
+                </VListItem>
+              </div>
             </template>
-          </template>
+          </VVirtualScroll>
         </VInfiniteScroll>
       </VList>
-      <VCardText v-if="historyList.length === 0 && isRefreshed" class="text-center">{{
-        t('dialog.subscribeHistory.noData')
-      }}</VCardText>
+      <VCardText v-if="historyList.length === 0 && isRefreshed" class="subscribe-history-empty">
+        <VIcon class="subscribe-history-empty__icon" icon="mdi-sync" size="30" />
+
+        <div class="subscribe-history-empty__headline">
+          {{ t('dialog.subscribeHistory.noData') }}
+        </div>
+
+        <div class="subscribe-history-empty__description">
+          {{ t('dialog.subscribeHistory.noDataHint') }}
+        </div>
+      </VCardText>
     </VCard>
     <!-- 进度框 -->
     <ProgressDialog v-if="progressDialog" v-model="progressDialog" :text="progressText" />
   </VDialog>
 </template>
+<style scoped>
+.subscribe-history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-block-size: 13rem;
+  padding-block: 2.5rem !important;
+  padding-inline: 1.5rem !important;
+  text-align: center;
+}
+
+.subscribe-history-empty__icon {
+  color: rgba(var(--v-theme-on-surface), 0.32);
+}
+
+.subscribe-history-empty__headline {
+  color: rgba(var(--v-theme-on-surface), 0.9);
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.subscribe-history-empty__description {
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 0.92rem;
+  line-height: 1.65;
+  max-inline-size: 25rem;
+}
+</style>

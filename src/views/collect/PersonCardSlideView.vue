@@ -2,7 +2,7 @@
 // @ts-nocheck
 import PersonCard from '@/components/cards/PersonCard.vue'
 import api from '@/api'
-import SlideView from '@/components/slide/SlideView.vue'
+import SlideView from '@/components/slide/VirtualSlideView.vue'
 
 // 输入参数
 const props = defineProps({

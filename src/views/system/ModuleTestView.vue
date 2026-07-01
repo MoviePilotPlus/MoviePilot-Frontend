@@ -131,7 +131,7 @@ onMounted(getModules)
   <div class="system-health-check">
     <!-- 动态进度框 - 固定在顶部 -->
     <div class="progress-container">
-      <div class="progress-card" :class="{ 'dark-theme': theme.global.current.value.dark }">
+      <div class="progress-card app-surface" :class="{ 'dark-theme': theme.global.current.value.dark }">
         <div class="progress-header">
           <VIcon
             :icon="isChecking ? 'mdi-cog-sync' : checkComplete ? 'mdi-check-circle' : 'mdi-cog'"
@@ -144,8 +144,8 @@ onMounted(getModules)
               isChecking
                 ? t('moduleTest.checking')
                 : checkComplete
-                ? t('moduleTest.complete')
-                : t('moduleTest.preparing')
+                  ? t('moduleTest.complete')
+                  : t('moduleTest.preparing')
             }}
           </h3>
         </div>
@@ -184,7 +184,7 @@ onMounted(getModules)
         <Transition v-for="(module, index) in modules" :key="module.id" name="module-item" appear>
           <div
             v-show="module.visible"
-            class="module-item"
+            class="module-item app-surface"
             :class="[module.state, { 'dark-theme': theme.global.current.value.dark }]"
           >
             <div class="module-header">
@@ -230,17 +230,19 @@ onMounted(getModules)
 <style scoped>
 .system-health-check {
   display: flex;
+  overflow: hidden;
+  flex: 1 1 auto;
   flex-direction: column;
+  block-size: 100%;
+  min-block-size: 0;
 }
 
 .progress-container {
   flex-shrink: 0;
-  background: var(--v-surface-variant);
 }
 
 .progress-card {
   padding: 20px;
-  border-radius: 12px;
   margin: 16px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
@@ -316,6 +318,7 @@ onMounted(getModules)
   flex: 1;
   min-block-size: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding-block: 0 16px;
   padding-inline: 16px;
 }
@@ -328,14 +331,8 @@ onMounted(getModules)
 
 .module-item {
   padding: 12px;
-  border: 1px solid var(--v-border-color);
-  border-radius: 8px;
   background: var(--v-surface);
   transition: all 0.3s ease;
-}
-
-.module-item:hover {
-  transform: translateY(-2px);
 }
 
 .module-item.success {

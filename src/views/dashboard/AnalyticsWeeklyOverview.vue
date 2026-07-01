@@ -2,17 +2,35 @@
 import { useTheme } from 'vuetify'
 import api from '@/api'
 import { hexToRgb } from '@layouts/utils'
-import { useUserStore } from '@/stores'
+import { formatDashboardCount, useAnimatedDashboardNumber } from '@/composables/useDashboardMotion'
 import { useI18n } from 'vue-i18n'
 
 // 国际化
 const { t } = useI18n()
 
 const vuetifyTheme = useTheme()
+const WEEKLY_BAR_RADIUS = 8
 
-// 用户 Store
-const userStore = useUserStore()
-const superUser = userStore.superUser
+/**
+ * 将入库统计柱形重绘为仅顶部圆角，规避 Safari 下 ApexCharts 禁用柱形圆角的问题。
+ */
+function roundWeeklyBarTops(chartContext: { el: HTMLElement }) {
+  const barPaths = chartContext.el.querySelectorAll<SVGPathElement>('.apexcharts-bar-area')
+
+  barPaths.forEach(barPath => {
+    const { x, y, width, height } = barPath.getBBox()
+    if (width <= 0 || height <= 0) return
+
+    const radius = Math.min(WEEKLY_BAR_RADIUS, width / 2, height / 2)
+    const right = x + width
+    const bottom = y + height
+
+    barPath.setAttribute(
+      'd',
+      `M ${x} ${bottom} L ${x} ${y + radius} Q ${x} ${y} ${x + radius} ${y} L ${right - radius} ${y} Q ${right} ${y} ${right} ${y + radius} L ${right} ${bottom} Z`,
+    )
+  })
+}
 
 const options = controlledComputed(
   () => vuetifyTheme.name.value,
@@ -21,7 +39,7 @@ const options = controlledComputed(
     const variableTheme = ref(vuetifyTheme.current.value.variables)
 
     const disabledColor = `rgba(${hexToRgb(currentTheme.value['on-surface'])},${
-      variableTheme.value['disabled-opacity']
+      variableTheme.value['medium-emphasis-opacity']
     })`
 
     const borderColor = `rgba(${hexToRgb(String(variableTheme.value['border-color']))},${
@@ -32,14 +50,20 @@ const options = controlledComputed(
       chart: {
         parentHeightOffset: 0,
         toolbar: { show: false },
+        zoom: { enabled: false, allowMouseWheelZoom: false },
+        selection: { enabled: false },
+        animations: { enabled: false },
+        events: {
+          mounted: roundWeeklyBarTops,
+          updated: roundWeeklyBarTops,
+        },
       },
       plotOptions: {
         bar: {
-          borderRadius: 9,
+          borderRadius: WEEKLY_BAR_RADIUS,
+          borderRadiusApplication: 'end',
           distributed: true,
           columnWidth: '40%',
-          endingShape: 'rounded',
-          startingShape: 'rounded',
         },
       },
       stroke: {
@@ -102,8 +126,15 @@ const series = ref([{ data: [0, 0, 0, 0, 0, 0, 0] }])
 
 // 总数
 const totalCount = computed(() => series.value[0].data.reduce((a, b) => a + b, 0))
+const animatedTotalCount = useAnimatedDashboardNumber(totalCount, {
+  delay: 100,
+  duration: 850,
+})
+const animatedTotalCountText = computed(() => formatDashboardCount(animatedTotalCount.value))
 
-// 调用API接口获取数据近7天数据
+/**
+ * 调用 API 接口获取近 7 天入库数据。
+ */
 async function getWeeklyData() {
   try {
     const res: number[] = await api.get('dashboard/transfer')
@@ -131,28 +162,50 @@ onActivated(() => {
 </script>
 
 <template>
-  <VHover>
-    <template #default="hover">
-      <VCard v-bind="hover.props">
-        <VCardItem>
-          <template #append>
-            <VIcon class="cursor-move" v-if="hover.isHovering">mdi-drag</VIcon>
-          </template>
-          <VCardTitle>{{ t('dashboard.weeklyOverview') }}</VCardTitle>
-        </VCardItem>
+  <VCard class="dashboard-work-card dashboard-grid-fill">
+    <VCardItem>
+      <VCardTitle>{{ t('dashboard.weeklyOverview') }}</VCardTitle>
+    </VCardItem>
 
-        <VCardText>
-          <VApexChart type="bar" :options="options" :series="series" :height="160" />
-          <div class="d-flex align-center mb-3">
-            <h5 class="text-h5 me-4">
-              {{ totalCount }}
-            </h5>
-            <p>{{ t('dashboard.weeklyOverviewDescription', { count: totalCount }) }} 😎</p>
-          </div>
-
-          <VBtn v-if="superUser" block to="/history"> {{ t('common.viewDetails') }} </VBtn>
-        </VCardText>
-      </VCard>
-    </template>
-  </VHover>
+    <VCardText class="dashboard-work-content">
+      <div class="dashboard-work-chart">
+        <VApexChart type="bar" :options="options" :series="series" height="100%" />
+      </div>
+      <div class="d-flex align-center mb-3">
+        <h5 class="dashboard-weekly-count text-h5 me-4">
+          {{ animatedTotalCountText }}
+        </h5>
+        <p>{{ t('dashboard.weeklyOverviewDescription', { count: animatedTotalCountText }) }} 😎</p>
+      </div>
+      <div>
+        <VBtn block to="/history"> {{ t('common.viewDetails') }} </VBtn>
+      </div>
+    </VCardText>
+  </VCard>
 </template>
+
+<style scoped>
+.dashboard-work-card {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+  min-block-size: 0;
+}
+
+.dashboard-work-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.dashboard-work-chart {
+  flex: 1 1 auto;
+  min-block-size: 0;
+}
+
+.dashboard-weekly-count {
+  font-variant-numeric: tabular-nums;
+}
+</style>

@@ -3,20 +3,20 @@ import { useToast } from 'vue-toastification'
 import { useConfirm } from '@/composables/useConfirm'
 import api from '@/api'
 import type { Plugin } from '@/api/types'
-import { isNullOrEmptyObject } from '@core/utils'
 import { getLogoUrl } from '@/utils/imageUtils'
 import { getDominantColor } from '@/@core/utils/image'
 import { formatDownloadCount } from '@/@core/utils/formatters'
-import VersionHistory from '@/components/misc/VersionHistory.vue'
-import ProgressDialog from '../dialog/ProgressDialog.vue'
-import PluginConfigDialog from '../dialog/PluginConfigDialog.vue'
-import PluginDataDialog from '../dialog/PluginDataDialog.vue'
-import LoggingView from '@/views/system/LoggingView.vue'
-import { useI18n } from 'vue-i18n'
 import { useDisplay } from 'vuetify'
+import { useI18n } from 'vue-i18n'
+import { openSharedDialog } from '@/composables/useSharedDialog'
 
-// 显示器宽度
-const display = useDisplay()
+// 插件日志面板只有点击“查看日志”时才需要，延后加载可减轻插件列表首屏。
+const PluginConfigDialog = defineAsyncComponent(() => import('../dialog/PluginConfigDialog.vue'))
+const PluginDataDialog = defineAsyncComponent(() => import('../dialog/PluginDataDialog.vue'))
+const ProgressDialog = defineAsyncComponent(() => import('../dialog/ProgressDialog.vue'))
+const PluginCloneDialog = defineAsyncComponent(() => import('../dialog/PluginCloneDialog.vue'))
+const PluginLogDialog = defineAsyncComponent(() => import('../dialog/PluginLogDialog.vue'))
+const PluginVersionHistoryDialog = defineAsyncComponent(() => import('../dialog/PluginVersionHistoryDialog.vue'))
 
 // 输入参数
 const props = defineProps({
@@ -25,6 +25,10 @@ const props = defineProps({
   action: Boolean, // 动作标识
   width: String,
   height: String,
+  sortable: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 // 定义触发的自定义事件
@@ -32,6 +36,9 @@ const emit = defineEmits(['remove', 'save', 'actionDone'])
 
 // 多语言
 const { t } = useI18n()
+
+// 显示器宽度
+const display = useDisplay()
 
 // 背景颜色
 const backgroundColor = ref('#28A9E1')
@@ -48,23 +55,8 @@ const createConfirm = useConfirm()
 // 本身是否可见
 const isVisible = ref(true)
 
-// 插件配置页面
-const pluginConfigDialog = ref(false)
-
 // 菜单显示状态
 const menuVisible = ref(false)
-
-// 进度框
-const progressDialog = ref(false)
-
-// 插件数据页面
-const pluginInfoDialog = ref(false)
-
-// 实时日志弹窗
-const loggingDialog = ref(false)
-
-// 进度框文本
-const progressText = ref('正在更新插件...')
 
 // 用户头像是否加载完成
 const isAvatarLoaded = ref(false)
@@ -75,20 +67,21 @@ const isImageLoaded = ref(false)
 // 图片是否加载失败
 const imageLoadError = ref(false)
 
-// 更新日志弹窗
-const releaseDialog = ref(false)
+let progressDialogController: ReturnType<typeof openSharedDialog> | null = null
+let cloneDialogController: ReturnType<typeof openSharedDialog> | null = null
+let versionHistoryDialogController: ReturnType<typeof openSharedDialog> | null = null
 
-// 插件分身对话框
-const pluginCloneDialog = ref(false)
+/** 打开插件操作进度弹窗，插件卡片自身不再持有进度弹窗实例。 */
+function showPluginProgress(text: string) {
+  progressDialogController?.close()
+  progressDialogController = openSharedDialog(ProgressDialog, { text }, {}, { closeOn: false })
+}
 
-// 插件分身表单
-const cloneForm = ref({
-  suffix: '',
-  name: '',
-  description: '',
-  version: '',
-  icon: '',
-})
+/** 关闭当前插件操作进度弹窗。 */
+function closePluginProgress() {
+  progressDialogController?.close()
+  progressDialogController = null
+}
 
 // 监听动作标识，如为true则打开详情
 watch(
@@ -110,13 +103,14 @@ async function imageLoaded() {
 }
 
 // 显示更新日志
-function showUpdateHistory() {
-  // 检查当前版本是否有更新日志
-  if (isNullOrEmptyObject(props.plugin?.history)) {
-    updatePlugin()
-  } else {
-    releaseDialog.value = true
-  }
+function showUpdateHistory(showUpdateAction: boolean = false) {
+  versionHistoryDialogController?.close()
+  versionHistoryDialogController = openSharedDialog(
+    PluginVersionHistoryDialog,
+    { plugin: props.plugin, showUpdateAction },
+    { update: updatePlugin },
+    { closeOn: ['close', 'update:modelValue'] },
+  )
 }
 
 // 调用API卸载插件
@@ -130,11 +124,10 @@ async function uninstallPlugin() {
 
   try {
     // 显示等待提示框
-    progressDialog.value = true
-    progressText.value = t('plugin.uninstalling', { name: props.plugin?.plugin_name })
+    showPluginProgress(t('plugin.uninstalling', { name: props.plugin?.plugin_name }))
     const result: { [key: string]: any } = await api.delete(`plugin/${props.plugin?.id}`)
     // 隐藏等待提示框
-    progressDialog.value = false
+    closePluginProgress()
     if (result.success) {
       $toast.success(t('plugin.uninstallSuccess', { name: props.plugin?.plugin_name }))
 
@@ -149,21 +142,34 @@ async function uninstallPlugin() {
       )
     }
   } catch (error) {
+    closePluginProgress()
     console.error(error)
   }
 }
 
 // 显示插件数据
 async function showPluginInfo() {
-  pluginConfigDialog.value = false
-  pluginInfoDialog.value = true
+  openSharedDialog(
+    PluginDataDialog,
+    { plugin: props.plugin },
+    {
+      switch: showPluginConfig,
+    },
+    { closeOn: ['close', 'switch'] },
+  )
 }
 
 // 显示插件配置
 async function showPluginConfig() {
-  // 显示对话框
-  pluginInfoDialog.value = false
-  pluginConfigDialog.value = true
+  openSharedDialog(
+    PluginConfigDialog,
+    { plugin: props.plugin },
+    {
+      save: configDone,
+      switch: showPluginInfo,
+    },
+    { closeOn: ['close', 'save', 'switch'] },
+  )
 }
 
 // 计算图标路径
@@ -215,25 +221,48 @@ async function resetPlugin() {
 }
 
 // 更新插件
-async function updatePlugin() {
+async function updatePlugin(releaseVersion?: string, repoUrl?: string) {
+  if (!releaseVersion && props.plugin?.system_version_compatible === false) {
+    $toast.error(props.plugin?.system_version_message || t('plugin.incompatibleSystemVersion'))
+    return
+  }
+
+  if (releaseVersion) {
+    const isConfirmed = await createConfirm({
+      title: t('common.confirm'),
+      content: t('plugin.confirmInstallOldRelease', {
+        name: props.plugin?.plugin_name,
+        version: releaseVersion,
+      }),
+      confirmText: t('common.confirm'),
+    })
+
+    if (!isConfirmed) return
+  }
+
   try {
-    releaseDialog.value = false
     // 显示等待提示框
-    progressDialog.value = true
-    progressText.value = t('plugin.updating', { name: props.plugin?.plugin_name })
+    showPluginProgress(
+      releaseVersion
+        ? t('plugin.installing', { name: props.plugin?.plugin_name, version: releaseVersion })
+        : t('plugin.updating', { name: props.plugin?.plugin_name }),
+    )
 
     const result: { [key: string]: any } = await api.get(`plugin/install/${props.plugin?.id}`, {
       params: {
-        repo_url: props.plugin?.repo_url,
+        repo_url: repoUrl || props.plugin?.repo_url,
+        release_version: releaseVersion,
         force: true,
       },
     })
 
     // 隐藏等待提示框
-    progressDialog.value = false
+    closePluginProgress()
 
     if (result.success) {
       $toast.success(t('plugin.updateSuccess', { name: props.plugin?.plugin_name }))
+      versionHistoryDialogController?.close()
+      versionHistoryDialogController = null
 
       // 通知父组件刷新
       emit('save')
@@ -246,21 +275,107 @@ async function updatePlugin() {
       )
     }
   } catch (error) {
+    closePluginProgress()
     console.error(error)
   }
 }
 
-// 访问作者主页
-function visitAuthorPage() {
-  window.open(props.plugin?.author_url, '_blank')
+/** 将 raw.githubusercontent.com 插件地址转换为可访问的 GitHub 项目主页。 */
+function normalizePluginRepoUrl(repoUrl?: string) {
+  if (!repoUrl || !repoUrl.includes('raw.githubusercontent.com')) return repoUrl
+
+  try {
+    const rawUrl = new URL(repoUrl)
+    const [user, repo] = rawUrl.pathname.split('/').filter(Boolean)
+
+    if (user && repo) return `https://github.com/${user}/${repo}`
+  } catch (error) {
+    console.error(error)
+  }
+
+  return repoUrl
 }
 
-// 查看日志URL
-function openLoggerWindow() {
-  const url = `${
-    import.meta.env.VITE_API_BASE_URL
-  }system/logging?length=-1&logfile=plugins/${props.plugin?.id?.toLowerCase()}.log`
-  window.open(url, '_blank')
+/** 判断插件当前是否已经有可用的远程项目地址。 */
+function hasRemoteRepoUrl(plugin?: Plugin) {
+  return Boolean(plugin?.repo_url && !plugin.repo_url.startsWith('local://'))
+}
+
+/** 优先解析插件仓库地址，本地插件或缺少仓库地址时回退到作者主页。 */
+function resolvePluginPageUrl(plugin?: Plugin) {
+  if (!plugin) return ''
+
+  const repoUrl =
+    hasRemoteRepoUrl(plugin)
+      ? normalizePluginRepoUrl(plugin.repo_url)
+      : plugin.author_url
+
+  return repoUrl || plugin.author_url || ''
+}
+
+/** 从插件市场中查找同 ID 插件，补齐已安装插件缺失的 repo_url。 */
+async function fetchMarketPlugin(pluginId?: string) {
+  if (!pluginId) return null
+
+  try {
+    const marketPlugins: Plugin[] = await api.get('plugin/', {
+      params: {
+        state: 'market',
+        force: false,
+      },
+    })
+
+    return marketPlugins.find(plugin => plugin.id === pluginId) || null
+  } catch (error) {
+    console.error(error)
+    return null
+  }
+}
+
+// 访问插件项目主页
+async function visitPluginPage() {
+  const popup = window.open('about:blank', '_blank')
+  let pluginDetail = props.plugin
+
+  if (popup) popup.opener = null
+
+  try {
+    if (props.plugin?.id) {
+      const historyPlugin: Plugin = await api.get(`plugin/history/${props.plugin.id}`, {
+        params: {
+          force: false,
+        },
+      })
+
+      // 历史接口可能只返回部分字段，合并原卡片数据避免丢失 author_url 兜底。
+      pluginDetail = { ...(props.plugin || {}), ...(historyPlugin || {}) } as Plugin
+    }
+  } catch (error) {
+    console.error(error)
+  }
+
+  if (!hasRemoteRepoUrl(pluginDetail)) {
+    const marketPlugin = await fetchMarketPlugin(props.plugin?.id)
+
+    if (marketPlugin) {
+      // 插件市场条目通常包含真实仓库地址，优先使用它来对齐市场卡片跳转。
+      pluginDetail = { ...(pluginDetail || {}), ...marketPlugin } as Plugin
+    }
+  }
+
+  const repoUrl = resolvePluginPageUrl(pluginDetail)
+
+  if (repoUrl) {
+    if (popup) {
+      popup.location.replace(repoUrl)
+      return
+    }
+
+    window.open(repoUrl, '_blank')
+    return
+  }
+
+  popup?.close()
 }
 
 // 打开插件详情
@@ -269,59 +384,70 @@ function openPluginDetail() {
   else showPluginConfig()
 }
 
+function handleCardClick() {
+  if (props.sortable) {
+    return
+  }
+
+  openPluginDetail()
+}
+
 // 配置完成
 function configDone() {
-  pluginConfigDialog.value = false
   emit('save')
 }
 
-// 显示插件分身对话框
+/** 显示插件分身共享弹窗。 */
 function showPluginClone() {
-  cloneForm.value = {
-    suffix: '',
-    name: t('plugin.cloneDefaultName', { name: props.plugin?.plugin_name }),
-    description: t('plugin.cloneDefaultDescription', { description: props.plugin?.plugin_desc }),
-    version: props.plugin?.plugin_version || '1.0',
-    icon: props.plugin?.plugin_icon || '',
-  }
-  pluginCloneDialog.value = true
+  cloneDialogController?.close()
+  cloneDialogController = openSharedDialog(
+    PluginCloneDialog,
+    { plugin: props.plugin },
+    { clone: executePluginClone },
+    { closeOn: ['close', 'update:modelValue'] },
+  )
 }
 
 // 执行插件分身
-async function executePluginClone() {
-  if (!cloneForm.value.suffix.trim()) {
+async function executePluginClone(cloneForm: { suffix: string; name: string; description: string; version: string; icon: string }) {
+  if (!cloneForm.suffix.trim()) {
     $toast.error(t('plugin.suffixRequired'))
     return
   }
 
   try {
-    progressDialog.value = true
-    progressText.value = t('plugin.cloning', { name: props.plugin?.plugin_name })
+    showPluginProgress(t('plugin.cloning', { name: props.plugin?.plugin_name }))
 
     const result: { [key: string]: any } = await api.post(`plugin/clone/${props.plugin?.id}`, {
-      suffix: cloneForm.value.suffix.trim(),
-      name: cloneForm.value.name.trim(),
-      description: cloneForm.value.description.trim(),
-      version: cloneForm.value.version.trim(),
-      icon: cloneForm.value.icon.trim(),
+      suffix: cloneForm.suffix.trim(),
+      name: cloneForm.name.trim(),
+      description: cloneForm.description.trim(),
+      version: cloneForm.version.trim(),
+      icon: cloneForm.icon.trim(),
     })
 
-    progressDialog.value = false
+    closePluginProgress()
 
     if (result.success) {
-      $toast.success(t('plugin.cloneSuccess', { name: cloneForm.value.name }))
-      pluginCloneDialog.value = false
+      $toast.success(t('plugin.cloneSuccess', { name: cloneForm.name }))
+      cloneDialogController?.close()
+      cloneDialogController = null
       // 通知父组件刷新
       emit('remove')
     } else {
       $toast.error(t('plugin.cloneFailed', { message: result.message }))
     }
   } catch (error) {
-    progressDialog.value = false
+    closePluginProgress()
     $toast.error(t('plugin.cloneFailedGeneral'))
     console.error(error)
   }
 }
+
+onUnmounted(() => {
+  closePluginProgress()
+  cloneDialogController?.close()
+})
 
 // 弹出菜单
 const dropdownItems = ref([
@@ -360,7 +486,7 @@ const dropdownItems = ref([
     props: {
       prependIcon: 'mdi-arrow-up-circle-outline',
       color: 'success',
-      click: showUpdateHistory,
+      click: () => showUpdateHistory(true),
     },
   },
   {
@@ -384,23 +510,32 @@ const dropdownItems = ref([
     },
   },
   {
+    title: t('plugin.versionHistory'),
+    value: 9,
+    show: !props.plugin?.has_update,
+    props: {
+      prependIcon: 'mdi-update',
+      click: () => showUpdateHistory(false),
+    },
+  },
+  {
     title: t('plugin.viewLogs'),
     value: 6,
     show: true,
     props: {
       prependIcon: 'mdi-file-document-outline',
       click: () => {
-        loggingDialog.value = true
+        openSharedDialog(PluginLogDialog, { plugin: props.plugin }, {}, { closeOn: ['close', 'update:modelValue'] })
       },
     },
   },
   {
-    title: t('plugin.authorHome'),
+    title: t('plugin.projectHome'),
     value: 7,
     show: true,
     props: {
-      prependIcon: 'mdi-home-circle-outline',
-      click: visitAuthorPage,
+      prependIcon: 'mdi-github',
+      click: visitPluginPage,
     },
   },
 ])
@@ -411,6 +546,9 @@ watch(
   (newHasUpdate, _) => {
     const updateItemIndex = dropdownItems.value.findIndex(item => item.value === 3)
     if (updateItemIndex !== -1) dropdownItems.value[updateItemIndex].show = newHasUpdate
+
+    const updateHistoryItemIndex = dropdownItems.value.findIndex(item => item.value === 9)
+    if (updateHistoryItemIndex !== -1) dropdownItems.value[updateHistoryItemIndex].show = !newHasUpdate
   },
 )
 
@@ -420,6 +558,7 @@ watch(
   (newOpenState, _) => {
     if (newOpenState) openPluginDetail()
   },
+  { immediate: true },
 )
 </script>
 
@@ -428,17 +567,19 @@ watch(
     <!-- 插件卡片 -->
     <VHover>
       <template #default="hover">
-        <VCard
-          v-if="isVisible"
-          v-bind="hover.props"
-          :width="props.width"
-          :height="props.height"
-          @click="openPluginDetail"
-          class="flex flex-col h-full"
-          :class="{
-            'transition transform-cpu duration-300 -translate-y-1': hover.isHovering,
-          }"
-        >
+        <!-- Hover 命中区域保持静止，避免卡片上浮后底边反复触发 mouseleave。 -->
+        <div v-if="isVisible" v-bind="hover.props" class="plugin-card-hover-area h-full">
+          <VCard
+            :width="props.width"
+            :height="props.height"
+            @click="handleCardClick"
+            class="app-hover-lift-card flex flex-col h-full"
+            :class="{
+              'app-hover-lift-card--hovering': hover.isHovering && !props.sortable,
+              'cursor-move': props.sortable,
+            }"
+            :ripple="!props.sortable"
+          >
           <div
             class="flex-grow"
             :style="`background: linear-gradient(rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0.5) 100%), linear-gradient(${backgroundColor} 0%, ${backgroundColor} 100%)`"
@@ -458,7 +599,10 @@ watch(
                   {{ props.plugin?.plugin_desc }}
                 </div>
               </div>
-              <div class="relative flex-shrink-0 self-center pb-3" :class="{ 'cursor-move': display.mdAndUp.value }">
+              <div
+                class="relative flex-shrink-0 self-center pb-3"
+                :class="{ 'cursor-move': props.sortable && display.mdAndUp.value }"
+              >
                 <VAvatar size="48">
                   <VImg
                     ref="imageRef"
@@ -482,7 +626,11 @@ watch(
                     <VIcon v-if="!isAvatarLoaded" size="small" icon="mdi-github" class="me-1" />
                   </template>
                 </VImg>
+                <span v-if="props.sortable" class="overflow-hidden text-ellipsis whitespace-nowrap">
+                  {{ props.plugin?.plugin_author }}
+                </span>
                 <a
+                  v-else
                   :href="props.plugin?.author_url"
                   target="_blank"
                   @click.stop
@@ -496,8 +644,8 @@ watch(
                 <span class="text-sm">{{ formatDownloadCount(props.count) }}</span>
               </span>
             </div>
-            <div class="absolute bottom-0 right-0">
-              <IconBtn>
+            <div v-if="!props.sortable" class="absolute bottom-0 right-0">
+              <IconBtn @click.stop>
                 <VIcon icon="mdi-dots-vertical" />
                 <VMenu v-model="menuVisible" activator="parent" close-on-content-click>
                   <VList>
@@ -521,191 +669,19 @@ watch(
           <div v-if="props.plugin?.has_update" class="me-n3 absolute top-0 right-5">
             <VIcon icon="mdi-new-box" class="text-white" />
           </div>
-        </VCard>
+          </VCard>
+        </div>
       </template>
     </VHover>
 
-    <!-- 插件配置页面 -->
-    <PluginConfigDialog
-      v-if="pluginConfigDialog"
-      v-model="pluginConfigDialog"
-      :plugin="props.plugin"
-      @save="configDone"
-      @close="pluginConfigDialog = false"
-      @switch="showPluginInfo"
-    />
-
-    <!-- 插件数据页面 -->
-    <PluginDataDialog
-      v-if="pluginInfoDialog"
-      v-model="pluginInfoDialog"
-      :plugin="props.plugin"
-      @close="pluginInfoDialog = false"
-      @switch="showPluginConfig"
-    />
-
-    <!-- 进度框 -->
-    <ProgressDialog v-if="progressDialog" v-model="progressDialog" :text="progressText" />
-
-    <!-- 更新日志 -->
-    <VDialog v-if="releaseDialog" v-model="releaseDialog" width="600" scrollable :fullscreen="!display.mdAndUp.value">
-      <VCard :title="t('plugin.updateHistoryTitle', { name: props.plugin?.plugin_name })">
-        <VDialogCloseBtn @click="releaseDialog = false" />
-        <VDivider />
-        <VersionHistory :history="props.plugin?.history" />
-        <VDivider />
-        <VCardItem>
-          <VBtn @click="updatePlugin" block>
-            <template #prepend>
-              <VIcon icon="mdi-arrow-up-circle-outline" />
-            </template>
-            {{ t('plugin.updateToLatest') }}
-          </VBtn>
-        </VCardItem>
-      </VCard>
-    </VDialog>
-
-    <!-- 实时日志弹窗 -->
-    <VDialog
-      v-if="loggingDialog"
-      v-model="loggingDialog"
-      scrollable
-      max-width="60rem"
-      :fullscreen="!display.mdAndUp.value"
-    >
-      <VCard>
-        <VDialogCloseBtn @click="loggingDialog = false" />
-        <VCardItem>
-          <VCardTitle class="d-inline-flex">
-            <VIcon icon="mdi-file-document" class="me-2" />
-            {{ t('plugin.logTitle') }}
-            <a class="mx-2 d-inline-flex align-center cursor-pointer" @click="openLoggerWindow">
-              <VChip color="grey-darken-1" size="small" class="ml-2">
-                <VIcon icon="mdi-open-in-new" size="small" start />
-                {{ t('common.openInNewWindow') }}
-              </VChip>
-            </a>
-          </VCardTitle>
-        </VCardItem>
-        <VDivider />
-        <VCardText>
-          <LoggingView :logfile="`plugins/${props.plugin?.id?.toLowerCase()}.log`" />
-        </VCardText>
-      </VCard>
-    </VDialog>
-
-    <!-- 插件分身对话框 -->
-    <VDialog
-      v-if="pluginCloneDialog"
-      v-model="pluginCloneDialog"
-      width="600"
-      scrollable
-      :fullscreen="!display.mdAndUp.value"
-    >
-      <VCard>
-        <VCardItem class="py-2">
-          <template #prepend>
-            <VIcon icon="mdi-content-copy" class="me-2" />
-          </template>
-          <VCardTitle>{{ t('plugin.cloneTitle') }}</VCardTitle>
-          <VCardSubtitle>{{ t('plugin.cloneSubtitle', { name: props.plugin?.plugin_name }) }}</VCardSubtitle>
-        </VCardItem>
-        <VDialogCloseBtn @click="pluginCloneDialog = false" />
-        <VDivider />
-        <VCardText>
-          <VForm>
-            <VRow>
-              <VCol cols="12" md="6">
-                <VTextField
-                  v-model="cloneForm.suffix"
-                  :label="t('plugin.suffix') + ' *'"
-                  :placeholder="t('plugin.suffixPlaceholder')"
-                  :hint="t('plugin.suffixHint')"
-                  persistent-hint
-                  :rules="[
-                    v => !!v || t('plugin.suffixRequired'),
-                    v => /^[a-zA-Z0-9]+$/.test(v) || t('plugin.suffixFormatError'),
-                    v => v.length <= 20 || t('plugin.suffixLengthError'),
-                  ]"
-                  required
-                  prepend-inner-icon="mdi-tag"
-                />
-              </VCol>
-
-              <VCol cols="12" md="6">
-                <VTextField
-                  v-model="cloneForm.name"
-                  :label="t('plugin.cloneName')"
-                  :placeholder="t('plugin.cloneNamePlaceholder')"
-                  :hint="t('plugin.cloneNameHint')"
-                  persistent-hint
-                  prepend-inner-icon="mdi-rename-box"
-                />
-              </VCol>
-
-              <VCol cols="12">
-                <VTextField
-                  v-model="cloneForm.description"
-                  :label="t('plugin.cloneDescriptionLabel')"
-                  :placeholder="t('plugin.cloneDescriptionPlaceholder')"
-                  :hint="t('plugin.cloneDescriptionHint')"
-                  persistent-hint
-                  prepend-inner-icon="mdi-text"
-                />
-              </VCol>
-
-              <VCol cols="12" md="6">
-                <VTextField
-                  v-model="cloneForm.version"
-                  :label="t('plugin.cloneVersion')"
-                  :placeholder="t('plugin.cloneVersionPlaceholder')"
-                  :hint="t('plugin.cloneVersionHint')"
-                  persistent-hint
-                  prepend-inner-icon="mdi-numeric"
-                />
-              </VCol>
-
-              <VCol cols="12" md="6">
-                <VTextField
-                  v-model="cloneForm.icon"
-                  :label="t('plugin.cloneIcon')"
-                  :placeholder="t('plugin.cloneIconPlaceholder')"
-                  :hint="t('plugin.cloneIconHint')"
-                  persistent-hint
-                  prepend-inner-icon="mdi-image"
-                />
-              </VCol>
-
-              <!-- 重要提醒 -->
-              <VCol cols="12">
-                <VAlert type="warning" variant="tonal" density="compact" class="mt-2" icon="mdi-alert-circle-outline">
-                  <div class="text-body-2">
-                    <strong>{{ t('common.notice') }}</strong
-                    >：{{ t('plugin.cloneNotice') }}
-                  </div>
-                </VAlert>
-              </VCol>
-            </VRow>
-          </VForm>
-        </VCardText>
-        <VCardActions class="pt-3">
-          <VSpacer />
-          <VBtn
-            color="primary"
-            @click="executePluginClone"
-            prepend-icon="mdi-content-copy"
-            class="px-5"
-            :disabled="!cloneForm.suffix.trim()"
-          >
-            {{ t('plugin.createClone') }}
-          </VBtn>
-        </VCardActions>
-      </VCard>
-    </VDialog>
   </div>
 </template>
 
 <style lang="scss" scoped>
+.plugin-card-hover-area {
+  inline-size: 100%;
+}
+
 .card-cover-blurred::before {
   position: absolute;
   /* stylelint-disable-next-line property-no-vendor-prefix */

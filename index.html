@@ -1,11 +1,16 @@
 <!DOCTYPE html>
-<html lang="zh-CN" style="
-    overflow: hidden auto;
-    min-block-size: 100vh;
-    min-block-size: 100dvh;
+<html lang="zh-CN" data-launch-loading="true" style="
+    overflow: hidden;
     --safe-area-inset-bottom: env(safe-area-inset-bottom);
     --safe-area-inset-top: env(safe-area-inset-top);
-    background: var(--initial-loader-bg, #fff);
+    --initial-loader-bg: #0E1116;
+    --initial-loader-color: #9155FD;
+    --initial-loader-height: 100svh;
+    --initial-loader-width: 100vw;
+    --initial-color-scheme: dark;
+    background: var(--initial-loader-bg, #0E1116);
+    background-color: var(--initial-loader-bg, #0E1116);
+    color-scheme: dark;
   ">
 
 <head>
@@ -13,7 +18,7 @@
   <meta charset="UTF-8" />
   <!-- 核心viewport设置 - 针对PWA优化 -->
   <meta name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover, shrink-to-fit=no, interactive-widget=resizes-content" />
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover, shrink-to-fit=no" />
 
   <!-- 防止缩放和选择，提供原生应用体验 -->
   <meta name="format-detection" content="telephone=no, date=no, email=no, address=no" />
@@ -34,7 +39,7 @@
 
   <!-- iOS Safari PWA 优化 -->
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-  <link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png" />
+  <link rel="apple-touch-icon-precomposed" href="/apple-touch-icon-precomposed.png" />
   <link rel="apple-touch-startup-image" href="/splash/apple-splash.png" />
 
   <!-- iOS Safari 全屏模式 -->
@@ -92,50 +97,102 @@
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 
   <style>
-    #app {
-      min-block-size: 100%;
+    html,
+    body {
+      background: var(--initial-loader-bg, #0E1116);
+      background-color: var(--initial-loader-bg, #0E1116);
+      color-scheme: var(--initial-color-scheme, dark);
+    }
+
+    html[data-launch-loading="true"],
+    html[data-launch-loading="true"] body {
+      overflow: hidden;
+    }
+
+    html[data-launch-loading="true"] body {
+      min-block-size: var(--initial-loader-height, 100svh);
+    }
+
+    html[data-launch-loading="true"] #app {
+      min-block-size: var(--initial-loader-height, 100svh);
+      background: var(--initial-loader-bg, #0E1116);
+      background-color: var(--initial-loader-bg, #0E1116);
       -webkit-overflow-scrolling: touch;
       overscroll-behavior: contain;
     }
 
+    html[data-launch-loading="true"] .footer-nav-container {
+      opacity: 0 !important;
+      pointer-events: none !important;
+      visibility: hidden !important;
+    }
+
     #loading-bg {
       position: fixed;
+      inset: 0;
       z-index: 99999;
       display: block;
-      background: var(--initial-loader-bg, #fff);
-      block-size: 100vh;
-      inline-size: 100vw;
-      transition: opacity 0.8s ease, transform 0.8s ease, filter 0.8s ease;
+      overflow: hidden;
+      background: var(--initial-loader-bg, #0E1116);
+      background-color: var(--initial-loader-bg, #0E1116);
+    }
+
+    .loading-shell {
+      box-sizing: border-box;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      block-size: var(--initial-loader-height, 100svh);
+      inline-size: 100%;
+      min-block-size: var(--initial-loader-height, 100svh);
+      transition: opacity 0.12s ease-out, transform 0.12s ease-out;
+      padding:
+        calc(env(safe-area-inset-top, 0px) + 24px)
+        24px
+        calc(env(safe-area-inset-bottom, 0px) + 48px);
+    }
+
+    .loading-main {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-block-size: 0;
     }
 
     .loading-logo {
-      position: absolute;
-      inset-block-start: 35%;
-      inset-inline-start: calc(50% - 5rem);
-      transition: opacity 0.8s ease, transform 0.8s ease, filter 0.8s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      inline-size: min(160px, 36vw);
+      transform: translate3d(0, 0, 0);
+      will-change: transform;
     }
 
-    .loading-complete .loading-logo {
-      filter: blur(10px);
-      opacity: 0;
-      transform: scale(1.5);
+    .loading-logo img {
+      display: block;
+      block-size: auto;
+      inline-size: 100%;
     }
 
-    .loading-complete {
-      filter: blur(15px);
+    .loading-footer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-block-size: clamp(72px, 14vh, 120px);
+    }
+
+    .loading-complete .loading-shell,
+    .loading-complete #loading-timeout {
       opacity: 0;
-      transform: scale(1.2);
+      transform: translate3d(0, 6px, 0);
     }
 
     .loading {
-      position: absolute;
+      position: relative;
       box-sizing: border-box;
       border: 3px solid transparent;
       border-radius: 50%;
-      block-size: 55px;
-      inline-size: 55px;
-      inset-block-start: 80%;
-      inset-inline-start: calc(50% - 27.5px);
+      block-size: 46px;
+      inline-size: 46px;
       transition: opacity 0.6s ease;
     }
 
@@ -198,7 +255,7 @@
       position: absolute;
       z-index: 2500;
       display: none;
-      inset-block-end: 20px;
+      inset-block-end: calc(env(safe-area-inset-bottom, 0px) + 24px);
       inset-inline-start: 50%;
       transform: translateX(-50%);
       background: rgba(0, 0, 0, 0.8);
@@ -209,7 +266,8 @@
       font-family: sans-serif;
       text-align: center;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-      white-space: nowrap;
+      max-inline-size: calc(100% - 32px);
+      white-space: normal;
       backdrop-filter: blur(4px);
       border: 1px solid rgba(255, 255, 255, 0.1);
     }
@@ -233,25 +291,170 @@
       }
     }
 
-    // 主题色彩初始化
-    let loaderColor = localStorage.getItem('materio-initial-loader-bg')
-    let primaryColor = localStorage.getItem('materio-initial-loader-color')
-
-    // 检查主题设置
-    const savedTheme = localStorage.getItem('theme') || 'auto'
-    const isAutoTheme = savedTheme === 'auto'
-
-    // 如果是自动主题或者没有保存的背景色，根据系统主题设置背景色
-    if (isAutoTheme || !loaderColor) {
-      loaderColor = checkPrefersColorSchemeIsDark() ? '#0E1116' : '#FFFFFF'
+    function getLocalStorageValue(key) {
+      try {
+        return localStorage.getItem(key)
+      } catch (e) {
+        return null
+      }
     }
-    if (!primaryColor) {
-      primaryColor = '#9155FD'
+
+    // 根据当前主题提前确定启动屏色彩，避免 iOS PWA 从原生启动图切到网页时露出默认白底。
+    const launchThemePalettes = {
+      light: {
+        background: '#F4F5FA',
+        primary: '#9155FD',
+      },
+      dark: {
+        background: '#0E1116',
+        primary: '#6E66ED',
+      },
+      purple: {
+        background: '#28243D',
+        primary: '#9155FD',
+      },
+      transparent: {
+        background: '#1C1C1C',
+        primary: '#A370F7',
+      },
+    }
+
+    function getSavedThemePreference() {
+      return getLocalStorageValue('theme') || 'auto'
+    }
+
+    function resolveLaunchTheme(themePreference) {
+      if (themePreference === 'auto') {
+        return checkPrefersColorSchemeIsDark() ? 'dark' : 'light'
+      }
+
+      if (themePreference === 'default') {
+        return 'light'
+      }
+
+      return launchThemePalettes[themePreference] ? themePreference : 'light'
+    }
+
+    function getLaunchColorScheme(themeName) {
+      return ['dark', 'purple', 'transparent'].includes(themeName) ? 'dark' : 'light'
+    }
+
+    function setMetaContent(selector, content) {
+      document.querySelectorAll(selector).forEach(meta => {
+        meta.setAttribute('content', content)
+      })
+    }
+
+    function syncThemeColorMeta(themeColor) {
+      const metas = document.querySelectorAll('meta[name="theme-color"]')
+
+      if (metas.length) {
+        metas.forEach(meta => {
+          meta.setAttribute('content', themeColor)
+        })
+
+        return
+      }
+
+      const meta = document.createElement('meta')
+      meta.name = 'theme-color'
+      meta.content = themeColor
+      document.head.appendChild(meta)
+    }
+
+    function applyLaunchThemeChrome() {
+      const themePreference = getSavedThemePreference()
+      const resolvedLaunchTheme = resolveLaunchTheme(themePreference)
+      const colorScheme = getLaunchColorScheme(resolvedLaunchTheme)
+      const palette = launchThemePalettes[resolvedLaunchTheme] || launchThemePalettes.light
+
+      // auto 模式下系统明暗可能已变化，不能复用旧的启动背景缓存。
+      const storedLoaderColor = themePreference === 'auto' ? null : getLocalStorageValue('materio-initial-loader-bg')
+      const loaderColor = storedLoaderColor || palette.background
+      const primaryColor = getLocalStorageValue('materio-initial-loader-color') || palette.primary
+
+      document.documentElement.setAttribute('data-launch-theme', resolvedLaunchTheme)
+      document.documentElement.setAttribute('data-theme', resolvedLaunchTheme)
+      document.documentElement.setAttribute('data-theme-preference', themePreference)
+      document.documentElement.style.setProperty('--initial-loader-bg', loaderColor)
+      document.documentElement.style.setProperty('--initial-loader-color', primaryColor)
+      document.documentElement.style.setProperty('--initial-color-scheme', colorScheme)
+      document.documentElement.style.backgroundColor = loaderColor
+      document.documentElement.style.colorScheme = colorScheme
+
+      if (document.body) {
+        document.body.setAttribute('data-theme', resolvedLaunchTheme)
+        document.body.setAttribute('data-theme-preference', themePreference)
+        document.body.style.backgroundColor = loaderColor
+        document.body.style.colorScheme = colorScheme
+      }
+
+      setMetaContent('meta[name="color-scheme"]', colorScheme === 'dark' ? 'dark light' : 'light dark')
+      syncThemeColorMeta(loaderColor)
+
+      return {
+        background: loaderColor,
+        colorScheme,
+        resolvedLaunchTheme,
+        themePreference,
+      }
+    }
+
+    // 在应用脚本接管前锁定一次启动层内容高度，避免 iOS 独立模式首次重算 safe area 时把 logo 顶下去。
+    function syncInitialViewport(force) {
+      const viewport = window.visualViewport
+      const nextHeight = Math.round(viewport?.height || window.innerHeight || document.documentElement.clientHeight || 0)
+      const nextWidth = Math.round(viewport?.width || window.innerWidth || document.documentElement.clientWidth || 0)
+      const currentHeight = parseInt(
+        document.documentElement.style.getPropertyValue('--initial-loader-height') || '0',
+        10,
+      )
+
+      if (!nextHeight || !nextWidth) {
+        return
+      }
+
+      if (!force && currentHeight && Math.abs(nextHeight - currentHeight) < 120) {
+        return
+      }
+
+      document.documentElement.style.setProperty('--initial-loader-height', `${nextHeight}px`)
+      document.documentElement.style.setProperty('--initial-loader-width', `${nextWidth}px`)
     }
 
     // 应用主题色彩
-    document.documentElement.style.setProperty('--initial-loader-bg', loaderColor)
-    document.documentElement.style.setProperty('--initial-loader-color', primaryColor)
+    applyLaunchThemeChrome()
+    syncInitialViewport(true)
+
+    document.addEventListener('DOMContentLoaded', () => {
+      applyLaunchThemeChrome()
+    })
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        applyLaunchThemeChrome()
+      }
+    })
+
+    window.addEventListener('pageshow', () => {
+      applyLaunchThemeChrome()
+    })
+
+    window.addEventListener('focus', () => {
+      applyLaunchThemeChrome()
+    })
+
+    window.addEventListener('orientationchange', () => {
+      window.setTimeout(() => syncInitialViewport(true), 160)
+    })
+
+    try {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        applyLaunchThemeChrome()
+      })
+    } catch (e) {
+      // 老浏览器不支持监听系统主题变化时，运行时主题管理器仍会继续接管。
+    }
 
     // 状态栏适配
     if (window.navigator.standalone) {
@@ -343,14 +546,20 @@
 
 <body style="margin: 0; overflow: hidden; overscroll-behavior: none; -webkit-overflow-scrolling: touch">
   <div id="loading-bg">
-    <div class="loading-logo">
-      <!-- Logo -->
-      <img src="/logo.svg" alt="MoviePilot" width="160px" height="160px" />
-    </div>
-    <div class="loading">
-      <div class="effect-1 effects"></div>
-      <div class="effect-2 effects"></div>
-      <div class="effect-3 effects"></div>
+    <div class="loading-shell">
+      <div class="loading-main">
+        <div class="loading-logo">
+          <!-- Logo -->
+          <img src="/logo.svg" alt="MoviePilot" width="160" height="160" />
+        </div>
+      </div>
+      <div class="loading-footer">
+        <div class="loading">
+          <div class="effect-1 effects"></div>
+          <div class="effect-2 effects"></div>
+          <div class="effect-3 effects"></div>
+        </div>
+      </div>
     </div>
     <!-- 超时提示 - 默认隐藏 -->
     <div id="loading-timeout"></div>

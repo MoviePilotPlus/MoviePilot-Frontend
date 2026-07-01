@@ -3,7 +3,7 @@
 import { VPullToRefresh } from 'vuetify/labs/VPullToRefresh'
 import api from '@/api'
 import type { Collect } from '@/api/types'
-import NoDataFound from '@/components/NoDataFound.vue'
+import NoDataFound from '@/components/states/NoDataFound.vue'
 import CollectCard from '@/components/cards/CollectCard.vue'
 import { useUserStore } from '@/stores'
 

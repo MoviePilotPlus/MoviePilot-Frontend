@@ -1,7 +1,9 @@
 <script lang="ts" setup>
 import { formatDateDifference } from '@/@core/utils/formatters'
 import type { WorkflowShare } from '@/api/types'
-import ForkWorkflowDialog from '../dialog/ForkWorkflowDialog.vue'
+import { openSharedDialog } from '@/composables/useSharedDialog'
+
+const ForkWorkflowDialog = defineAsyncComponent(() => import('../dialog/ForkWorkflowDialog.vue'))
 
 // 输入参数
 const props = defineProps({
@@ -14,9 +16,6 @@ const props = defineProps({
 
 // 定义删除事件
 const emit = defineEmits(['delete', 'update'])
-
-// 复用工作流弹窗
-const forkWorkflowDialog = ref(false)
 
 // 工作流ID
 const workflowId = ref<string>()
@@ -65,19 +64,28 @@ onMounted(() => {
 
 // 复用工作流
 function showForkWorkflow() {
-  forkWorkflowDialog.value = true
+  openSharedDialog(
+    ForkWorkflowDialog,
+    {
+      workflow: props.workflow,
+      eventTypes: props.eventTypes,
+    },
+    {
+      fork: finishForkWorkflow,
+      delete: doDelete,
+    },
+    { closeOn: ['close', 'fork', 'delete'] },
+  )
 }
 
 // 完成复用工作流
 function finishForkWorkflow(wid: string) {
   workflowId.value = wid
-  forkWorkflowDialog.value = false
   emit('update')
 }
 
 // 删除工作流分享时处理
 function doDelete() {
-  forkWorkflowDialog.value = false
   // 通知父组件刷新
   emit('delete')
 }
@@ -87,62 +95,56 @@ function doDelete() {
   <div class="h-full">
     <VHover>
       <template #default="hover">
-        <div
-          class="w-full h-full rounded-lg overflow-hidden"
-          :class="{
-            'transition transform-cpu duration-300 -translate-y-1': hover.isHovering,
-          }"
-        >
+        <!-- Hover 命中区域保持静止，避免卡片上浮后底边反复触发 mouseleave。 -->
+        <div v-bind="hover.props" class="workflow-share-card-hover-area h-full">
           <VCard
-            v-bind="hover.props"
             :key="props.workflow?.id"
-            class="flex flex-col h-full"
-            rounded="0"
+            class="workflow-share-card app-hover-lift-card flex flex-col h-full cursor-pointer overflow-hidden"
+            :class="{
+              'app-hover-lift-card--hovering': hover.isHovering,
+            }"
             min-height="150"
             :style="{ background: gradientStyle }"
             @click="showForkWorkflow"
           >
-            <div class="h-full flex flex-col">
-              <VCardText class="flex items-center pa-3 pb-1 grow">
-                <div class="flex flex-col justify-center w-full">
-                  <VCardTitle class="text-lg text-bold text-white line-clamp-2 break-words">
-                    {{ props.workflow?.share_title }}
-                  </VCardTitle>
-                  <div class="px-4 text-white text-opacity-90 overflow-hidden line-clamp-3 break-all ...">
-                    {{ props.workflow?.share_comment }}
-                  </div>
+          <div class="h-full flex flex-col">
+            <VCardText class="flex items-center pa-3 pb-1 grow">
+              <div class="flex flex-col justify-center w-full">
+                <VCardTitle class="text-lg text-bold text-white line-clamp-2 break-words">
+                  {{ props.workflow?.share_title }}
+                </VCardTitle>
+                <div class="px-4 text-white text-opacity-90 overflow-hidden line-clamp-3 break-all ...">
+                  {{ props.workflow?.share_comment }}
                 </div>
-              </VCardText>
-              <VCardText class="flex justify-space-between align-center flex-wrap py-2">
-                <div class="flex align-center">
-                  <IconBtn v-bind="props" icon="mdi-account" class="me-1 text-white" />
-                  <div class="text-subtitle-2 me-4 text-white text-opacity-90">
-                    {{ props.workflow?.share_user }}
-                  </div>
-                  <IconBtn v-if="props.workflow?.count" icon="mdi-fire" class="me-1 text-white" />
-                  <span v-if="props.workflow?.count" class="text-subtitle-2 me-4 text-white text-opacity-90">
-                    {{ props.workflow?.count.toLocaleString() }}
-                  </span>
+              </div>
+            </VCardText>
+            <VCardText class="flex justify-space-between align-center flex-wrap py-2">
+              <div class="flex align-center">
+                <IconBtn v-bind="props" icon="mdi-account" class="me-1 text-white" />
+                <div class="text-subtitle-2 me-4 text-white text-opacity-90">
+                  {{ props.workflow?.share_user }}
                 </div>
-              </VCardText>
-              <VCardText class="absolute right-0 bottom-0 d-flex align-center p-2 text-white text-sm text-opacity-75">
-                <VIcon icon="mdi-calendar" size="small" class="me-1" />
-                {{ dateText }}
-              </VCardText>
-            </div>
+                <IconBtn v-if="props.workflow?.count" icon="mdi-fire" class="me-1 text-white" />
+                <span v-if="props.workflow?.count" class="text-subtitle-2 me-4 text-white text-opacity-90">
+                  {{ props.workflow?.count.toLocaleString() }}
+                </span>
+              </div>
+            </VCardText>
+            <VCardText class="absolute right-0 bottom-0 d-flex align-center p-2 text-white text-sm text-opacity-75">
+              <VIcon icon="mdi-calendar" size="small" class="me-1" />
+              {{ dateText }}
+            </VCardText>
+          </div>
           </VCard>
         </div>
       </template>
     </VHover>
-    <!-- 复用工作流弹窗 -->
-    <ForkWorkflowDialog
-      v-if="forkWorkflowDialog"
-      v-model="forkWorkflowDialog"
-      :workflow="props.workflow"
-      :event-types="props.eventTypes"
-      @close="forkWorkflowDialog = false"
-      @fork="finishForkWorkflow"
-      @delete="doDelete"
-    />
   </div>
 </template>
+
+<style lang="scss" scoped>
+.workflow-share-card-hover-area {
+  inline-size: 100%;
+}
+
+</style>

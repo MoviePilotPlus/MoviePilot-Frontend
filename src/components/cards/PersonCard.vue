@@ -3,6 +3,7 @@ import personIcon from '@images/misc/person-icon.png'
 import type { Person } from '@/api/types'
 import router from '@/router'
 import { useGlobalSettingsStore } from '@/stores'
+import { getDisplayImageUrl } from '@/utils/imageUtils'
 
 const personProps = defineProps({
   person: Object as PropType<Person>,
@@ -40,9 +41,7 @@ function getPersonImage() {
   } else {
     return personIcon
   }
-  if (globalSettings.GLOBAL_IMAGE_CACHE && url)
-    return `${import.meta.env.VITE_API_BASE_URL}system/cache/image?url=${encodeURIComponent(url)}`
-  return url
+  return getDisplayImageUrl(url, globalSettings.GLOBAL_IMAGE_CACHE)
 }
 
 // 人物姓名
@@ -76,15 +75,17 @@ function goPersonDetail() {
 <template>
   <VHover>
     <template #default="hover">
-      <VCard
-        v-bind="hover.props"
-        :height="personProps.height"
-        :width="personProps.width"
-        :class="{
-          'transition transform-cpu duration-300 -translate-y-1': hover.isHovering,
-        }"
-        @click.stop="goPersonDetail"
-      >
+      <!-- Hover 命中区域保持静止，避免卡片上浮后底边反复触发 mouseleave。 -->
+      <div v-bind="hover.props" class="person-card-hover-area">
+        <VCard
+          :height="personProps.height"
+          :width="personProps.width"
+          class="app-hover-lift-card"
+          :class="{
+            'app-hover-lift-card--hovering': hover.isHovering,
+          }"
+          @click.stop="goPersonDetail"
+        >
         <div class="person-card relative cursor-pointer ring-gray-700">
           <div style="padding-block-end: 150%">
             <div class="absolute inset-0 flex h-full w-full flex-col items-center p-2">
@@ -108,12 +109,17 @@ function goPersonDetail() {
             </div>
           </div>
         </div>
-      </VCard>
+        </VCard>
+      </div>
     </template>
   </VHover>
 </template>
 
 <style lang="scss" scoped>
+.person-card-hover-area {
+  inline-size: 100%;
+}
+
 .person-card {
   background-image: linear-gradient(
     45deg,

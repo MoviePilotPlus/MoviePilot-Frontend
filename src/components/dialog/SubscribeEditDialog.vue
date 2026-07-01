@@ -7,8 +7,15 @@ import { useDisplay } from 'vuetify'
 import { useConfirm } from '@/composables/useConfirm'
 import { useI18n } from 'vue-i18n'
 import { qualityOptions, resolutionOptions, effectOptions } from '@/api/constants'
+import { useUserStore } from '@/stores'
+import { buildUserPermissionContext, hasPermission } from '@/utils/permission'
+import { formatSeason } from '@/@core/utils/formatters'
 // i18n
 const { t } = useI18n()
+const userStore = useUserStore()
+const canAdmin = computed(() =>
+  hasPermission(buildUserPermissionContext(userStore.superUser, userStore.permissions), 'admin'),
+)
 
 // 显示器宽度
 const display = useDisplay()
@@ -52,6 +59,7 @@ const subscribeForm = ref<Subscribe>({
   username: '',
   sites: [],
   best_version: undefined,
+  best_version_full: undefined,
   current_priority: 0,
   downloader: '',
   date: '',
@@ -88,6 +96,13 @@ const seasonItems = ref(
     value: item,
   })),
 )
+
+function getSubscribeDisplayName() {
+  const name = subscribeForm.value.name || ''
+  const season = subscribeForm.value.season
+  if (season === null || season === undefined) return name
+  return `${name} ${formatSeason(season.toString())}`
+}
 
 // 剧集组选项属性
 function episodeGroupItemProps(item: { title: string; subtitle: string }) {
@@ -127,6 +142,8 @@ async function loadDownloaderSetting() {
 
 // 加载规则组
 async function queryFilterRuleGroups() {
+  if (!canAdmin.value) return
+
   try {
     const result: { [key: string]: any } = await api.get('system/setting/UserFilterRuleGroups')
     filterRuleGroups.value = result.data?.value ?? []
@@ -149,11 +166,11 @@ async function updateSubscribeInfo() {
     const result: { [key: string]: any } = await api.put('subscribe/', subscribeForm.value)
     // 提示
     if (result.success) {
-      $toast.success(`${subscribeForm.value.name} 更新成功！`)
+      $toast.success(`${getSubscribeDisplayName()} 更新成功！`)
       // 通知父组件刷新
       emit('save')
     } else {
-      $toast.error(`${subscribeForm.value.name} 更新失败：${result.message}！`)
+      $toast.error(`${getSubscribeDisplayName()} 更新失败：${result.message}！`)
     }
   } catch (e) {
     console.log(e)
@@ -162,6 +179,8 @@ async function updateSubscribeInfo() {
 
 // 设置用户设置的默认订阅规则
 async function saveDefaultSubscribeConfig() {
+  if (!canAdmin.value) return
+
   try {
     let subscribe_config_url = ''
     if (props.type === '电影') subscribe_config_url = 'system/setting/DefaultMovieSubscribeConfig'
@@ -182,8 +201,8 @@ async function saveDefaultSubscribeConfig() {
 async function queryDefaultSubscribeConfig() {
   try {
     let subscribe_config_url = ''
-    if (props.type === '电影') subscribe_config_url = 'system/setting/DefaultMovieSubscribeConfig'
-    else subscribe_config_url = 'system/setting/DefaultTvSubscribeConfig'
+    if (props.type === '电影') subscribe_config_url = 'system/setting/public/DefaultMovieSubscribeConfig'
+    else subscribe_config_url = 'system/setting/public/DefaultTvSubscribeConfig'
 
     const result: { [key: string]: any } = await api.get(subscribe_config_url)
 
@@ -226,6 +245,7 @@ async function getSubscribeInfo() {
     const result: Subscribe = await api.get(`subscribe/${props.subid}`)
     subscribeForm.value = result
     subscribeForm.value.best_version = subscribeForm.value.best_version === 1
+    subscribeForm.value.best_version_full = subscribeForm.value.best_version_full === 1
     subscribeForm.value.search_imdbid = subscribeForm.value.search_imdbid === 1
     // 加载剧集组
     if (subscribeForm.value.type == '电视剧') getEpisodeGroups()
@@ -246,7 +266,7 @@ async function removeSubscribe() {
     const result: { [key: string]: any } = await api.delete(`subscribe/${props.subid}`)
 
     if (result.success) {
-      $toast.success(`订阅 ${subscribeForm.value.name} 已取消！`)
+      $toast.success(`订阅 ${getSubscribeDisplayName()} 已取消！`)
       // 通知父组件刷新
       emit('remove')
     }
@@ -258,7 +278,7 @@ async function removeSubscribe() {
 // 查询下载目录
 async function loadDownloadDirectories() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/Directories')
+    const result: { [key: string]: any } = await api.get('system/setting/public/Directories')
     if (result.success && result.data?.value) {
       downloadDirectories.value = result.data.value
     }
@@ -272,6 +292,16 @@ const targetDirectories = computed(() => {
   // 去重后的下载目录
   return downloadDirectories.value.map(item => item.download_path)
 })
+
+// 仅电视剧订阅支持全集洗版，电影保持原有洗版逻辑
+const isTvSubscribe = computed(() => props.type === '电视剧' || subscribeForm.value.type === '电视剧')
+
+watch(
+  () => subscribeForm.value.best_version,
+  bestVersion => {
+    if (!bestVersion) subscribeForm.value.best_version_full = false
+  },
+)
 
 onMounted(() => {
   queryFilterRuleGroups()
@@ -295,10 +325,7 @@ onMounted(() => {
           {{ props.default ? t('dialog.subscribeEdit.titleDefault') : t('dialog.subscribeEdit.titleEdit') }}
         </VCardTitle>
         <VCardSubtitle v-if="!props.default">
-          {{ subscribeForm.name }}
-          <span v-if="subscribeForm.season">
-            {{ t('dialog.subscribeEdit.seasonFormat', { number: subscribeForm.season }) }}
-          </span>
+          {{ getSubscribeDisplayName() }}
         </VCardSubtitle>
         <VCardSubtitle v-else>
           {{ props.type }}
@@ -426,6 +453,14 @@ onMounted(() => {
                       persistent-hint
                     />
                   </VCol>
+                  <VCol v-if="isTvSubscribe && subscribeForm.best_version" cols="12" md="4">
+                    <VSwitch
+                      v-model="subscribeForm.best_version_full"
+                      :label="t('dialog.subscribeEdit.bestVersionFull')"
+                      :hint="t('dialog.subscribeEdit.bestVersionFullHint')"
+                      persistent-hint
+                    />
+                  </VCol>
                   <VCol cols="12" md="4">
                     <VSwitch
                       v-model="subscribeForm.search_imdbid"
@@ -529,12 +564,14 @@ onMounted(() => {
           </VWindow>
         </VForm>
       </VCardText>
-      <VCardActions class="pt-3">
-        <VBtn v-if="!props.default" color="error" @click="removeSubscribe" class="me-3">
+      <VCardActions class="app-dialog-actions">
+        <VBtn v-if="!props.default" color="error" variant="tonal" @click="removeSubscribe">
           {{ t('dialog.subscribeEdit.cancelSubscribe') }}
         </VBtn>
         <VSpacer />
         <VBtn
+          color="primary"
+          variant="flat"
           @click=";`${props.default ? saveDefaultSubscribeConfig() : updateSubscribeInfo()}`"
           prepend-icon="mdi-content-save"
           class="px-5"

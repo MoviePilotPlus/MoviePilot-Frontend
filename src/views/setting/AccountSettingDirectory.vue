@@ -1,18 +1,29 @@
 <!-- eslint-disable sonarjs/no-duplicate-string -->
 <script lang="ts" setup>
 import { useToast } from 'vue-toastification'
-import draggable from 'vuedraggable'
-import { VRow } from 'vuetify/lib/components/index.mjs'
 import api from '@/api'
 import { TransferDirectoryConf, StorageConf } from '@/api/types'
 import DirectoryCard from '@/components/cards/DirectoryCard.vue'
 import StorageCard from '@/components/cards/StorageCard.vue'
-import ProgressDialog from '@/components/dialog/ProgressDialog.vue'
-import CategoryEditDialog from '@/components/dialog/CategoryEditDialog.vue'
 import { useI18n } from 'vue-i18n'
+import { useTheme } from 'vuetify'
 import { storageAttributes } from '@/api/constants'
+import { useSilentSettingRefresh } from '@/composables/useSilentSettingRefresh'
+import { openSharedDialog } from '@/composables/useSharedDialog'
 
 const { t } = useI18n()
+const { global: globalTheme } = useTheme()
+
+const props = defineProps({
+  active: {
+    type: Boolean,
+    default: true,
+  },
+})
+
+// 拖拽排序和分类编辑弹窗按需加载，避免设置框架预加载目录页时带上这些交互依赖。
+const Draggable = defineAsyncComponent(() => import('vuedraggable').then(module => module.default))
+const CategoryEditDialog = defineAsyncComponent(() => import('@/components/dialog/CategoryEditDialog.vue'))
 
 // 所有下载目录
 const directories = ref<TransferDirectoryConf[]>([])
@@ -25,12 +36,6 @@ const mediaCategories = ref<{ [key: string]: any }>({})
 
 // 提示框
 const $toast = useToast()
-
-// 进度框
-const progressDialog = ref(false)
-
-// 分类编辑对话框
-const categoryDialog = ref(false)
 
 // 数据源
 const sourceItems = [
@@ -55,6 +60,43 @@ const SystemSettings = ref<any>({
     SCRAP_SOURCE: 'themoviedb',
     MOVIE_RENAME_FORMAT: null,
     TV_RENAME_FORMAT: null,
+  },
+})
+
+// 编辑器主题
+// Ace 跟随 Vuetify 当前生效主题，auto 模式下也按实际明暗色渲染。
+const editorTheme = computed(() => (globalTheme.current.value.dark ? 'github_dark' : 'github_light_default'))
+
+const renameEditorOptions = {
+  fontSize: 14,
+  tabSize: 2,
+  showLineNumbers: true,
+  showGutter: true,
+}
+
+// 打开共享分类编辑弹窗，保存后刷新本页分类配置。
+function openCategoryDialog() {
+  openSharedDialog(
+    CategoryEditDialog,
+    {},
+    {
+      save: loadMediaCategories,
+    },
+    { closeOn: ['close', 'save', 'update:modelValue'] },
+  )
+}
+
+const movieRenameFormat = computed({
+  get: () => SystemSettings.value.Basic.MOVIE_RENAME_FORMAT ?? '',
+  set: (value: string) => {
+    SystemSettings.value.Basic.MOVIE_RENAME_FORMAT = value || null
+  },
+})
+
+const tvRenameFormat = computed({
+  get: () => SystemSettings.value.Basic.TV_RENAME_FORMAT ?? '',
+  set: (value: string) => {
+    SystemSettings.value.Basic.TV_RENAME_FORMAT = value || null
   },
 })
 
@@ -86,7 +128,7 @@ function orderDirectoryCards() {
 // 查询存储
 async function loadStorages() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/Storages')
+    const result: { [key: string]: any } = await api.get('system/setting/public/Storages')
 
     storages.value = result.data?.value ?? []
   } catch (error) {
@@ -108,7 +150,7 @@ async function saveStorages() {
 // 查询目录
 async function loadDirectories() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/Directories')
+    const result: { [key: string]: any } = await api.get('system/setting/public/Directories')
     directories.value = result.data?.value ?? []
   } catch (error) {
     console.log(error)
@@ -220,12 +262,17 @@ async function saveSystemSettings(value: any) {
   }
 }
 
+async function loadPageData() {
+  await Promise.all([loadDirectories(), loadStorages(), loadMediaCategories(), loadSystemSettings()])
+}
+
 // 加载数据
 onMounted(() => {
-  loadDirectories()
-  loadStorages()
-  loadMediaCategories()
-  loadSystemSettings()
+  loadPageData()
+})
+
+useSilentSettingRefresh(loadPageData, {
+  active: computed(() => props.active),
 })
 </script>
 
@@ -238,7 +285,7 @@ onMounted(() => {
           <VCardSubtitle>{{ t('setting.directory.storageDesc') }}</VCardSubtitle>
         </VCardItem>
         <VCardText>
-          <draggable
+          <Draggable
             v-model="storages"
             handle=".cursor-move"
             item-key="name"
@@ -248,7 +295,7 @@ onMounted(() => {
             <template #item="{ element }">
               <StorageCard :storage="element" @close="removeStorage(element)" @done="loadStorages" />
             </template>
-          </draggable>
+          </Draggable>
         </VCardText>
         <VCardText>
           <VForm @submit.prevent="() => {}">
@@ -283,7 +330,7 @@ onMounted(() => {
           <VCardSubtitle>{{ t('setting.directory.directoryDesc') }}</VCardSubtitle>
         </VCardItem>
         <VCardText>
-          <draggable
+          <Draggable
             v-model="directories"
             handle=".cursor-move"
             item-key="pri"
@@ -305,7 +352,7 @@ onMounted(() => {
                 @close="removeDirectory(element)"
               />
             </template>
-          </draggable>
+          </Draggable>
         </VCardText>
         <VCardText>
           <VForm @submit.prevent="() => {}">
@@ -317,7 +364,7 @@ onMounted(() => {
                 <VIcon icon="mdi-plus" />
               </VBtn>
               <VSpacer />
-              <VBtn color="info" variant="tonal" prepend-icon="mdi-shape-plus" @click="categoryDialog = true">
+              <VBtn color="info" variant="tonal" prepend-icon="mdi-shape-plus" @click="openCategoryDialog">
                 {{ t('setting.category.title') }}
               </VBtn>
             </div>
@@ -346,26 +393,48 @@ onMounted(() => {
               />
             </VCol>
             <VCol cols="12">
-              <VTextarea
-                v-model="SystemSettings.Basic.MOVIE_RENAME_FORMAT"
-                :label="t('setting.directory.movieRenameFormat')"
-                :hint="t('setting.directory.movieRenameFormatHint')"
-                persistent-hint
-                clearable
-                active
-                prepend-inner-icon="mdi-movie-open"
-              />
+              <div class="rename-format-editor">
+                <div class="rename-format-editor__label">
+                  <VIcon icon="mdi-movie-open" size="20" class="me-2" />
+                  <span>{{ t('setting.directory.movieRenameFormat') }}</span>
+                </div>
+                <VAceEditor
+                  v-model:value="movieRenameFormat"
+                  lang="jinja2"
+                  :theme="editorTheme"
+                  :options="renameEditorOptions"
+                  :print-margin="false"
+                  :min-lines="4"
+                  :max-lines="12"
+                  wrap
+                  class="rename-format-editor__ace rounded"
+                />
+                <div class="rename-format-editor__hint">
+                  {{ t('setting.directory.movieRenameFormatHint') }}
+                </div>
+              </div>
             </VCol>
             <VCol cols="12">
-              <VTextarea
-                v-model="SystemSettings.Basic.TV_RENAME_FORMAT"
-                :label="t('setting.directory.tvRenameFormat')"
-                :hint="t('setting.directory.tvRenameFormatHint')"
-                persistent-hint
-                clearable
-                active
-                prepend-inner-icon="mdi-television"
-              />
+              <div class="rename-format-editor">
+                <div class="rename-format-editor__label">
+                  <VIcon icon="mdi-television" size="20" class="me-2" />
+                  <span>{{ t('setting.directory.tvRenameFormat') }}</span>
+                </div>
+                <VAceEditor
+                  v-model:value="tvRenameFormat"
+                  lang="jinja2"
+                  :theme="editorTheme"
+                  :options="renameEditorOptions"
+                  :print-margin="false"
+                  :min-lines="4"
+                  :max-lines="12"
+                  wrap
+                  class="rename-format-editor__ace rounded"
+                />
+                <div class="rename-format-editor__hint">
+                  {{ t('setting.directory.tvRenameFormatHint') }}
+                </div>
+              </div>
             </VCol>
           </VRow>
         </VCardText>
@@ -381,14 +450,29 @@ onMounted(() => {
       </VCard>
     </VCol>
   </VRow>
-  <!-- 进度框 -->
-  <ProgressDialog v-if="progressDialog" v-model="progressDialog" :text="t('setting.system.reloading')" />
-  <!-- 分类对话框 -->
-  <CategoryEditDialog
-    v-if="categoryDialog"
-    v-model="categoryDialog"
-    :categories="mediaCategories"
-    @close="categoryDialog = false"
-    @done="loadMediaCategories"
-  />
 </template>
+
+<style scoped>
+.rename-format-editor__label {
+  display: flex;
+  align-items: center;
+  color: rgba(var(--v-theme-on-surface), 0.78);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.375rem;
+  margin-block-end: 0.5rem;
+}
+
+.rename-format-editor__ace {
+  overflow: hidden;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  min-block-size: 8rem;
+}
+
+.rename-format-editor__hint {
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  margin-block-start: 0.375rem;
+}
+</style>

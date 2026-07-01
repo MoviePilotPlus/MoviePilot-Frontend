@@ -2,24 +2,20 @@
 import draggable from 'vuedraggable'
 import api from '@/api'
 import type { Subscribe } from '@/api/types'
-import NoDataFound from '@/components/NoDataFound.vue'
+import NoDataFound from '@/components/states/NoDataFound.vue'
 import SubscribeCard from '@/components/cards/SubscribeCard.vue'
-import SubscribeHistoryDialog from '@/components/dialog/SubscribeHistoryDialog.vue'
+import ProgressiveCardGrid from '@/components/misc/ProgressiveCardGrid.vue'
 import { useUserStore } from '@/stores'
-import { useDynamicButton } from '@/composables/useDynamicButton'
 import { useI18n } from 'vue-i18n'
-import { usePWA } from '@/composables/usePWA'
 import { useToast } from 'vue-toastification'
 import { useConfirm } from '@/composables/useConfirm'
+import { useKeepAliveRefresh, type KeepAliveRefreshContext } from '@/composables/useKeepAliveRefresh'
+import { openSharedDialog } from '@/composables/useSharedDialog'
+
+const SubscribeHistoryDialog = defineAsyncComponent(() => import('@/components/dialog/SubscribeHistoryDialog.vue'))
 
 // 国际化
 const { t } = useI18n()
-
-// 路由
-const route = useRoute()
-
-// PWA模式检测
-const { appMode } = usePWA()
 
 // 用户 Store
 const userStore = useUserStore()
@@ -40,7 +36,35 @@ const props = defineProps({
   subid: String,
   keyword: String,
   statusFilter: String,
+  sortMode: {
+    type: Boolean,
+    default: false,
+  },
+  sortBy: {
+    type: String,
+    default: '',
+  },
+  active: {
+    type: Boolean,
+    default: true,
+  },
 })
+
+const emit = defineEmits<{
+  'update:sortMode': [value: boolean]
+  'update:sortBy': [value: SubscribeSortBy]
+  'batch-state-change': [state: SubscribeBatchState]
+}>()
+
+type SubscribeSortBy = 'custom' | 'last_update' | 'date' | 'lack_episode'
+
+// 订阅批量模式状态快照，供父页面渲染外部批量操作按钮。
+interface SubscribeBatchState {
+  enabled: boolean
+  selectedCount: number
+  totalCount: number
+  allSelected: boolean
+}
 
 // 是否刷新过
 let isRefreshed = ref(false)
@@ -51,9 +75,6 @@ const loading = ref(false)
 // 数据列表
 const dataList = ref<Subscribe[]>([])
 
-// 历史记录弹窗
-const historyDialog = ref(false)
-
 // 订阅顺序配置
 const orderConfig = ref<{ id: number }[]>([])
 
@@ -63,6 +84,48 @@ const displayList = ref<Subscribe[]>([])
 // 批量管理相关状态
 const isBatchMode = ref(false)
 const selectedSubscribes = ref<number[]>([])
+
+const normalizedKeyword = computed(() => props.keyword?.trim().toLowerCase() || '')
+const selectedSubscribesSet = computed(() => new Set(selectedSubscribes.value))
+const hasCustomOrder = computed(() => orderConfig.value.length > 0)
+const isAllSubscribesSelected = computed(
+  () => displayList.value.length > 0 && selectedSubscribes.value.length === displayList.value.length,
+)
+
+// 归一化订阅排序方式，电影订阅不使用缺失集数排序。
+const normalizedSortBy = computed<SubscribeSortBy | ''>(() => {
+  const sortBy = props.sortBy as SubscribeSortBy | ''
+  if (props.type === '电影' && sortBy === 'lack_episode') {
+    return 'date'
+  }
+
+  return sortBy
+})
+const effectiveSortBy = computed<SubscribeSortBy>(() => {
+  return normalizedSortBy.value || (hasCustomOrder.value ? 'custom' : 'date')
+})
+const canSortContext = computed(
+  () =>
+    effectiveSortBy.value === 'custom' &&
+    !normalizedKeyword.value &&
+    (!props.statusFilter || props.statusFilter === 'all') &&
+    !isBatchMode.value,
+)
+const sortMode = computed({
+  get: () => props.sortMode,
+  set: value => emit('update:sortMode', value),
+})
+const canDragSort = computed(() => sortMode.value && canSortContext.value)
+const shouldVirtualizeList = computed(() => !sortMode.value)
+const scrollToIndex = computed(() => {
+  if (!props.subid || sortMode.value) {
+    return undefined
+  }
+
+  const targetIndex = displayList.value.findIndex(item => item.id.toString() === props.subid?.toString())
+
+  return targetIndex >= 0 ? targetIndex : undefined
+})
 
 // 根据订阅数据判断订阅状态
 function getSubscribeStatus(subscribe: Subscribe) {
@@ -83,10 +146,11 @@ function getSubscribeStatus(subscribe: Subscribe) {
     return 'all'
   }
 
-  // 电视剧根据集数情况判断
+  // 电视剧根据集数情况判断：completed_episode 由后端按订阅类型派生
+  // （普通=已入库集数，洗版=起始集前 + [start, total] 范围内 priority==100 命中）
   if (subscribe.total_episode && subscribe.total_episode > 0) {
     const lackEpisode = subscribe.lack_episode || 0
-    const completedEpisode = subscribe.total_episode - lackEpisode
+    const completedEpisode = subscribe.completed_episode ?? 0
 
     if (lackEpisode === 0) {
       return 'completed' // 订阅完成
@@ -103,26 +167,104 @@ function getSubscribeStatus(subscribe: Subscribe) {
 // API请求键值（计算属性）
 const orderRequestKey = computed(() => (props.type === '电影' ? 'SubscribeMovieOrder' : 'SubscribeTvOrder'))
 
-// 监听dataList变化，同步更新displayList
-watch([dataList, () => props.keyword, () => props.statusFilter], () => {
-  if (superUser)
-    displayList.value = dataList.value.filter(
-      data =>
-        data.type === props.type &&
-        (!props.keyword || data.name.toLowerCase().includes(props.keyword.toLowerCase())) &&
-        (!props.statusFilter || props.statusFilter === 'all' || getSubscribeStatus(data) === props.statusFilter),
-    )
-  else
-    displayList.value = dataList.value.filter(
-      data =>
-        data.type === props.type &&
-        data.username === userName &&
-        (!props.keyword || data.name.toLowerCase().includes(props.keyword.toLowerCase())) &&
-        (!props.statusFilter || props.statusFilter === 'all' || getSubscribeStatus(data) === props.statusFilter),
-    )
-  // 排序
-  sortSubscribeOrder()
-})
+// 转换订阅时间字段为可排序时间戳。
+function getSubscribeTimeValue(value?: string) {
+  if (!value) return 0
+
+  const directTime = Date.parse(value)
+  if (!Number.isNaN(directTime)) return directTime
+
+  const compatibleTime = Date.parse(value.replace(/-/g, '/'))
+  return Number.isNaN(compatibleTime) ? 0 : compatibleTime
+}
+
+// 按自定义顺序排序订阅，未配置顺序的订阅按添加时间倒序补齐。
+function sortByCustomOrder(a: Subscribe, b: Subscribe, orderIndexMap: Map<number, number>) {
+  const aIndex = orderIndexMap.get(a.id) ?? Number.MAX_SAFE_INTEGER
+  const bIndex = orderIndexMap.get(b.id) ?? Number.MAX_SAFE_INTEGER
+
+  if (aIndex !== bIndex) {
+    return aIndex - bIndex
+  }
+
+  return getSubscribeTimeValue(b.date) - getSubscribeTimeValue(a.date)
+}
+
+// 按当前排序选项调整订阅列表顺序。
+function sortSubscribeList(list: Subscribe[]) {
+  const orderIndexMap = new Map(orderConfig.value.map((item, index) => [item.id, index]))
+
+  list.sort((a, b) => {
+    if (effectiveSortBy.value === 'custom') {
+      return sortByCustomOrder(a, b, orderIndexMap)
+    }
+
+    if (effectiveSortBy.value === 'last_update') {
+      return getSubscribeTimeValue(b.last_update) - getSubscribeTimeValue(a.last_update)
+    }
+
+    if (effectiveSortBy.value === 'lack_episode') {
+      const lackEpisodeDiff = (b.lack_episode || 0) - (a.lack_episode || 0)
+      return lackEpisodeDiff || getSubscribeTimeValue(b.date) - getSubscribeTimeValue(a.date)
+    }
+
+    return getSubscribeTimeValue(b.date) - getSubscribeTimeValue(a.date)
+  })
+}
+
+// 同步订阅排序默认值给父组件。
+function syncDefaultSortBy() {
+  if (!props.sortBy) {
+    emit('update:sortBy', hasCustomOrder.value ? 'custom' : 'date')
+  }
+}
+
+// 监听数据、筛选和排序变化，同步更新显示列表
+watch(
+  [dataList, normalizedKeyword, () => props.statusFilter, orderConfig, effectiveSortBy],
+  () => {
+    const nextDisplayList = dataList.value.filter(data => {
+      if (data.type !== props.type) {
+        return false
+      }
+
+      if (!superUser && data.username !== userName) {
+        return false
+      }
+
+      if (normalizedKeyword.value && !data.name?.toLowerCase().includes(normalizedKeyword.value)) {
+        return false
+      }
+
+      if (props.statusFilter && props.statusFilter !== 'all' && getSubscribeStatus(data) !== props.statusFilter) {
+        return false
+      }
+
+      return true
+    })
+
+    sortSubscribeList(nextDisplayList)
+
+    displayList.value = nextDisplayList
+  },
+  { immediate: true },
+)
+
+watch(
+  canSortContext,
+  canSort => {
+    if (!canSort && sortMode.value) {
+      sortMode.value = false
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  [isBatchMode, () => selectedSubscribes.value.length, () => displayList.value.length, isAllSubscribesSelected],
+  emitBatchStateChange,
+  { immediate: true },
+)
 
 // 加载顺序
 async function loadSubscribeOrderConfig() {
@@ -131,26 +273,12 @@ async function loadSubscribeOrderConfig() {
     if (response && response.data && response.data.value) {
       orderConfig.value = response.data.value
     }
+    syncDefaultSortBy()
   } catch (error) {
     console.error('Failed to load subscribe order config:', error)
     orderConfig.value = []
+    syncDefaultSortBy()
   }
-}
-
-// 按order的顺序排序
-async function sortSubscribeOrder() {
-  if (!orderConfig.value) {
-    return
-  }
-  if (displayList.value.length === 0) {
-    return
-  }
-  await loadSubscribeOrderConfig()
-  displayList.value.sort((a, b) => {
-    const aIndex = orderConfig.value.findIndex((item: { id: number }) => item.id === a.id)
-    const bIndex = orderConfig.value.findIndex((item: { id: number }) => item.id === b.id)
-    return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex)
-  })
 }
 
 // 保存顺序设置
@@ -158,6 +286,7 @@ async function saveSubscribeOrder() {
   // 顺序配置
   const orderObj = displayList.value.map(item => ({ id: item.id }))
   orderConfig.value = orderObj
+  emit('update:sortBy', 'custom')
 
   // 保存到服务端
   try {
@@ -168,42 +297,81 @@ async function saveSubscribeOrder() {
 }
 
 // 获取订阅列表数据
-async function fetchData() {
+async function fetchData(context: KeepAliveRefreshContext = {}) {
+  const showLoading = !context.silent || !isRefreshed.value
+
   try {
-    loading.value = true
+    if (showLoading) {
+      loading.value = true
+    }
     dataList.value = await api.get('subscribe/')
-    loading.value = false
     isRefreshed.value = true
   } catch (error) {
     console.error(error)
+  } finally {
+    if (showLoading) {
+      loading.value = false
+    }
   }
 }
 
 // 历史记录窗口完成
 function historyDone() {
-  historyDialog.value = false
   fetchData()
 }
 
-// 批量管理相关函数
-// 切换批量模式
-function toggleBatchMode() {
-  isBatchMode.value = !isBatchMode.value
-  if (!isBatchMode.value) {
-    selectedSubscribes.value = []
-  }
+function openHistoryDialog() {
+  openSharedDialog(
+    SubscribeHistoryDialog,
+    { type: props.type },
+    {
+      save: historyDone,
+    },
+    { closeOn: ['close', 'save'] },
+  )
 }
 
-// 全选/取消全选
+// 向父组件同步批量操作状态，供 Footer/FAB 动态按钮渲染。
+function emitBatchStateChange() {
+  emit('batch-state-change', {
+    enabled: isBatchMode.value,
+    selectedCount: selectedSubscribes.value.length,
+    totalCount: displayList.value.length,
+    allSelected: isAllSubscribesSelected.value,
+  })
+}
+
+// 进入批量模式。
+function enterBatchMode() {
+  isBatchMode.value = true
+}
+
+// 退出批量模式并清空已选择的订阅。
+function exitBatchMode() {
+  isBatchMode.value = false
+  selectedSubscribes.value = []
+}
+
+// 切换批量模式。
+function toggleBatchMode() {
+  if (isBatchMode.value) {
+    exitBatchMode()
+    return
+  }
+
+  enterBatchMode()
+}
+
+// 全选或取消全选当前显示的订阅。
 function toggleSelectAll() {
-  if (selectedSubscribes.value.length === displayList.value.length) {
+  if (isAllSubscribesSelected.value) {
     selectedSubscribes.value = []
   } else {
     selectedSubscribes.value = displayList.value.map(item => item.id)
   }
 }
 
-// 选择单个订阅
+// 切换单个订阅的选中状态。
 function toggleSelectSubscribe(id: number) {
   const index = selectedSubscribes.value.indexOf(id)
   if (index > -1) {
@@ -213,7 +381,7 @@ function toggleSelectSubscribe(id: number) {
   }
 }
 
-// 批量删除订阅
+// 批量删除已选中的订阅。
 async function batchDeleteSubscribes() {
   if (selectedSubscribes.value.length === 0) {
     $toast.warning(t('subscribe.noSelectedItems'))
@@ -242,11 +410,8 @@ async function batchDeleteSubscribes() {
       $toast.error(t('subscribe.batchDeleteFailed', { count: failedCount }))
     }
 
-    // 刷新数据
     await fetchData()
-    // 退出批量模式
-    isBatchMode.value = false
-    selectedSubscribes.value = []
+    exitBatchMode()
   } catch (error) {
     console.error(error)
     $toast.error(t('subscribe.batchDeleteError'))
@@ -255,7 +420,7 @@ async function batchDeleteSubscribes() {
   }
 }
 
-// 批量启用订阅
+// 批量启用已选中的订阅。
 async function batchEnableSubscribes() {
   if (selectedSubscribes.value.length === 0) {
     $toast.warning(t('subscribe.noSelectedItems'))
@@ -284,11 +449,8 @@ async function batchEnableSubscribes() {
       $toast.error(t('subscribe.batchEnableFailed', { count: failedCount }))
     }
 
-    // 刷新数据
     await fetchData()
-    // 退出批量模式
-    isBatchMode.value = false
-    selectedSubscribes.value = []
+    exitBatchMode()
   } catch (error) {
     console.error(error)
     $toast.error(t('subscribe.batchEnableError'))
@@ -297,7 +459,7 @@ async function batchEnableSubscribes() {
   }
 }
 
-// 批量暂停订阅
+// 批量暂停已选中的订阅。
 async function batchPauseSubscribes() {
   if (selectedSubscribes.value.length === 0) {
     $toast.warning(t('subscribe.noSelectedItems'))
@@ -326,11 +488,8 @@ async function batchPauseSubscribes() {
       $toast.error(t('subscribe.batchPauseFailed', { count: failedCount }))
     }
 
-    // 刷新数据
     await fetchData()
-    // 退出批量模式
-    isBatchMode.value = false
-    selectedSubscribes.value = []
+    exitBatchMode()
   } catch (error) {
     console.error(error)
     $toast.error(t('subscribe.batchPauseError'))
@@ -356,6 +515,7 @@ const errorTitle = computed(() => {
 })
 
 onMounted(async () => {
+  await loadSubscribeOrderConfig()
   await fetchData()
   if (props.subid) {
     // 找到这个订阅
@@ -366,140 +526,83 @@ onMounted(async () => {
     }
   }
 
-  // 监听批量管理模式切换事件
-  window.addEventListener('toggle-batch-mode', toggleBatchMode)
 })
 
-onUnmounted(() => {
-  // 移除事件监听器
-  window.removeEventListener('toggle-batch-mode', toggleBatchMode)
+useKeepAliveRefresh(fetchData, {
+  active: computed(() => props.active),
 })
 
-onActivated(async () => {
-  if (!loading.value) {
-    fetchData()
-  }
-})
-
-// 使用动态按钮钩子
-useDynamicButton({
-  icon: 'mdi-history',
-  onClick: () => {
-    historyDialog.value = true
-  },
+defineExpose({
+  openHistoryDialog,
+  enterBatchMode,
+  exitBatchMode,
+  toggleBatchMode,
+  toggleSelectAll,
+  batchEnableSubscribes,
+  batchPauseSubscribes,
+  batchDeleteSubscribes,
 })
 </script>
 
 <template>
   <LoadingBanner v-if="!isRefreshed" class="mt-12" />
 
-  <!-- 批量管理工具栏 -->
-  <div v-if="isBatchMode" class="mb-4 px-2">
-    <VCard class="pa-4">
-      <div class="d-flex align-center justify-space-between">
-        <div class="d-flex align-center">
-          <VCheckbox
-            :model-value="selectedSubscribes.length === displayList.length"
-            :indeterminate="selectedSubscribes.length > 0 && selectedSubscribes.length < displayList.length"
-            @update:model-value="toggleSelectAll"
-            hide-details
-            class="me-4"
-          />
-          <span class="text-body-1 font-weight-medium">
-            {{ t('subscribe.selectedCount', { count: selectedSubscribes.length, total: displayList.length }) }}
-          </span>
-        </div>
-        <div class="d-flex gap-2">
-          <VBtn
-            color="success"
-            variant="outlined"
-            size="small"
-            :disabled="selectedSubscribes.length === 0"
-            @click="batchEnableSubscribes"
-          >
-            <VIcon icon="mdi-play" class="me-sm-1" />
-            <span class="d-none d-sm-inline">{{ t('subscribe.batchEnable') }}</span>
-          </VBtn>
-          <VBtn
-            color="info"
-            variant="outlined"
-            size="small"
-            :disabled="selectedSubscribes.length === 0"
-            @click="batchPauseSubscribes"
-          >
-            <VIcon icon="mdi-pause" class="me-sm-1" />
-            <span class="d-none d-sm-inline">{{ t('subscribe.batchPause') }}</span>
-          </VBtn>
-          <VBtn
-            color="error"
-            variant="outlined"
-            size="small"
-            :disabled="selectedSubscribes.length === 0"
-            @click="batchDeleteSubscribes"
-          >
-            <VIcon icon="mdi-delete" class="me-sm-1" />
-            <span class="d-none d-sm-inline">{{ t('subscribe.batchDelete') }}</span>
-          </VBtn>
-          <VBtn color="secondary" variant="outlined" size="small" @click="toggleBatchMode">
-            <VIcon icon="mdi-close" class="me-sm-1" />
-            <span class="d-none d-sm-inline">{{ t('common.cancel') }}</span>
-          </VBtn>
-        </div>
-      </div>
-    </VCard>
-  </div>
+  <VAlert v-if="sortMode" color="warning" variant="tonal" class="mb-4 mx-2 py-0 app-surface-static">
+    <div class="d-flex flex-wrap align-center justify-space-between gap-2 py-5">
+      <span>{{ t('common.sortModeHint') }}</span>
+      <VBtn variant="tonal" color="error" @click="sortMode = false">
+        {{ t('common.exit') }}
+      </VBtn>
+    </div>
+  </VAlert>
 
   <draggable
-    v-if="displayList.length > 0"
+    v-if="displayList.length > 0 && canDragSort"
     v-model="displayList"
     @end="saveSubscribeOrder"
-    handle=".cursor-move"
     item-key="id"
     tag="div"
     :component-data="{ class: 'grid gap-4 grid-subscribe-card px-2' }"
-    :disabled="props.keyword || (props.statusFilter && props.statusFilter !== 'all') || isBatchMode"
   >
     <template #item="{ element }">
       <SubscribeCard
         :key="element.id"
         :media="element"
         :batch-mode="isBatchMode"
-        :selected="selectedSubscribes.includes(element.id)"
+        :selected="selectedSubscribesSet.has(element.id)"
+        :sortable="true"
         @remove="fetchData"
         @save="fetchData"
         @select="toggleSelectSubscribe(element.id)"
       />
     </template>
   </draggable>
+  <ProgressiveCardGrid
+    v-else-if="displayList.length > 0 && shouldVirtualizeList"
+    :items="displayList"
+    :get-item-key="item => item.id"
+    :min-item-width="240"
+    :estimated-item-height="300"
+    :scroll-to-index="scrollToIndex"
+    class="px-2"
+  >
+    <template #default="{ item }">
+      <SubscribeCard
+        :key="item.id"
+        :media="item"
+        :batch-mode="isBatchMode"
+        :selected="selectedSubscribesSet.has(item.id)"
+        :sortable="false"
+        @remove="fetchData"
+        @save="fetchData"
+        @select="toggleSelectSubscribe(item.id)"
+      />
+    </template>
+  </ProgressiveCardGrid>
   <NoDataFound
     v-if="displayList.length === 0 && isRefreshed"
     error-code="404"
     :error-title="errorTitle"
     :error-description="errorDescription"
-  />
-  <!-- 底部操作按钮 -->
-  <Teleport to="body" v-if="route.path.startsWith(`/subscribe/${props.type === '电影' ? 'movie' : 'tv'}`)">
-    <div v-if="isRefreshed">
-      <VFab
-        v-if="userStore.superUser && !appMode"
-        icon="mdi-history"
-        color="info"
-        location="bottom"
-        :class="{ 'mb-12': appMode }"
-        size="x-large"
-        fixed
-        app
-        appear
-        @click="historyDialog = true"
-      />
-    </div>
-  </Teleport>
-  <!-- 历史记录弹窗 -->
-  <SubscribeHistoryDialog
-    v-if="historyDialog"
-    v-model="historyDialog"
-    :type="props.type"
-    @close="historyDialog = false"
-    @save="historyDone"
   />
 </template>

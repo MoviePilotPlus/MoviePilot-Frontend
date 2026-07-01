@@ -2,16 +2,27 @@
 <script lang="ts" setup>
 import { useToast } from 'vue-toastification'
 import { copyToClipboard } from '@/@core/utils/navigator'
-import draggable from 'vuedraggable'
 import api from '@/api'
 import { CustomRule, FilterRuleGroup } from '@/api/types'
 import CustomerRuleCard from '@/components/cards/CustomRuleCard.vue'
 import FilterRuleGroupCard from '@/components/cards/FilterRuleGroupCard.vue'
-import ImportCodeDialog from '@/components/dialog/ImportCodeDialog.vue'
 import { useI18n } from 'vue-i18n'
+import { useSilentSettingRefresh } from '@/composables/useSilentSettingRefresh'
+import { openSharedDialog } from '@/composables/useSharedDialog'
 
 // 国际化
 const { t } = useI18n()
+
+const props = defineProps({
+  active: {
+    type: Boolean,
+    default: true,
+  },
+})
+
+// 拖拽库和导入弹窗只在规则编辑交互中需要，拆出设置页入口 chunk。
+const Draggable = defineAsyncComponent(() => import('vuedraggable').then(module => module.default))
+const ImportCodeDialog = defineAsyncComponent(() => import('@/components/dialog/ImportCodeDialog.vue'))
 
 // 自定义规则列表
 const customRules = ref<CustomRule[]>([])
@@ -24,12 +35,6 @@ const selectedTorrentPriority = ref<string[]>(['seeder'])
 
 // 二级分类策略
 const mediaCategories = ref<{ [key: string]: any }>({})
-
-// 导入代码弹窗
-const importCodeDialog = ref(false)
-
-// 导入代码类型
-const importCodeType = ref('')
 
 // 提示框
 const $toast = useToast()
@@ -177,8 +182,17 @@ async function shareRules(rules: CustomRule[] | FilterRuleGroup[], type: string)
 
 // 打开弹窗
 async function importRules(ruleType: string) {
-  importCodeType.value = ruleType
-  importCodeDialog.value = true
+  openSharedDialog(
+    ImportCodeDialog,
+    {
+      title: ruleType === 'custom' ? t('setting.rule.importCustomRules') : t('setting.rule.importRuleGroups'),
+      dataType: ruleType,
+    },
+    {
+      save: saveCodeString,
+    },
+    { closeOn: ['close', 'save'] },
+  )
 }
 
 // 保存导入的代码
@@ -363,12 +377,17 @@ async function saveTorrentPriority() {
   }
 }
 
+async function loadPageData() {
+  await Promise.all([loadMediaCategories(), queryCustomRules(), queryFilterRuleGroups(), queryTorrentPriority()])
+}
+
 // 加载数据
 onMounted(() => {
-  loadMediaCategories()
-  queryCustomRules()
-  queryFilterRuleGroups()
-  queryTorrentPriority()
+  loadPageData()
+})
+
+useSilentSettingRefresh(loadPageData, {
+  active: computed(() => props.active),
 })
 </script>
 
@@ -381,7 +400,7 @@ onMounted(() => {
           <VCardSubtitle>{{ t('setting.rule.customRulesDesc') }}</VCardSubtitle>
         </VCardItem>
         <VCardText>
-          <draggable
+          <Draggable
             v-model="customRules"
             handle=".cursor-move"
             item-key="name"
@@ -396,7 +415,7 @@ onMounted(() => {
                 @change="onRuleChange"
               />
             </template>
-          </draggable>
+          </Draggable>
         </VCardText>
         <VCardText>
           <VForm @submit.prevent="() => {}">
@@ -432,7 +451,7 @@ onMounted(() => {
           <VCardSubtitle>{{ t('setting.rule.priorityRuleGroupsDesc') }}</VCardSubtitle>
         </VCardItem>
         <VCardText>
-          <draggable
+          <Draggable
             v-model="filterRuleGroups"
             handle=".cursor-move"
             item-key="name"
@@ -449,7 +468,7 @@ onMounted(() => {
                 @change="changeRuleGroup"
               />
             </template>
-          </draggable>
+          </Draggable>
         </VCardText>
         <VCardText>
           <VForm @submit.prevent="() => {}">
@@ -477,14 +496,6 @@ onMounted(() => {
       </VCard>
     </VCol>
   </VRow>
-  <ImportCodeDialog
-    v-if="importCodeDialog"
-    v-model="importCodeDialog"
-    :title="importCodeType === 'custom' ? t('setting.rule.importCustomRules') : t('setting.rule.importRuleGroups')"
-    :dataType="importCodeType"
-    @close="importCodeDialog = false"
-    @save="saveCodeString"
-  />
   <VRow>
     <VCol cols="12">
       <VCard>

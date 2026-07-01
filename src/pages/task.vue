@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // @ts-nocheck
-import NoDataFound from '@/components/NoDataFound.vue'
+import NoDataFound from '@/components/states/NoDataFound.vue'
 import api from '@/api'
 import type { Collect, DownloadTask } from '@/api/types'
 import TaskCardListView from '@/views/collect/TaskCardListView.vue'

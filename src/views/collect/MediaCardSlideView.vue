@@ -3,7 +3,7 @@
 import api from '@/api'
 import type { MediaInfo } from '@/api/types'
 import MediaCard from '@/components/cards/MediaCard.vue'
-import SlideView from '@/components/slide/SlideView.vue'
+import SlideView from '@/components/slide/VirtualSlideView.vue'
 import { registerAbortController } from '@/router'
 
 // 输入参数

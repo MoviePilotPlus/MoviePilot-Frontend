@@ -1,19 +1,33 @@
 <script setup lang="ts">
 import { debounce } from 'lodash-es'
-import NoDataFound from '@/components/NoDataFound.vue'
+import type { LocationQuery } from 'vue-router'
+import NoDataFound from '@/components/states/NoDataFound.vue'
 import api from '@/api'
-import type { Context } from '@/api/types'
+import type { Context, SubtitleInfo } from '@/api/types'
 import TorrentCard from '@/components/cards/TorrentCard.vue'
 import TorrentItem from '@/components/cards/TorrentItem.vue'
+import SubtitleCard from '@/components/cards/SubtitleCard.vue'
+import SubtitleItem from '@/components/cards/SubtitleItem.vue'
+import ProgressiveCardGrid from '@/components/misc/ProgressiveCardGrid.vue'
 import TorrentFilterBar from '@/components/filter/TorrentFilterBar.vue'
 import { useI18n } from 'vue-i18n'
 import { useGlobalSettingsStore } from '@/stores/global'
 import { useTorrentFilter, type FilterState } from '@/composables/useTorrentFilter'
-import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
+import { useDynamicButton } from '@/composables/useDynamicButton'
+import { usePWA } from '@/composables/usePWA'
 import { useToast } from 'vue-toastification'
+import { useKeepAliveRefresh } from '@/composables/useKeepAliveRefresh'
+import { useUserStore } from '@/stores'
+import { buildUserPermissionContext, hasPermission } from '@/utils/permission'
 
 // 国际化
 const { t } = useI18n()
+
+const { appMode } = usePWA()
+const userStore = useUserStore()
+const canSearch = computed(() =>
+  hasPermission(buildUserPermissionContext(userStore.superUser, userStore.permissions), 'search'),
+)
 
 // 提示框
 const toast = useToast()
@@ -26,27 +40,174 @@ const torrentFilter = useTorrentFilter()
 
 // 路由参数
 const route = useRoute()
+const router = useRouter()
+
+interface SearchParams {
+  keyword: string
+  type: string
+  area: string
+  title: string
+  year: string
+  season: string
+  episode: string
+  sites: string
+  result_type: string
+}
+
+interface LastSearchContextResponse {
+  success?: boolean
+  data?: {
+    params?: Partial<SearchParams>
+    results?: Array<Context | SubtitleInfo>
+  }
+}
+
+const resourceSearchParamsStorageKey = 'MP_ResourceSearchParams'
+
+function createSearchParams(query: LocationQuery): SearchParams {
+  return {
+    keyword: query?.keyword?.toString() ?? '',
+    type: query?.type?.toString() ?? '',
+    area: query?.area?.toString() ?? '',
+    title: query?.title?.toString() ?? '',
+    year: query?.year?.toString() ?? '',
+    season: query?.season?.toString() ?? '',
+    episode: query?.episode?.toString() ?? '',
+    sites: query?.sites?.toString() ?? '',
+    result_type: query?.result_type?.toString() === 'subtitle' ? 'subtitle' : 'torrent',
+  }
+}
+
+function normalizeSearchParams(params?: Partial<SearchParams> | null): SearchParams {
+  return {
+    keyword: params?.keyword?.toString() ?? '',
+    type: params?.type?.toString() ?? '',
+    area: params?.area?.toString() ?? '',
+    title: params?.title?.toString() ?? '',
+    year: params?.year?.toString() ?? '',
+    season: params?.season?.toString() ?? '',
+    episode: params?.episode?.toString() ?? '',
+    sites: params?.sites?.toString() ?? '',
+    result_type: params?.result_type?.toString() === 'subtitle' ? 'subtitle' : 'torrent',
+  }
+}
+
+function hasSearchKeyword(params: SearchParams): boolean {
+  return params.keyword.trim().length > 0
+}
+
+function createSearchRequestToken(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function loadStoredSearchParams(): SearchParams | null {
+  try {
+    const rawParams = localStorage.getItem(resourceSearchParamsStorageKey)
+    if (!rawParams) return null
+
+    const params = normalizeSearchParams(JSON.parse(rawParams) as Partial<SearchParams>)
+    return hasSearchKeyword(params) ? params : null
+  } catch (error) {
+    console.warn('读取资源搜索参数失败:', error)
+    localStorage.removeItem(resourceSearchParamsStorageKey)
+    return null
+  }
+}
+
+function saveStoredSearchParams(params: SearchParams) {
+  if (!hasSearchKeyword(params)) return
+  localStorage.setItem(resourceSearchParamsStorageKey, JSON.stringify(params))
+}
+
+const initialSearchParams = createSearchParams(route.query)
+const activeSearchParams = ref<SearchParams>(initialSearchParams)
+const lastSearchParams = ref<SearchParams | null>(
+  hasSearchKeyword(initialSearchParams) ? { ...initialSearchParams } : loadStoredSearchParams(),
+)
+
+function rememberSearchParams(params: SearchParams) {
+  if (!hasSearchKeyword(params)) return
+
+  const nextParams = { ...params }
+  lastSearchParams.value = nextParams
+  saveStoredSearchParams(nextParams)
+}
+
+function applyRememberedSearchParams(params?: Partial<SearchParams> | null, syncActive: boolean = false) {
+  const nextParams = normalizeSearchParams(params)
+  if (!hasSearchKeyword(nextParams)) return null
+
+  rememberSearchParams(nextParams)
+  if (syncActive || !hasSearchKeyword(activeSearchParams.value)) {
+    activeSearchParams.value = { ...nextParams }
+  }
+  return nextParams
+}
+
+if (hasSearchKeyword(initialSearchParams)) {
+  rememberSearchParams(initialSearchParams)
+}
+
+async function fetchLastSearchContext() {
+  try {
+    const result = (await api.get('search/last/context')) as LastSearchContextResponse
+    applyRememberedSearchParams(result?.data?.params, true)
+    return Array.isArray(result?.data?.results) ? result.data.results : []
+  } catch (error) {
+    console.warn('读取上次搜索上下文失败，回退到仅加载结果:', error)
+    const results = await api.get('search/last')
+    return (results as unknown as Context[]) || []
+  }
+}
+
+async function resolveRefreshSearchParams() {
+  if (hasSearchKeyword(activeSearchParams.value)) {
+    return { ...activeSearchParams.value }
+  }
+  if (lastSearchParams.value && hasSearchKeyword(lastSearchParams.value)) {
+    return { ...lastSearchParams.value }
+  }
+
+  const storedParams = loadStoredSearchParams()
+  if (storedParams) {
+    applyRememberedSearchParams(storedParams, true)
+    return { ...storedParams }
+  }
+
+  await fetchLastSearchContext()
+  if (lastSearchParams.value && hasSearchKeyword(lastSearchParams.value)) {
+    return { ...lastSearchParams.value }
+  }
+
+  return null
+}
 
 // 查询TMDBID或标题
-const keyword = route.query?.keyword?.toString() ?? ''
+const keyword = computed(() => activeSearchParams.value.keyword)
 
 // 查询类型
-const type = route.query?.type?.toString() ?? ''
+const type = computed(() => activeSearchParams.value.type)
 
 // 搜索字段
-const area = route.query?.area?.toString() ?? ''
+const area = computed(() => activeSearchParams.value.area)
 
 // 搜索标题
-const title = route.query?.title?.toString() ?? ''
+const title = computed(() => activeSearchParams.value.title)
 
 // 搜索年份
-const year = route.query?.year
+const year = computed(() => activeSearchParams.value.year)
 
 // 搜索季
-const season = route.query?.season?.toString() ?? ''
+const season = computed(() => activeSearchParams.value.season)
 
 // 搜索站点，以,分离多个
-const sites = route.query?.sites?.toString() ?? ''
+const sites = computed(() => activeSearchParams.value.sites)
+
+// 搜索结果类型
+const resultType = computed(() => (activeSearchParams.value.result_type === 'subtitle' ? 'subtitle' : 'torrent'))
+
+// 是否为字幕搜索
+const isSubtitleSearch = computed(() => resultType.value === 'subtitle')
 
 // 视图类型，从localStorage中读取
 const viewType = ref<string>(localStorage.getItem('MPTorrentsViewType') ?? 'card')
@@ -68,7 +229,7 @@ let aiStatusCheckInterval: ReturnType<typeof setInterval> | null = null // AI状
 
 // 是否有搜索标签
 const hasSearchTags = computed(() => {
-  return !!(keyword || title || year || season)
+  return !!(keyword.value || title.value || year.value || season.value)
 })
 
 // 是否启用筛选栏动画
@@ -76,6 +237,9 @@ const enableFilterAnimation = ref(true)
 
 // 原始数据列表（未筛选）
 const rawDataList = ref<Array<Context>>([])
+
+// 原始字幕数据列表
+const rawSubtitleDataList = ref<Array<SubtitleInfo>>([])
 
 // 筛选后的数据列表（用于行视图）
 const filteredRowDataList = ref<Array<Context>>([])
@@ -86,14 +250,25 @@ interface SearchTorrent extends Context {
 }
 const filteredCardDataList = ref<Array<SearchTorrent>>([])
 
-// 使用无限滚动 composable（行视图）
-const rowScroll = useInfiniteScroll(filteredRowDataList)
-
-// 使用无限滚动 composable（卡片视图）
-const cardScroll = useInfiniteScroll(filteredCardDataList)
-
 // 是否刷新过
 const isRefreshed = ref(false)
+
+const viewToggleIcon = computed(() => (viewType.value === 'card' ? 'mdi-view-list-outline' : 'mdi-view-grid-outline'))
+
+// 搜索结果视图切换收纳到页面动态按钮中，和仪表盘的设置按钮保持一致。
+function toggleViewType() {
+  changeViewType(viewType.value === 'card' ? 'row' : 'card')
+}
+
+useDynamicButton({
+  icon: viewToggleIcon,
+  onClick: toggleViewType,
+  permission: 'search',
+  show: computed(() => appMode.value && isRefreshed.value),
+})
+
+// 是否正在重新搜索
+const isRefreshing = ref(false)
 
 // 加载进度文本
 const progressText = ref(t('common.pleaseWait'))
@@ -107,14 +282,11 @@ const progressEnabled = ref(false)
 // 进度是否激活
 const progressActive = ref(false)
 
+let progressResetTimer: ReturnType<typeof setTimeout> | null = null
+
 // 是否显示搜索进度
 const isSearchProgressVisible = computed(
   () => progressActive.value || (!isRefreshed.value && (progressEnabled.value || progressValue.value > 0)),
-)
-
-// 是否显示搜索中的页面态
-const isSearchLoading = computed(
-  () => !isRefreshed.value && isSearchProgressVisible.value && rawDataList.value.length === 0,
 )
 
 // 归一化搜索进度，避免 SSE 异常值影响显示
@@ -135,14 +307,45 @@ const errorTitle = ref(t('resource.noData'))
 const errorDescription = ref(t('resource.noResourceFound'))
 
 let searchEventSource: EventSource | null = null
+let searchStreamIdleTimer: ReturnType<typeof setTimeout> | null = null
 
 const streamPreviewLimit = 24
+const streamUiFlushDelay = 1000
+const streamPreviewBufferLimit = streamPreviewLimit * 4
+const searchStreamIdleTimeout = 90_000
+const searchStreamDoneCloseDelay = 1500
 
 const streamTotalCount = ref(0)
+const streamPreviewDataList = ref<Array<Context>>([])
+const streamPreviewSubtitleDataList = ref<Array<SubtitleInfo>>([])
+
+// 搜索过程中还没有任何可展示结果时，显示骨架卡片，等搜索结束后再切换为空态。
+const isSearchLoading = computed(() => {
+  if (!isSearchProgressVisible.value) return false
+
+  return isSubtitleSearch.value
+    ? rawSubtitleDataList.value.length === 0 && streamPreviewSubtitleDataList.value.length === 0
+    : rawDataList.value.length === 0 && streamPreviewDataList.value.length === 0
+})
 
 const displayResourceCount = computed(() =>
-  progressActive.value ? streamTotalCount.value : torrentFilter.totalFilteredCount.value,
+  progressActive.value
+    ? streamTotalCount.value
+    : isSubtitleSearch.value
+      ? rawSubtitleDataList.value.length
+      : torrentFilter.totalFilteredCount.value,
 )
+
+// 搜索中只显示进度区域，避免结果抬头和进度条同时占用顶部空间。
+const showResultHeader = computed(() => isRefreshed.value && !progressActive.value)
+
+let pendingStreamItems: Array<Context> = []
+let pendingSubtitleStreamItems: Array<SubtitleInfo> = []
+let streamFlushTimer: ReturnType<typeof setTimeout> | null = null
+let streamFinalResultApplied = false
+let pendingProgressText: string | null = null
+let pendingProgressValue: number | null = null
+let pendingStreamTotalCount: number | null = null
 
 // 监听筛选条件变化，重新筛选数据
 watch(
@@ -155,6 +358,8 @@ watch(
 
 // 应用筛选
 function applyFilter() {
+  if (isSubtitleSearch.value) return
+
   if (viewType.value === 'row') {
     filteredRowDataList.value = torrentFilter.filterRowData(rawDataList.value)
   } else {
@@ -200,6 +405,7 @@ const watchProgressValue = watch(
 
 // 使用SSE监听加载进度
 function startLoadingProgress() {
+  clearProgressResetTimer()
   watchProgressValue.resume()
   progressText.value = t('resource.searching')
   progressValue.value = 0
@@ -214,18 +420,104 @@ function stopLoadingProgress() {
 
   // 确保进度显示100%，然后再渐进清零
   progressValue.value = 100
-  setTimeout(() => {
+  clearProgressResetTimer()
+  progressResetTimer = setTimeout(() => {
+    progressResetTimer = null
     progressValue.value = 0
     progressEnabled.value = false
   }, 1500)
 }
 
+function clearProgressResetTimer() {
+  if (progressResetTimer) {
+    clearTimeout(progressResetTimer)
+    progressResetTimer = null
+  }
+}
+
 // 关闭SSE连接
-function closeSearchEventSource() {
+function closeSearchEventSource(source?: EventSource) {
+  if (source && searchEventSource !== source) {
+    source.close()
+    return
+  }
+
   if (searchEventSource) {
     searchEventSource.close()
     searchEventSource = null
   }
+
+  clearSearchStreamIdleTimer()
+}
+
+function clearSearchStreamIdleTimer() {
+  if (searchStreamIdleTimer) {
+    clearTimeout(searchStreamIdleTimer)
+    searchStreamIdleTimer = null
+  }
+}
+
+// 渐进式搜索期间只保留有限预览数据，避免每个批次都触发完整筛选和分组计算。
+function clearStreamFlushTimer() {
+  if (streamFlushTimer) {
+    clearTimeout(streamFlushTimer)
+    streamFlushTimer = null
+  }
+}
+
+function clearStreamPreviewState(resetFinalState: boolean = false) {
+  clearStreamFlushTimer()
+  pendingStreamItems = []
+  pendingSubtitleStreamItems = []
+  pendingProgressText = null
+  pendingProgressValue = null
+  pendingStreamTotalCount = null
+  streamPreviewDataList.value = []
+  streamPreviewSubtitleDataList.value = []
+  if (resetFinalState) {
+    streamFinalResultApplied = false
+  }
+}
+
+// 将进度和预览列表放到同一个节奏刷新，避免 SSE 到来时多处 UI 各自抖动。
+function flushBufferedStreamState() {
+  clearStreamFlushTimer()
+
+  if (pendingProgressText !== null) {
+    progressText.value = pendingProgressText
+  }
+  if (pendingProgressValue !== null) {
+    progressValue.value = pendingProgressValue
+  }
+  if (pendingStreamTotalCount !== null) {
+    streamTotalCount.value = pendingStreamTotalCount
+  }
+
+  pendingProgressText = null
+  pendingProgressValue = null
+  pendingStreamTotalCount = null
+
+  if (pendingSubtitleStreamItems.length) {
+    streamPreviewSubtitleDataList.value = [...pendingSubtitleStreamItems, ...streamPreviewSubtitleDataList.value].slice(
+      0,
+      streamPreviewLimit,
+    )
+    pendingSubtitleStreamItems = []
+    isRefreshed.value = true
+  }
+
+  if (!pendingStreamItems.length) return
+
+  streamPreviewDataList.value = [...pendingStreamItems, ...streamPreviewDataList.value].slice(0, streamPreviewLimit)
+  pendingStreamItems = []
+  isRefreshed.value = true
+}
+
+function scheduleStreamFlush() {
+  if (streamFlushTimer) return
+  streamFlushTimer = setTimeout(() => {
+    flushBufferedStreamState()
+  }, streamUiFlushDelay)
 }
 
 // 获取API URL
@@ -246,20 +538,42 @@ function setSearchParam(params: URLSearchParams, key: string, value: unknown) {
 }
 
 // 构建搜索流URL
-function buildSearchStreamUrl() {
-  const isMediaSearch = /^[a-zA-Z]+:/.test(keyword)
-  const url = getApiUrl(isMediaSearch ? `search/media/${encodeURIComponent(keyword)}/stream` : 'search/title/stream')
+function buildSearchStreamUrl(params: SearchParams, requestToken?: string) {
+  const isMediaSearch = /^[a-zA-Z]+:/.test(params.keyword)
+  const url = getApiUrl(
+    params.result_type === 'subtitle'
+      ? isMediaSearch
+        ? `search/subtitle/media/${encodeURIComponent(params.keyword)}/stream`
+        : 'search/subtitle/title/stream'
+      : isMediaSearch
+        ? `search/media/${encodeURIComponent(params.keyword)}/stream`
+        : 'search/title/stream',
+  )
 
-  if (isMediaSearch) {
-    setSearchParam(url.searchParams, 'mtype', type)
-    setSearchParam(url.searchParams, 'area', area)
-    setSearchParam(url.searchParams, 'title', title)
-    setSearchParam(url.searchParams, 'year', year)
-    setSearchParam(url.searchParams, 'season', season)
-    setSearchParam(url.searchParams, 'sites', sites)
+  if (params.result_type === 'subtitle' && isMediaSearch) {
+    setSearchParam(url.searchParams, 'mtype', params.type)
+    setSearchParam(url.searchParams, 'title', params.title)
+    setSearchParam(url.searchParams, 'year', params.year)
+    setSearchParam(url.searchParams, 'season', params.season)
+    setSearchParam(url.searchParams, 'episode', params.episode)
+    setSearchParam(url.searchParams, 'sites', params.sites)
+  } else if (params.result_type === 'subtitle') {
+    setSearchParam(url.searchParams, 'keyword', params.keyword)
+    setSearchParam(url.searchParams, 'sites', params.sites)
+  } else if (isMediaSearch) {
+    setSearchParam(url.searchParams, 'mtype', params.type)
+    setSearchParam(url.searchParams, 'area', params.area)
+    setSearchParam(url.searchParams, 'title', params.title)
+    setSearchParam(url.searchParams, 'year', params.year)
+    setSearchParam(url.searchParams, 'season', params.season)
+    setSearchParam(url.searchParams, 'sites', params.sites)
   } else {
-    setSearchParam(url.searchParams, 'keyword', keyword)
-    setSearchParam(url.searchParams, 'sites', sites)
+    setSearchParam(url.searchParams, 'keyword', params.keyword)
+    setSearchParam(url.searchParams, 'sites', params.sites)
+  }
+
+  if (requestToken) {
+    setSearchParam(url.searchParams, '_ts', requestToken)
   }
 
   return url.toString()
@@ -267,7 +581,11 @@ function buildSearchStreamUrl() {
 
 // 重置搜索结果
 function resetSearchResults() {
+  clearStreamPreviewState(true)
+  // 新搜索开始时先回到未完成态，避免上一轮空态在 SSE 返回前抢先显示。
+  isRefreshed.value = false
   rawDataList.value = []
+  rawSubtitleDataList.value = []
   originalDataList.value = []
   streamTotalCount.value = 0
   aiRecommended.value = false
@@ -279,23 +597,37 @@ function resetSearchResults() {
   applyFilter()
 }
 
+// 判断当前页面是否已经完成过一次带关键词的空结果搜索，避免 keep-alive 返回时自动重搜。
+function hasLoadedEmptySearchResult() {
+  const dataLength = isSubtitleSearch.value ? rawSubtitleDataList.value.length : rawDataList.value.length
+  return isRefreshed.value && !progressActive.value && dataLength === 0 && hasSearchKeyword(activeSearchParams.value)
+}
+
 // 更新搜索进度
-function updateSearchProgress(eventData: { [key: string]: any }) {
+function updateSearchProgress(eventData: { [key: string]: any }, flushNow: boolean = false) {
   if (eventData.text) {
-    progressText.value = eventData.text
+    pendingProgressText = eventData.text
   }
   if (typeof eventData.value === 'number') {
-    progressValue.value = eventData.value
+    pendingProgressValue = eventData.value
   }
   if (typeof eventData.total_items === 'number') {
-    streamTotalCount.value = eventData.total_items
+    pendingStreamTotalCount = eventData.total_items
   }
   progressEnabled.value = true
+
+  if (flushNow) {
+    flushBufferedStreamState()
+  } else {
+    scheduleStreamFlush()
+  }
 }
 
 // 设置流式搜索结果
 function setStreamResults(items: Context[]) {
+  clearStreamPreviewState()
   rawDataList.value = items
+  rawSubtitleDataList.value = []
   originalDataList.value = items
   if (!progressActive.value) {
     streamTotalCount.value = items.length
@@ -304,12 +636,51 @@ function setStreamResults(items: Context[]) {
   applyFilter()
 }
 
-// 追加流式搜索结果
+// 设置字幕搜索结果
+function setSubtitleStreamResults(items: SubtitleInfo[]) {
+  clearStreamPreviewState()
+  rawSubtitleDataList.value = items
+  rawDataList.value = []
+  originalDataList.value = []
+  if (!progressActive.value) {
+    streamTotalCount.value = items.length
+  }
+  isRefreshed.value = true
+}
+
+// 追加流式搜索预览结果
 function appendStreamResults(items: Context[]) {
   if (!items.length) return
 
-  const nextItems = [...items, ...rawDataList.value]
-  setStreamResults(progressActive.value ? nextItems.slice(0, streamPreviewLimit) : nextItems)
+  pendingStreamItems.unshift(...items)
+  if (pendingStreamItems.length > streamPreviewBufferLimit) {
+    pendingStreamItems = pendingStreamItems.slice(0, streamPreviewBufferLimit)
+  }
+  scheduleStreamFlush()
+}
+
+// 追加流式字幕搜索预览结果
+function appendSubtitleStreamResults(items: SubtitleInfo[]) {
+  if (!items.length) return
+
+  pendingSubtitleStreamItems.unshift(...items)
+  if (pendingSubtitleStreamItems.length > streamPreviewBufferLimit) {
+    pendingSubtitleStreamItems = pendingSubtitleStreamItems.slice(0, streamPreviewBufferLimit)
+  }
+  scheduleStreamFlush()
+}
+
+function applyFinalStreamResults(items: Context[]) {
+  streamFinalResultApplied = true
+  flushBufferedStreamState()
+  setStreamResults(items)
+}
+
+// 应用最终字幕搜索结果
+function applyFinalSubtitleStreamResults(items: SubtitleInfo[]) {
+  streamFinalResultApplied = true
+  flushBufferedStreamState()
+  setSubtitleStreamResults(items)
 }
 
 // 获取磁力链接的key
@@ -322,97 +693,185 @@ function getTorrentItemKey(item: Context, index: number) {
   )
 }
 
+// 获取字幕结果的key
+function getSubtitleItemKey(item: SubtitleInfo, index: number) {
+  return (
+    item.enclosure ||
+    item.page_url ||
+    `${item.site_name || ''}-${item.subtitle_id || ''}-${item.title || ''}` ||
+    `subtitle-${index}`
+  )
+}
+
 // 处理搜索流消息
 function handleSearchStreamMessage(eventData: { [key: string]: any }) {
-  updateSearchProgress(eventData)
-
   if (eventData.type === 'error') {
+    updateSearchProgress(eventData, true)
     errorDescription.value = eventData.message || t('resource.noResourceFound')
+    return
+  }
+
+  if (isSubtitleSearch.value) {
+    const subtitleItems = Array.isArray(eventData.items) ? (eventData.items as SubtitleInfo[]) : []
+    if (eventData.type === 'append') {
+      updateSearchProgress(eventData)
+      appendSubtitleStreamResults(subtitleItems)
+    } else if (eventData.type === 'replace') {
+      updateSearchProgress(eventData, true)
+      applyFinalSubtitleStreamResults(subtitleItems)
+    } else if (eventData.type === 'done' && subtitleItems.length > 0 && !streamFinalResultApplied) {
+      updateSearchProgress(eventData, true)
+      applyFinalSubtitleStreamResults(subtitleItems)
+    } else {
+      updateSearchProgress(eventData)
+    }
     return
   }
 
   const items = Array.isArray(eventData.items) ? (eventData.items as Context[]) : []
   if (eventData.type === 'append') {
+    updateSearchProgress(eventData)
     appendStreamResults(items)
-  } else if (eventData.type === 'replace' || eventData.type === 'done') {
-    setStreamResults(items)
+  } else if (eventData.type === 'replace') {
+    updateSearchProgress(eventData, true)
+    applyFinalStreamResults(items)
+  } else if (eventData.type === 'done' && items.length > 0 && !streamFinalResultApplied) {
+    updateSearchProgress(eventData, true)
+    applyFinalStreamResults(items)
+  } else {
+    updateSearchProgress(eventData)
   }
 }
 
 // 按请求搜索
-async function searchByRequest() {
+async function searchByRequest(params: SearchParams, requestToken?: string) {
+  const items = await requestSearchResults(params, requestToken)
+  streamTotalCount.value = items.length
+  if (params.result_type === 'subtitle') {
+    setSubtitleStreamResults(items as SubtitleInfo[])
+  } else {
+    setStreamResults(items as Context[])
+  }
+}
+
+// 静默刷新使用普通请求，保留当前结果直到新数据完整返回，避免返回页面时露出搜索进度态。
+async function requestSearchResults(params: SearchParams, requestToken?: string) {
   let result: { [key: string]: any }
+  const isMediaSearch = /^[a-zA-Z]+:/.test(params.keyword)
   // 如果keyword的格式是 xxxx:xxxxx 且:前面的xxxx为字符，则按照媒体ID格式搜索
-  if (/^[a-zA-Z]+:/.test(keyword)) {
-    result = await api.get(`search/media/${keyword}`, {
+  if (params.result_type === 'subtitle' && isMediaSearch) {
+    result = await api.get(`search/subtitle/media/${params.keyword}`, {
       params: {
-        mtype: type,
-        area,
-        title,
-        year,
-        season,
-        sites,
+        mtype: params.type,
+        title: params.title,
+        year: params.year,
+        season: params.season,
+        episode: params.episode,
+        sites: params.sites,
+        _ts: requestToken,
+      },
+    })
+  } else if (params.result_type === 'subtitle') {
+    result = await api.get('search/subtitle/title', {
+      params: {
+        keyword: params.keyword,
+        sites: params.sites,
+        _ts: requestToken,
+      },
+    })
+  } else if (isMediaSearch) {
+    result = await api.get(`search/media/${params.keyword}`, {
+      params: {
+        mtype: params.type,
+        area: params.area,
+        title: params.title,
+        year: params.year,
+        season: params.season,
+        sites: params.sites,
+        _ts: requestToken,
       },
     })
   } else {
     // 按标题模糊查询
     result = await api.get(`search/title`, {
       params: {
-        keyword,
-        sites,
+        keyword: params.keyword,
+        sites: params.sites,
+        _ts: requestToken,
       },
     })
   }
 
   if (result && result.success) {
-    streamTotalCount.value = result.data?.length || 0
-    setStreamResults(result.data || [])
-  } else {
-    errorDescription.value = result?.message || t('resource.noResourceFound')
-    streamTotalCount.value = 0
-    setStreamResults([])
+    return (result.data || []) as Array<Context | SubtitleInfo>
   }
+
+  errorDescription.value = result?.message || t('resource.noResourceFound')
+  throw new Error(errorDescription.value)
 }
 
 // 按流搜索
-function searchByStream() {
+function searchByStream(params: SearchParams, requestToken?: string) {
   return new Promise<void>((resolve, reject) => {
     closeSearchEventSource()
 
     let settled = false
-    const source = new EventSource(buildSearchStreamUrl())
+    let receivedDone = false
+    const source = new EventSource(buildSearchStreamUrl(params, requestToken))
     searchEventSource = source
 
+    const settleSearchStream = (callback: () => void) => {
+      if (settled) return
+
+      settled = true
+      closeSearchEventSource(source)
+      callback()
+    }
+
+    const resetIdleTimeout = () => {
+      clearSearchStreamIdleTimer()
+      searchStreamIdleTimer = setTimeout(() => {
+        settleSearchStream(() => reject(new Error(t('resource.noResourceFound'))))
+      }, searchStreamIdleTimeout)
+    }
+
+    resetIdleTimeout()
+
     source.onmessage = event => {
+      if (source !== searchEventSource || settled) return
+
       try {
+        resetIdleTimeout()
         const eventData = JSON.parse(event.data)
         handleSearchStreamMessage(eventData)
 
         if (eventData.type === 'error') {
-          settled = true
-          closeSearchEventSource()
-          resolve()
+          settleSearchStream(resolve)
           return
         }
 
         if (eventData.type === 'done') {
-          settled = true
-          closeSearchEventSource()
-          resolve()
+          // 收到 done 后给后端留出收尾时间，避免过早关闭连接中断搜索结果缓存写入
+          receivedDone = true
+          clearSearchStreamIdleTimer()
+          searchStreamIdleTimer = setTimeout(() => {
+            settleSearchStream(resolve)
+          }, searchStreamDoneCloseDelay)
         }
       } catch (error) {
-        settled = true
-        closeSearchEventSource()
-        reject(error)
+        settleSearchStream(() => reject(error))
       }
     }
 
     source.onerror = () => {
-      if (settled) return
+      if (source !== searchEventSource || settled) return
 
-      settled = true
-      closeSearchEventSource()
-      reject(new Error(t('resource.noResourceFound')))
+      if (receivedDone) {
+        settleSearchStream(resolve)
+        return
+      }
+
+      settleSearchStream(() => reject(new Error(t('resource.noResourceFound'))))
     }
   })
 }
@@ -430,29 +889,50 @@ function changeViewType(newType: string) {
 }
 
 // 获取搜索列表数据
-async function fetchData() {
+async function fetchData(options: { force?: boolean; params?: SearchParams; silent?: boolean } = {}) {
+  const currentSearchParams = { ...(options.params ?? activeSearchParams.value) }
+  if (hasSearchKeyword(currentSearchParams)) {
+    activeSearchParams.value = { ...currentSearchParams }
+    rememberSearchParams(currentSearchParams)
+  }
+  const requestToken = options.force || Boolean(currentSearchParams.keyword) ? createSearchRequestToken() : undefined
+  const hasCurrentResults = isSubtitleSearch.value ? rawSubtitleDataList.value.length > 0 : rawDataList.value.length > 0
+  const silentRefresh = Boolean(options.silent && isRefreshed.value && hasCurrentResults)
+
   try {
     enableFilterAnimation.value = true
-    if (!keyword) {
-      // 查询上次搜索结果
-      const results = await api.get('search/last')
-      rawDataList.value = (results as unknown as Context[]) || []
-      originalDataList.value = (results as unknown as Context[]) || []
+    if (!hasSearchKeyword(currentSearchParams)) {
+      // 查询上次搜索结果，并同步可重放的搜索参数
+      const results = await fetchLastSearchContext()
+      if (activeSearchParams.value.result_type === 'subtitle') {
+        setSubtitleStreamResults((results || []) as SubtitleInfo[])
+      } else {
+        setStreamResults((results || []) as Context[])
+      }
+    } else if (silentRefresh) {
+      // keep-alive 重新进入时后台刷新，旧结果继续显示，等新结果完整返回后一次性替换。
+      const results = await requestSearchResults(currentSearchParams, requestToken)
+      streamTotalCount.value = results.length
+      if (currentSearchParams.result_type === 'subtitle') {
+        setSubtitleStreamResults(results as SubtitleInfo[])
+      } else {
+        setStreamResults(results as Context[])
+      }
     } else {
       resetSearchResults()
       startLoadingProgress()
       try {
-        await searchByStream()
+        await searchByStream(currentSearchParams, requestToken)
       } catch (error) {
         console.warn('渐进式搜索连接失败，回退到普通搜索:', error)
-        await searchByRequest()
+        await searchByRequest(currentSearchParams, requestToken)
       }
       stopLoadingProgress()
-      // 从浏览器历史中删除当前搜索
-      window.history.replaceState(null, '', window.location.pathname)
+      // 搜索完成后移除地址栏参数，避免分享/刷新残留搜索条件
+      if (Object.keys(route.query).length > 0) {
+        await router.replace({ path: route.path, query: {} })
+      }
     }
-    // 应用筛选
-    applyFilter()
     // 标记已刷新
     isRefreshed.value = true
   } catch (error) {
@@ -461,6 +941,26 @@ async function fetchData() {
     stopLoadingProgress()
     isRefreshed.value = true
     return Promise.reject(error)
+  }
+}
+
+// 重新搜索（使用相同参数重新触发搜索）
+async function refreshSearch() {
+  if (isRefreshing.value || progressActive.value) return
+  isRefreshing.value = true
+  try {
+    // 重新搜索时退出 AI 视图，其余状态由 fetchData 内部重置
+    showingAiResults.value = false
+    const refreshParams = await resolveRefreshSearchParams()
+    if (!refreshParams) {
+      console.warn('未找到可用于重新搜索的搜索参数')
+      return
+    }
+    await fetchData({ force: true, params: refreshParams })
+  } catch (error) {
+    console.error('重新搜索失败:', error)
+  } finally {
+    isRefreshing.value = false
   }
 }
 
@@ -687,8 +1187,8 @@ async function checkAiRecommendStatus() {
     const { success, data } = result
     const status = data?.status
 
-    // 只要有数据且状态不是disabled，就标记已检查（允许重试）
-    if (data && status !== 'disabled') {
+    // 状态检查只是初始化已有推荐结果，非禁用状态下即使后端暂无历史状态也不应锁住按钮
+    if (status !== 'disabled') {
       aiStatusChecked.value = true
     }
 
@@ -708,11 +1208,24 @@ async function checkAiRecommendStatus() {
     }
   } catch (error) {
     console.error('检查AI状态失败:', error)
+    // 检查失败不影响用户手动发起智能推荐，避免按钮永久不可用
+    aiStatusChecked.value = true
   }
 }
 
 // 计算当前显示的数据是否有数据
 const hasData = computed(() => {
+  if (isSubtitleSearch.value) {
+    if (progressActive.value) {
+      return streamPreviewSubtitleDataList.value.length > 0 || rawSubtitleDataList.value.length > 0
+    }
+    return rawSubtitleDataList.value.length > 0
+  }
+
+  if (progressActive.value) {
+    return streamPreviewDataList.value.length > 0 || rawDataList.value.length > 0
+  }
+
   if (viewType.value === 'row') {
     return filteredRowDataList.value.length > 0 || rawDataList.value.length > 0
   } else {
@@ -726,24 +1239,51 @@ watchEffect(() => {
   // 需要满足：AI 功能启用、数据已加载、尚未检查
   if (
     aiRecommendEnabled.value &&
+    !isSubtitleSearch.value &&
     originalDataList.value.length > 0 &&
     !progressActive.value &&
     !aiStatusChecked.value
   ) {
-    checkAiRecommendStatus()
+    void checkAiRecommendStatus()
   }
 })
 
+watch(
+  () => route.query,
+  query => {
+    if (Object.keys(query).length === 0) return
+
+    const nextSearchParams = createSearchParams(query)
+    if (!hasSearchKeyword(nextSearchParams)) return
+
+    activeSearchParams.value = nextSearchParams
+    void fetchData()
+  },
+  { deep: true },
+)
+
 // 加载数据
 onMounted(async () => {
-  fetchData()
+  void fetchData()
+})
+
+useKeepAliveRefresh(async () => {
+  if (progressActive.value || isRefreshing.value || isRecommending.value || showingAiResults.value) return
+  if (hasLoadedEmptySearchResult()) return
+
+  const refreshParams = await resolveRefreshSearchParams()
+  if (!refreshParams) return
+
+  await fetchData({ force: true, params: refreshParams, silent: true })
 })
 
 // 卸载时停止轮询
 onUnmounted(() => {
   closeSearchEventSource()
   stopLoadingProgress()
+  clearProgressResetTimer()
   stopAiRecommendPolling()
+  clearStreamPreviewState()
 })
 </script>
 
@@ -751,7 +1291,11 @@ onUnmounted(() => {
   <div>
     <!-- 搜索加载状态 -->
     <VFadeTransition>
-      <div v-if="isSearchProgressVisible" class="search-loading-state mb-3" :class="{ 'is-empty-loading': isSearchLoading }">
+      <div
+        v-if="isSearchProgressVisible"
+        class="search-loading-state mb-3"
+        :class="{ 'is-empty-loading': isSearchLoading }"
+      >
         <VCard elevation="0" class="search-progress-card">
           <div class="progress-header">
             <div class="progress-icon-wrap">
@@ -808,98 +1352,79 @@ onUnmounted(() => {
       </div>
     </VFadeTransition>
 
-    <!-- 精简标题栏 -->
-    <VCard v-if="isRefreshed && !progressActive" class="search-header d-flex align-center mb-3">
-      <div class="search-info-container">
-        <div class="search-title text-moviepilot">
-          <span class="d-none d-sm-inline">{{ t('resource.searchResults') }}</span>
-          <span class="d-inline d-sm-none">{{ t('navItems.searchResult') }}</span>
-        </div>
-        <div v-if="hasSearchTags" class="search-tags d-flex flex-wrap mt-1">
-          <VChip v-if="keyword" class="search-tag" color="primary" size="small" variant="flat">
-            {{ t('resource.keyword') }}: {{ keyword }}
-          </VChip>
-          <VChip v-if="title" class="search-tag" color="primary" size="small" variant="flat">
-            {{ t('resource.title') }}: {{ title }}
-          </VChip>
-          <VChip v-if="year" class="search-tag" color="primary" size="small" variant="flat">
-            {{ t('resource.year') }}: {{ year }}
-          </VChip>
-          <VChip v-if="season" class="search-tag" color="primary" size="small" variant="flat">
-            {{ t('resource.season') }}: {{ season }}
-          </VChip>
-        </div>
+    <!-- 结果抬头：保持和站点管理一致的页面标题结构，筛选控制交给下方工具条。 -->
+    <div v-if="showResultHeader" class="resource-page-header d-flex justify-space-between align-center mb-3">
+      <div class="resource-page-header__copy">
+        <VPageContentTitle
+          :title="isSubtitleSearch ? t('resource.subtitleSearchResults') : t('resource.searchResults')"
+          class="resource-page-header__title my-0"
+          style="margin-block: 0"
+        />
       </div>
 
-      <VSpacer />
+      <div class="resource-page-header__actions d-flex align-center gap-1">
+        <!-- 重新搜索按钮 -->
+        <IconBtn
+          variant="text"
+          color="gray"
+          :loading="isRefreshing"
+          :disabled="isRefreshing || progressActive"
+          @click="refreshSearch"
+        >
+          <VIcon icon="mdi-refresh" />
+          <VTooltip activator="parent" location="top">
+            {{ t('resource.refreshSearch') }}
+          </VTooltip>
+        </IconBtn>
 
-      <!-- AI操作按钮组 -->
-      <div v-if="aiRecommendEnabled && originalDataList.length > 0" class="ai-toggle-container me-2">
-        <div class="ai-toggle-buttons">
+        <!-- AI操作按钮组 -->
+        <div
+          v-if="!isSubtitleSearch && aiRecommendEnabled && originalDataList.length > 0"
+          class="ai-action-group"
+          :class="{ 'ai-action-group--active': showingAiResults }"
+        >
           <VBtn
-            variant="text"
-            size="small"
-            rounded="0"
-            @click="toggleAiRecommend"
+            :variant="showingAiResults ? 'tonal' : 'text'"
+            :color="showingAiResults ? 'primary' : 'gray'"
             :disabled="isRecommending || !aiStatusChecked"
-            height="44"
-            class="ps-4 pe-3 ai-recommend-btn"
-            :class="{ 'ai-active': showingAiResults }"
+            size="small"
+            height="40"
+            class="ai-action-group__primary"
+            @click="toggleAiRecommend"
           >
             <template #prepend>
-              <VIcon icon="lucide:sparkles" size="18" class="ai-icon" :class="{ 'ai-icon-active': showingAiResults }" />
+              <VIcon icon="lucide:sparkles" size="18" />
             </template>
-            <span class="ai-text" :class="{ 'ai-text-active': showingAiResults }">
+            <span class="ai-action-group__label">{{ t('resource.aiRecommend') }}</span>
+            <VTooltip activator="parent" location="top">
               {{ t('resource.aiRecommend') }}
-            </span>
+            </VTooltip>
           </VBtn>
 
           <VExpandXTransition>
-            <div v-if="aiRecommended || isRecommending" class="d-flex align-center">
-              <div class="ai-divider" :style="{ opacity: showingAiResults ? 0 : 1 }"></div>
-              <VBtn
+            <div v-if="aiRecommended || isRecommending" class="ai-action-group__more">
+              <IconBtn
                 variant="text"
-                size="small"
-                rounded="0"
+                color="gray"
                 :disabled="isRecommending || !aiStatusChecked"
                 @click="reRecommend"
-                height="44"
-                min-width="38"
-                class="px-0"
               >
-                <VIcon
-                  :icon="isRecommending ? 'line-md:loading-twotone-loop' : 'mdi-refresh'"
-                  size="18"
-                  class="ai-refresh-icon"
-                />
+                <VIcon :icon="isRecommending ? 'line-md:loading-twotone-loop' : 'mdi-auto-fix'" />
                 <VTooltip activator="parent" location="top">
                   {{ t('resource.reRecommend') }}
                 </VTooltip>
-              </VBtn>
+              </IconBtn>
             </div>
           </VExpandXTransition>
         </div>
       </div>
-
-      <!-- 重新设计的视图切换按钮 -->
-      <div class="view-toggle-container">
-        <div class="view-toggle-buttons">
-          <div class="active-indicator" :class="viewType"></div>
-          <button class="view-toggle-btn" :class="{ active: viewType === 'card' }" @click="changeViewType('card')">
-            <VIcon icon="mdi-view-grid-outline" :color="viewType === 'card' ? 'primary' : undefined" />
-          </button>
-          <button class="view-toggle-btn" :class="{ active: viewType === 'row' }" @click="changeViewType('row')">
-            <VIcon icon="mdi-view-list-outline" :color="viewType === 'row' ? 'primary' : undefined" />
-          </button>
-        </div>
-      </div>
-    </VCard>
+    </div>
 
     <!-- 搜索结果 -->
     <div v-if="isRefreshed && hasData" class="search-results-container">
       <!-- 筛选栏 -->
       <TorrentFilterBar
-        v-if="!progressActive"
+        v-if="!progressActive && !isSubtitleSearch"
         :filter-form="torrentFilter.filterForm"
         :filter-options="torrentFilter.filterOptions"
         :sort-field="torrentFilter.sortField.value"
@@ -921,28 +1446,59 @@ onUnmounted(() => {
       <VFadeTransition mode="out-in">
         <!-- 卡片视图模式 -->
         <div v-if="viewType === 'card'" key="card">
-          <!-- 资源列表 -->
-          <VInfiniteScroll
-            mode="intersect"
-            side="end"
-            :items="cardScroll.displayDataList.value"
-            class="overflow-visible"
-            @load="cardScroll.loadMore"
+          <div
+            v-if="isSubtitleSearch && progressActive && streamPreviewSubtitleDataList.length > 0"
+            class="grid gap-4 grid-torrent-card items-start"
           >
-            <template #loading />
-            <template #empty />
-            <div class="grid gap-4 grid-torrent-card items-start">
-              <TorrentCard
-                v-for="(item, index) in cardScroll.displayDataList.value"
-                :key="getTorrentItemKey(item, index)"
-                :torrent="item"
-                :more="item.more"
-                class="stream-result-item"
-              />
-            </div>
-          </VInfiniteScroll>
+            <SubtitleCard
+              v-for="(item, index) in streamPreviewSubtitleDataList"
+              :key="getSubtitleItemKey(item, index)"
+              :subtitle="item"
+              class="stream-result-item"
+            />
+          </div>
+          <ProgressiveCardGrid
+            v-else-if="isSubtitleSearch && rawSubtitleDataList.length > 0"
+            :items="rawSubtitleDataList"
+            :get-item-key="getSubtitleItemKey"
+            :min-item-width="300"
+            :estimated-item-height="320"
+          >
+            <template #default="{ item }">
+              <SubtitleCard :subtitle="item" />
+            </template>
+          </ProgressiveCardGrid>
+          <div
+            v-else-if="!isSubtitleSearch && progressActive && streamPreviewDataList.length > 0"
+            class="grid gap-4 grid-torrent-card items-start"
+          >
+            <TorrentCard
+              v-for="(item, index) in streamPreviewDataList"
+              :key="getTorrentItemKey(item, index)"
+              :torrent="item"
+              class="stream-result-item"
+            />
+          </div>
+          <ProgressiveCardGrid
+            v-else-if="filteredCardDataList.length > 0"
+            :items="filteredCardDataList"
+            :get-item-key="getTorrentItemKey"
+            :min-item-width="300"
+            :estimated-item-height="400"
+          >
+            <template #default="{ item }">
+              <TorrentCard :torrent="item" :more="item.more" />
+            </template>
+          </ProgressiveCardGrid>
           <!-- 无结果时显示 -->
-          <div v-if="cardScroll.displayDataList.value.length === 0" class="no-results">
+          <div
+            v-if="
+              !progressActive &&
+              ((isSubtitleSearch && rawSubtitleDataList.length === 0) ||
+                (!isSubtitleSearch && filteredCardDataList.length === 0))
+            "
+            class="no-results"
+          >
             <VIcon icon="mdi-file-search-outline" size="64" color="grey-lighten-1" />
             <div class="text-h6 text-grey mt-4">{{ t('torrent.noResults') }}</div>
           </div>
@@ -952,37 +1508,80 @@ onUnmounted(() => {
         <div v-else-if="viewType === 'row'" key="row">
           <VCard class="resource-list-container">
             <!-- 无结果时显示 -->
-            <div v-if="rowScroll.displayDataList.value.length === 0" class="no-results">
+            <div
+              v-if="
+                !progressActive &&
+                ((isSubtitleSearch && rawSubtitleDataList.length === 0) ||
+                  (!isSubtitleSearch && filteredRowDataList.length === 0))
+              "
+              class="no-results"
+            >
               <VIcon icon="mdi-file-search-outline" size="64" color="grey-lighten-1" />
               <div class="text-h6 text-grey mt-4">{{ t('torrent.noResults') }}</div>
             </div>
-            <!-- 资源列表 -->
-            <VInfiniteScroll
-              v-else
-              mode="intersect"
-              side="end"
-              :items="rowScroll.displayDataList.value"
+            <div
+              v-else-if="isSubtitleSearch && progressActive && streamPreviewSubtitleDataList.length > 0"
               class="resource-list overflow-visible"
-              @load="rowScroll.loadMore"
             >
-              <template #loading />
-              <template #empty />
               <div
-                v-for="(item, index) in rowScroll.displayDataList.value"
+                v-for="(item, index) in streamPreviewSubtitleDataList"
+                :key="getSubtitleItemKey(item, index)"
+                class="stream-result-item"
+              >
+                <SubtitleItem :subtitle="item" />
+                <VDivider v-if="index < streamPreviewSubtitleDataList.length - 1" class="my-2" />
+              </div>
+            </div>
+            <div v-else-if="isSubtitleSearch && rawSubtitleDataList.length > 0" class="resource-list">
+              <ProgressiveCardGrid
+                :items="rawSubtitleDataList"
+                :columns="1"
+                :gap="8"
+                :estimated-item-height="190"
+                :overscan-rows="6"
+                :get-item-key="getSubtitleItemKey"
+              >
+                <template #default="{ item, index }">
+                  <SubtitleItem :subtitle="item" />
+                  <VDivider v-if="index < rawSubtitleDataList.length - 1" class="my-2" />
+                </template>
+              </ProgressiveCardGrid>
+            </div>
+            <div
+              v-else-if="!isSubtitleSearch && progressActive && streamPreviewDataList.length > 0"
+              class="resource-list overflow-visible"
+            >
+              <div
+                v-for="(item, index) in streamPreviewDataList"
                 :key="getTorrentItemKey(item, index)"
                 class="stream-result-item"
               >
                 <TorrentItem :torrent="item" />
-                <VDivider v-if="index < rowScroll.displayDataList.value.length - 1" class="my-2" />
+                <VDivider v-if="index < streamPreviewDataList.length - 1" class="my-2" />
               </div>
-            </VInfiniteScroll>
+            </div>
+            <div v-else-if="!isSubtitleSearch && filteredRowDataList.length > 0" class="resource-list">
+              <ProgressiveCardGrid
+                :items="filteredRowDataList"
+                :columns="1"
+                :gap="8"
+                :estimated-item-height="240"
+                :overscan-rows="6"
+                :get-item-key="getTorrentItemKey"
+              >
+                <template #default="{ item, index }">
+                  <TorrentItem :torrent="item" />
+                  <VDivider v-if="index < filteredRowDataList.length - 1" class="my-2" />
+                </template>
+              </ProgressiveCardGrid>
+            </div>
           </VCard>
         </div>
       </VFadeTransition>
     </div>
 
     <!-- 无数据显示 -->
-    <div v-else-if="isRefreshed" class="d-flex flex-column align-center justify-center py-8">
+    <div v-else-if="isRefreshed && !progressActive" class="d-flex flex-column align-center justify-center py-8">
       <NoDataFound :errorTitle="errorTitle" :errorDescription="errorDescription" />
       <VBtn rounded="pill" class="mt-4" color="primary" prepend-icon="mdi-home" to="/">
         {{ t('resource.backToHome') }}
@@ -991,9 +1590,22 @@ onUnmounted(() => {
 
     <!-- 初始加载状态 -->
     <LoadingBanner v-else-if="!isRefreshed && !isSearchLoading" />
+
+    <Teleport to="body" v-if="route.path === '/resource'">
+      <div v-if="isRefreshed && !appMode && canSearch" class="compact-fab-stack">
+        <VFab
+          :icon="viewToggleIcon"
+          color="primary"
+          appear
+          class="compact-fab compact-fab--primary"
+          @click="toggleViewType"
+        />
+      </div>
+    </Teleport>
+
     <!-- 滚动到顶部按钮 -->
     <Teleport to="body" v-if="route.path === '/resource'">
-      <VScrollToTopBtn />
+      <VScrollToTopBtn :offset-fab="isRefreshed && !appMode" />
     </Teleport>
   </div>
 </template>
@@ -1011,8 +1623,6 @@ onUnmounted(() => {
 
 .search-progress-card {
   padding: 16px;
-  border: 1px solid rgba(var(--v-theme-primary), 0.18);
-  border-radius: 8px;
   backdrop-filter: blur(10px);
   background: linear-gradient(135deg, rgba(var(--v-theme-primary), 0.08), transparent 42%), rgb(var(--v-theme-surface));
   inline-size: 100%;
@@ -1073,14 +1683,12 @@ onUnmounted(() => {
 .search-skeleton-grid {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
 }
 
 .search-skeleton-card,
 .search-skeleton-list {
   overflow: hidden;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  border-radius: 8px;
   background: rgb(var(--v-theme-surface));
 }
 
@@ -1104,149 +1712,56 @@ onUnmounted(() => {
   }
 }
 
-/* 精简标题栏样式 */
-.search-header {
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  padding-block: 8px;
-  padding-inline: 12px;
-}
-
-.search-info-container {
+.resource-page-header {
   gap: 12px;
 }
 
-.search-title {
-  font-size: 1.2rem;
-  font-weight: 600;
+.resource-page-header__copy {
+  flex: 1 1 auto;
+  min-inline-size: 0;
 }
 
-.search-tags {
-  gap: 8px;
+.resource-page-header__title {
+  max-inline-size: 100%;
+}
+
+.resource-page-header__actions {
+  flex: 0 0 auto;
+  align-self: center;
 }
 
 .search-tag {
+  max-inline-size: min(100%, 220px);
   font-size: 0.75rem;
 }
 
-/* 重新设计的视图切换按钮 */
-.view-toggle-container {
-  position: relative;
-}
-
-.view-toggle-buttons {
-  position: relative;
-  display: flex;
-  padding: 4px;
-  border-radius: 8px;
-  background-color: rgba(var(--v-theme-surface-variant), 0.1);
-  isolation: isolate; /* Create new stacking context */
-}
-
-.active-indicator {
-  position: absolute;
-  z-index: 1;
-  border-radius: 6px;
-  background-color: rgb(var(--v-theme-surface));
-  block-size: 36px;
-  box-shadow:
-    0 1px 3px rgba(0, 0, 0, 12%),
-    0 1px 2px rgba(0, 0, 0, 24%);
-  inline-size: 40px;
-  inset-block-start: 4px;
-  inset-inline-start: 4px;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.active-indicator.row {
-  transform: translateX(40px);
-}
-
-.view-toggle-btn {
-  position: relative;
-  z-index: 2; /* Sit on top of indicator */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  block-size: 36px;
-  cursor: pointer;
-  inline-size: 40px;
-  transition: all 0.2s ease;
-}
-
-.view-toggle-btn:hover:not(.active) {
-  border-radius: 6px;
-  background-color: rgba(var(--v-theme-primary), 0.05);
-}
-
-/* AI按钮组样式 */
-.ai-toggle-container {
-  position: relative;
-}
-
-.ai-toggle-buttons {
+.ai-action-group {
   display: flex;
   overflow: hidden;
   align-items: center;
-  padding: 0;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   border-radius: 8px;
-  background-color: rgba(var(--v-theme-surface-variant), 0.1);
-  block-size: 44px; /* 36px(btn) + 4px*2(padding) to match right side exactly */
 }
 
-.ai-recommend-btn {
-  margin: 0;
-  block-size: 100% !important;
-  transition: all 0.3s ease;
+.ai-action-group--active {
+  border-color: rgba(var(--v-theme-primary), 0.24);
+  background-color: rgba(var(--v-theme-primary), 0.08);
 }
 
-/* 仅为激活的按钮添加背景 */
-.ai-recommend-btn.ai-active {
-  z-index: 1;
-  background-color: rgba(var(--v-theme-primary), 0.15);
+.ai-action-group__primary {
+  border-radius: 8px 0 0 8px !important;
+  padding-inline: 14px 12px !important;
 }
 
-/* 图标基础样式 */
-.ai-icon {
-  color: rgba(var(--v-theme-on-surface), 0.6);
-  transform: translateZ(0);
-  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+.ai-action-group__label {
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
-/* 激活状态图标：变色 + 辉光 */
-.ai-icon-active {
-  color: rgb(var(--v-theme-primary));
-  filter: drop-shadow(0 0 4px rgba(var(--v-theme-primary), 0.5));
-}
-
-/* 文字基础样式 */
-.ai-text {
-  color: rgba(var(--v-theme-on-surface), 0.6);
-  font-size: 0.85rem;
-  font-weight: 600; /* 保持一致的字重防止位移 */
-  transform: translateZ(0);
-  transition: color 0.3s ease;
-}
-
-/* 激活状态文字 */
-.ai-text-active {
-  color: rgb(var(--v-theme-primary));
-}
-
-/* 刷新图标样式 */
-.ai-refresh-icon {
-  color: rgba(var(--v-theme-on-surface), 0.6);
-  transition: color 0.3s ease;
-}
-
-.ai-divider {
-  z-index: 0;
-  flex-shrink: 0;
-  block-size: 20px;
-  border-inline-start: 1px solid rgba(var(--v-theme-on-surface), 0.12); /* 使用边框显示线条 */
-  inline-size: 0; /* 宽度设为0，不占用空间 */
-  transition: opacity 0.3s ease;
+.ai-action-group__more {
+  display: flex;
+  align-items: center;
+  border-inline-start: 1px solid rgba(var(--v-theme-on-surface), 0.12);
 }
 
 .search-results-container {
@@ -1262,14 +1777,10 @@ onUnmounted(() => {
 /* 列表视图样式 */
 .resource-list-container {
   padding: 8px;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  border-radius: 12px;
 }
 
 .resource-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: block;
 }
 
 /* 无结果提示 */
@@ -1282,30 +1793,8 @@ onUnmounted(() => {
 }
 
 @media (width <= 600px) {
-  .search-header {
-    padding-block: 6px;
-    padding-inline: 12px;
-  }
-
-  .search-title {
-    font-size: 1.1rem;
-    white-space: nowrap;
-  }
-
-  .search-info-container {
+  .resource-page-header {
     gap: 8px;
-    min-inline-size: 0;
-  }
-
-  .search-tags {
-    flex-wrap: nowrap;
-    margin-inline-end: 4px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .search-tags::-webkit-scrollbar {
-    display: none;
   }
 
   .search-loading-state {
@@ -1345,52 +1834,6 @@ onUnmounted(() => {
 
   .search-skeleton-grid {
     grid-template-columns: 1fr;
-  }
-
-  .view-toggle-container {
-    flex-shrink: 0;
-  }
-
-  .view-toggle-buttons {
-    padding: 2px;
-  }
-
-  .active-indicator {
-    block-size: 32px;
-    inline-size: 36px;
-    inset-block-start: 2px;
-    inset-inline-start: 2px;
-  }
-
-  .active-indicator.row {
-    transform: translateX(36px);
-  }
-
-  .view-toggle-btn {
-    block-size: 32px;
-    inline-size: 36px;
-  }
-
-  .ai-toggle-buttons {
-    block-size: 36px;
-  }
-
-  .ai-text {
-    font-size: 0.8rem;
-  }
-
-  .ai-recommend-btn,
-  .ai-toggle-buttons .v-btn {
-    block-size: 36px !important;
-    min-inline-size: unset !important;
-  }
-
-  .ai-recommend-btn {
-    padding-inline: 12px 8px !important;
-  }
-
-  .ai-toggle-buttons .v-btn:last-child {
-    min-inline-size: 32px !important;
   }
 }
 </style>

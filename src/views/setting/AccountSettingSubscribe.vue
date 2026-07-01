@@ -2,17 +2,21 @@
 import { useToast } from 'vue-toastification'
 import api from '@/api'
 import type { FilterRuleGroup, Site } from '@/api/types'
-import ProgressDialog from '@/components/dialog/ProgressDialog.vue'
 import { useI18n } from 'vue-i18n'
+import { useSilentSettingRefresh } from '@/composables/useSilentSettingRefresh'
 
 // 国际化
 const { t } = useI18n()
 
+const props = defineProps({
+  active: {
+    type: Boolean,
+    default: true,
+  },
+})
+
 // 提示框
 const $toast = useToast()
-
-// 进度框
-const progressDialog = ref(false)
 
 // 所有站点
 const allSites = ref<Site[]>([])
@@ -184,12 +188,22 @@ async function saveSubscribeSetting() {
   }
 }
 
+async function loadPageData() {
+  await Promise.all([
+    querySites(),
+    queryFilterRuleGroups(),
+    querySelectedRssSites(),
+    querySubscribeRules(),
+    loadSystemSettings(),
+  ])
+}
+
 onMounted(() => {
-  querySites()
-  queryFilterRuleGroups()
-  querySelectedRssSites()
-  querySubscribeRules()
-  loadSystemSettings()
+  loadPageData()
+})
+
+useSilentSettingRefresh(loadPageData, {
+  active: computed(() => props.active),
 })
 </script>
 
@@ -327,5 +341,4 @@ onMounted(() => {
     </VCol>
   </VRow>
   <!-- 进度框 -->
-  <ProgressDialog v-if="progressDialog" v-model="progressDialog" :text="t('setting.system.reloading')" />
 </template>

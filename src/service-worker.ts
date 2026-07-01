@@ -147,13 +147,18 @@ registerRoute(
   ({ url, request }) =>
     url.pathname.includes('/api/v1/') &&
     request.method === 'GET' &&
+    !url.pathname.includes('/api/v1/search/') && // 搜索接口结果动态变化，避免缓存导致重复搜索失效
+    !url.pathname.includes('/api/v1/site/cookie/') && // 站点 Cookie 更新是副作用请求，不能缓存
     !url.pathname.includes('/api/v1/system/message') && // SSE实时消息流
     !url.pathname.includes('/api/v1/system/progress/') && // SSE实时进度流
     !url.pathname.includes('/api/v1/system/logging') && // SSE实时日志流
     !url.pathname.includes('/api/v1/message/') && // 用户消息接口
     !url.pathname.includes('/api/v1/system/global') && // 系统配置接口
     !url.pathname.includes('/api/v1/mfa/') && // 多因素认证接口
-    !url.pathname.includes('/api/v1/dashboard/'), // Dashboard实时监控数据
+    !url.pathname.includes('/api/v1/auth/') && // 登录认证入口与票据交换
+    !url.pathname.includes('/api/v1/dashboard/') && // Dashboard实时监控数据
+    !url.pathname.includes('/api/v1/plugin/')&& // 插件接口
+    !url.pathname.includes('/api/v1/subscribe/'), // 订阅接口
   new NetworkFirst({
     cacheName: `api-cache-${CACHE_VERSION}`,
     networkTimeoutSeconds: 5,
@@ -278,6 +283,17 @@ async function setStoredUnreadCount(count: number): Promise<void> {
   await set(UNREAD_COUNT_KEY, count)
 }
 
+// 通知已打开的页面同步未读计数，保证前台通知中心能感知 PWA badge 的变化。
+async function broadcastUnreadCount(count: number) {
+  const clients = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' })
+  clients.forEach(client => {
+    client.postMessage({
+      type: 'UNREAD_COUNT_UPDATE',
+      count,
+    })
+  })
+}
+
 async function updateBadge(count: number) {
   if ('setAppBadge' in self.navigator) {
     try {
@@ -292,14 +308,21 @@ async function updateBadge(count: number) {
   }
 }
 
+// 清除桌面角标和本地未读计数，确保不支持 Badge API 时也能归零。
 async function clearBadge() {
   if ('clearAppBadge' in self.navigator) {
     try {
       await self.navigator.clearAppBadge()
-      await setStoredUnreadCount(0)
     } catch (error) {
-      console.error('Failed to clear app badge:', error)
+      console.error('Failed to clear native app badge:', error)
     }
+  }
+
+  try {
+    await setStoredUnreadCount(0)
+    await broadcastUnreadCount(0)
+  } catch (error) {
+    console.error('Failed to clear unread count:', error)
   }
 }
 
@@ -411,7 +434,11 @@ self.addEventListener('push', function (event) {
         const currentCount = await getStoredUnreadCount()
         const newCount = currentCount + 1
         await setStoredUnreadCount(newCount)
-        await Promise.all([self.registration.showNotification(payload.title, content), updateBadge(newCount)])
+        await Promise.all([
+          self.registration.showNotification(payload.title, content),
+          updateBadge(newCount),
+          broadcastUnreadCount(newCount),
+        ])
       })(),
     )
   } catch (e) {
@@ -443,6 +470,7 @@ self.addEventListener('message', function (event) {
     const count = event.data.count || 0
     setStoredUnreadCount(count)
       .then(() => updateBadge(count))
+      .then(() => broadcastUnreadCount(count))
       .then(() => {
         event.ports[0]?.postMessage({ success: true })
       })

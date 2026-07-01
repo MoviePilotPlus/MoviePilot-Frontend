@@ -1,8 +1,9 @@
 <script lang="ts" setup>
 import api from '@/api'
 import type { SubscribeShare } from '@/api/types'
-import NoDataFound from '@/components/NoDataFound.vue'
+import NoDataFound from '@/components/states/NoDataFound.vue'
 import SubscribeShareCard from '@/components/cards/SubscribeShareCard.vue'
+import ProgressiveCardGrid from '@/components/misc/ProgressiveCardGrid.vue'
 import { useI18n } from 'vue-i18n'
 
 // 国际化
@@ -38,6 +39,13 @@ const filterParams = reactive({
 
 // 当前Key（用于重新加载数据）
 const currentKey = ref(0)
+
+function resetData() {
+  dataList.value = []
+  page.value = 1
+  isRefreshed.value = false
+  currentKey.value++
+}
 
 // TMDB电影风格字典
 const tmdbMovieGenreDict: Record<string, string> = {
@@ -93,11 +101,7 @@ watch(
   () => props.keyword,
   newKeyword => {
     keyword.value = newKeyword || ''
-    // 重置页码和数据
-    page.value = 1
-    dataList.value = []
-    isRefreshed.value = false
-    currentKey.value++
+    resetData()
   },
 )
 
@@ -105,11 +109,7 @@ watch(
 watch(
   filterParams,
   () => {
-    // 重置数据
-    dataList.value = []
-    page.value = 1
-    isRefreshed.value = false
-    currentKey.value++
+    resetData()
   },
   { deep: true },
 )
@@ -183,6 +183,7 @@ async function fetchData({ done }: { done: any }) {
         page.value++
         // 返回加载成功
         done('ok')
+        await nextTick()
       }
     } else {
       // 设置加载中
@@ -294,11 +295,18 @@ function removeData(id: number) {
   >
     <template #loading />
     <template #empty />
-    <div v-if="dataList.length > 0" class="grid gap-4 grid-subscribe-card" tabindex="0">
-      <div v-for="data in dataList" :key="data.id">
-        <SubscribeShareCard :media="data" @delete="removeData(data.id || 0)" />
-      </div>
-    </div>
+    <ProgressiveCardGrid
+      v-if="dataList.length > 0"
+      :items="dataList"
+      :get-item-key="item => item.id || `${item.tmdbid || item.doubanid || item.name}-${item.share_user}`"
+      :min-item-width="240"
+      :estimated-item-height="260"
+      tabindex="0"
+    >
+      <template #default="{ item }">
+        <SubscribeShareCard :media="item" @delete="removeData(item.id || 0)" />
+      </template>
+    </ProgressiveCardGrid>
     <NoDataFound
       v-if="dataList.length === 0 && isRefreshed"
       error-code="404"

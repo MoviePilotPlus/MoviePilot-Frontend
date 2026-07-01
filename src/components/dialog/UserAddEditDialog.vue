@@ -91,6 +91,7 @@ const userForm = ref<ExtendedUser>({
   },
   settings: {
     wechat_userid: null,
+    wechatclawbot_userid: null,
     telegram_userid: null,
     slack_userid: null,
     discord_userid: null,
@@ -505,6 +506,15 @@ onMounted(() => {
             </VCol>
             <VCol cols="12" md="6">
               <VTextField
+                v-model="userForm.settings.wechatclawbot_userid"
+                density="comfortable"
+                clearable
+                :label="t('dialog.userAddEdit.wechatClawBot')"
+                prepend-inner-icon="mdi-robot-happy-outline"
+              />
+            </VCol>
+            <VCol cols="12" md="6">
+              <VTextField
                 v-model="userForm.settings.telegram_userid"
                 density="comfortable"
                 clearable
@@ -602,12 +612,13 @@ onMounted(() => {
           </div>
         </VForm>
       </VCardText>
-      <VCardActions class="pt-3">
+      <VCardActions class="app-dialog-actions">
         <VSpacer />
         <VBtn
           v-if="props.oper === 'add'"
           :disabled="isAdding"
           color="primary"
+          variant="flat"
           @click="addUser"
           prepend-icon="mdi-plus"
           class="px-5"
@@ -619,6 +630,7 @@ onMounted(() => {
           v-else
           :disabled="isUpdating"
           color="primary"
+          variant="flat"
           @click="updateUser"
           prepend-icon="mdi-content-save"
           class="px-5"

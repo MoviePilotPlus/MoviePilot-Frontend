@@ -2,7 +2,7 @@
 import type { PropType } from 'vue'
 import type { MediaServerPlayItem } from '@/api/types'
 import noImage from '@images/no-image.jpeg'
-import { openMediaServerWithAutoDetect } from '@/utils/appDeepLink'
+import { openMediaServerItem } from '@/utils/appDeepLink'
 
 // 输入参数
 const props = defineProps({
@@ -16,6 +16,12 @@ const isImageLoaded = ref(false)
 
 // 图片加载失败
 const imageLoadError = ref(false)
+
+const cardStyle = computed(() => ({
+  aspectRatio: props.height ? undefined : '2 / 3',
+  blockSize: props.height,
+  inlineSize: props.width || '100%',
+}))
 
 // 角标颜色
 function getChipColor(type: string) {
@@ -38,8 +44,8 @@ const getImgUrl = computed(() => {
 
 // 跳转播放
 async function goPlay(isHovering: boolean | null = false) {
-  if (props.media?.link && isHovering) {
-    await openMediaServerWithAutoDetect(props.media.link, undefined, props.media.server_type)
+  if (props.media && isHovering) {
+    await openMediaServerItem(props.media)
   }
 }
 </script>
@@ -47,20 +53,21 @@ async function goPlay(isHovering: boolean | null = false) {
 <template>
   <VHover>
     <template #default="hover">
-      <VCard
-        v-bind="hover.props"
-        :height="props.height"
-        :width="props.width"
-        class="outline-none ring-gray-500"
-        :class="{
-          'transition transform-cpu duration-300 -translate-y-1': hover.isHovering,
-          'ring-1': isImageLoaded,
-        }"
-      >
+      <!-- Hover 命中区域保持静止，避免卡片上浮后底边反复触发 mouseleave。 -->
+      <div v-bind="hover.props" class="poster-card-hover-area">
+        <VCard
+          :style="cardStyle"
+          class="app-hover-lift-card outline-none ring-gray-500"
+          :class="{
+            'app-hover-lift-card--hovering': hover.isHovering,
+            'ring-1': isImageLoaded,
+          }"
+        >
         <VImg
           aspect-ratio="2/3"
           :src="getImgUrl"
-          class="object-cover aspect-w-2 aspect-h-3"
+          class="poster-card-image object-cover aspect-w-2 aspect-h-3"
+          :class="{ 'poster-card-image--loaded': isImageLoaded }"
           cover
           @load="isImageLoaded = true"
           @error="imageLoadError = true"
@@ -77,7 +84,7 @@ async function goPlay(isHovering: boolean | null = false) {
           variant="elevated"
           size="small"
           :class="getChipColor(props.media?.type || '')"
-          class="absolute left-2 top-2 bg-opacity-80 text-white font-bold"
+          class="poster-card-chip absolute left-2 top-2 bg-opacity-80 text-white font-bold"
         >
           {{ props.media?.type }}
         </VChip>
@@ -93,7 +100,41 @@ async function goPlay(isHovering: boolean | null = false) {
             {{ props.media?.title }}
           </h1>
         </VCardText>
-      </VCard>
+        </VCard>
+      </div>
     </template>
   </VHover>
 </template>
+
+<style scoped>
+/* stylelint-disable selector-pseudo-class-no-unknown */
+
+.poster-card-hover-area {
+  block-size: 100%;
+  inline-size: 100%;
+}
+
+.poster-card-image {
+  block-size: 100%;
+  inline-size: 100%;
+}
+
+.poster-card-image :deep(.v-img__img) {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.poster-card-image--loaded :deep(.v-img__img) {
+  opacity: 1;
+}
+
+.poster-card-image :deep(.v-responsive__sizer) {
+  padding-bottom: 150%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poster-card-image :deep(.v-img__img) {
+    transition: none;
+  }
+}
+</style>

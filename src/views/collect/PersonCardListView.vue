@@ -2,7 +2,7 @@
 // @ts-nocheck
 import api from '@/api'
 import PersonCard from '@/components/cards/PersonCard.vue'
-import NoDataFound from '@/components/NoDataFound.vue'
+import NoDataFound from '@/components/states/NoDataFound.vue'
 
 // 输入参数
 const props = defineProps({

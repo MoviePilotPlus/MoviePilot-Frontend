@@ -2,11 +2,13 @@
 import { Workflow } from '@/api/types'
 import { useToast } from 'vue-toastification'
 import { useConfirm } from '@/composables/useConfirm'
-import WorkflowAddEditDialog from '@/components/dialog/WorkflowAddEditDialog.vue'
-import WorkflowActionsDialog from '@/components/dialog/WorkflowActionsDialog.vue'
-import WorkflowShareDialog from '@/components/dialog/WorkflowShareDialog.vue'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
+import { openSharedDialog } from '@/composables/useSharedDialog'
+
+const WorkflowActionsDialog = defineAsyncComponent(() => import('@/components/dialog/WorkflowActionsDialog.vue'))
+const WorkflowAddEditDialog = defineAsyncComponent(() => import('@/components/dialog/WorkflowAddEditDialog.vue'))
+const WorkflowShareDialog = defineAsyncComponent(() => import('@/components/dialog/WorkflowShareDialog.vue'))
 
 const { t } = useI18n()
 
@@ -31,15 +33,6 @@ const $toast = useToast()
 // 确认框
 const createConfirm = useConfirm()
 
-// 编辑对话框
-const editDialog = ref(false)
-
-// 流程对话框
-const flowDialog = ref(false)
-
-// 分享对话框
-const shareDialog = ref(false)
-
 // 加载中
 const loading = ref(false)
 
@@ -51,24 +44,35 @@ const getEventTypeText = (eventTypeValue: string) => {
 
 // 编辑任务
 function handleEdit(item: Workflow) {
-  editDialog.value = true
+  openSharedDialog(
+    WorkflowAddEditDialog,
+    { workflow: item },
+    {
+      save: editDone,
+    },
+    { closeOn: ['close', 'save'] },
+  )
 }
 
 // 编辑流程
 function handleFlow(item: Workflow) {
-  flowDialog.value = true
+  openSharedDialog(
+    WorkflowActionsDialog,
+    { workflow: item },
+    {
+      save: editDone,
+    },
+    { closeOn: ['close', 'save'] },
+  )
 }
 
 // 分享工作流
 function handleShare(item: Workflow) {
-  shareDialog.value = true
+  openSharedDialog(WorkflowShareDialog, { workflow: item }, {}, { closeOn: ['close'] })
 }
 
 // 编辑完成
 function editDone() {
-  editDialog.value = false
-  flowDialog.value = false
-  shareDialog.value = false
   emit('refresh')
 }
 
@@ -216,14 +220,15 @@ const resolveProgress = (item: Workflow) => {
 <template>
   <div class="h-full">
     <VHover v-slot="hover">
-      <VCard
-        v-bind="hover.props"
-        class="mx-auto h-full"
-        @click="handleFlow(workflow)"
-        :ripple="false"
-        :loading="loading"
-        :class="{ 'transition transform-cpu duration-300 -translate-y-1': hover.isHovering }"
-      >
+      <!-- Hover 命中区域保持静止，避免卡片上浮后底边反复触发 mouseleave。 -->
+      <div v-bind="hover.props" class="workflow-task-card-hover-area h-full">
+        <VCard
+          class="app-hover-lift-card mx-auto h-full"
+          @click="handleFlow(workflow)"
+          :ripple="false"
+          :loading="loading"
+          :class="{ 'app-hover-lift-card--hovering': hover.isHovering }"
+        >
         <VCardItem
           class="px-2 py-2"
           :style="{
@@ -363,25 +368,14 @@ const resolveProgress = (item: Workflow) => {
             </div>
           </div>
         </VCardText>
-      </VCard>
+        </VCard>
+      </div>
     </VHover>
-    <!-- 流程对话框 -->
-    <WorkflowActionsDialog
-      v-if="flowDialog"
-      v-model="flowDialog"
-      @close="flowDialog = false"
-      @save="editDone"
-      :workflow="workflow"
-    />
-    <!-- 编辑对话框 -->
-    <WorkflowAddEditDialog
-      v-if="editDialog"
-      v-model="editDialog"
-      @close="editDialog = false"
-      @save="editDone"
-      :workflow="workflow"
-    />
-    <!-- 分享对话框 -->
-    <WorkflowShareDialog v-if="shareDialog" v-model="shareDialog" :workflow="workflow" @close="shareDialog = false" />
   </div>
 </template>
+
+<style scoped>
+.workflow-task-card-hover-area {
+  inline-size: 100%;
+}
+</style>
