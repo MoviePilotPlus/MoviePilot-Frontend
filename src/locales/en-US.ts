@@ -1747,6 +1747,8 @@ export default {
       downloaderDeleteAfterDoneHint: 'Remove temporary files after download completion',
       seedSkipHashCheck: 'Skip Hash Check When Seeding',
       seedSkipHashCheckHint: 'Skip hash checking when adding torrents to the downloader for seeding (faster startup). Unsupported downloaders (e.g. Transmission) will ignore it.',
+      highBitrateThreshold: 'High Bitrate Threshold (bps)',
+      highBitrateThresholdHint: 'Tag as "High Bitrate" when video bitrate is at least this value, in bps. Default 10000000 (10Mbps).',
       raiseException: 'Throw Exceptions',
       raiseExceptionHint: 'Enable exception throwing for debugging purposes',
       apiDebug: 'API Debugging',

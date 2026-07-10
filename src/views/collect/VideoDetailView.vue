@@ -289,6 +289,12 @@ async function getMediaDetail() {
     if (audioLangs.includes('cantonese') && !addForm.value.tags.includes('Cantonese')) {
       addForm.value.tags.push('Cantonese')
     }
+    if (audioLangs.includes('japanese') && !addForm.value.tags.includes('Japanese')) {
+      addForm.value.tags.push('Japanese')
+    }
+    if (audioLangs.includes('korean') && !addForm.value.tags.includes('Korean')) {
+      addForm.value.tags.push('Korean')
+    }
     ;(addForm.value as any).audio_languages = audioLangs
     // 自动填入追更配置的总集数
     followConfig.value.totalEpisodes = addForm.value.episodes_all

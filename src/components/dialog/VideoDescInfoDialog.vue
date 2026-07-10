@@ -26,6 +26,22 @@ const emit = defineEmits(['close'])
 onMounted(() => {
   getDetail()
 })
+
+// screenshots 已与 description 解耦：展示时动态拼接当前 screenshots
+// 兼容历史数据：若 description 末尾已拼接旧 screenshots，先剥离再拼接，避免重复
+function stripTrailingScreenshots(desc: string, screenshots: string): string {
+  if (!desc || !screenshots) return desc || ''
+  const d = desc.replace(/\s+$/, '')
+  const s = screenshots.trim()
+  if (s && d.endsWith(s)) return d.slice(0, d.length - s.length).replace(/\s+$/, '')
+  return d
+}
+const descContent = computed(() => {
+  const desc = collectDetail.value?.description || ''
+  const shots = collectDetail.value?.screenshots || ''
+  const cleaned = stripTrailingScreenshots(desc, shots)
+  return shots ? `${cleaned}\n\n${shots}` : cleaned
+})
 </script>
 <template>
   <VDialog scrollable fullscreen :scrim="false" transition="dialog-bottom-transition">
@@ -44,7 +60,7 @@ onMounted(() => {
       </div>
       <VCardText class="d-flex flex-row  justify-center ">
         <v-sheet class="d-flex align-center justify-center flex-wrap mx-auto px-4" elevation="0">
-          <BbcodeParser v-if="collectDetail?.description" :content="collectDetail.description" />
+          <BbcodeParser v-if="descContent" :content="descContent" />
         </v-sheet>
       </VCardText>
 

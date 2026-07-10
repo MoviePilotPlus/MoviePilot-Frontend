@@ -1731,6 +1731,8 @@ export default {
       downloaderDeleteAfterDoneHint: '下載完成後清除下載產生的臨時文件',
       seedSkipHashCheck: '做種跳過Hash校驗',
       seedSkipHashCheckHint: '把種子加入到下載器做種時跳過hash校驗，可加快做種啟動；部分下載器（如Transmission）不支援，將自動忽略',
+      highBitrateThreshold: '高碼率閾值（bps）',
+      highBitrateThresholdHint: '視頻碼率不低於該值時打「高碼率」標籤，單位 bps，預設 10000000（10Mbps）',
       raiseException: '異常拋出',
       raiseExceptionHint: '下載工具發生異常時的拋出異常信息方便調試',
       apiDebug: '日誌調試',

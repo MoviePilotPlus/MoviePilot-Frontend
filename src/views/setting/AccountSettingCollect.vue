@@ -119,6 +119,7 @@ const CollectSettings = ref<any>({
     SCREENSHOT_HDR_PROCESSOR: 'auto',
     DOWNLOADER_DELETE_AFTER_DONE: true,
     SEED_SKIP_HASH_CHECK: false,
+    HIGH_BITRATE_THRESHOLD: 10000000,
     TV_FILE_FORMAT: '',
     MOVIE_FILE_FORMAT: '',
     TV_TITLE_FORMAT: '',
@@ -853,6 +854,17 @@ onDeactivated(() => {
                   :label="t('setting.collect.seedSkipHashCheck')"
                   :hint="t('setting.collect.seedSkipHashCheckHint')"
                   persistent-hint
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VTextField
+                  v-model="CollectSettings.Basic.HIGH_BITRATE_THRESHOLD"
+                  type="number"
+                  :label="t('setting.collect.highBitrateThreshold')"
+                  :hint="t('setting.collect.highBitrateThresholdHint')"
+                  placeholder="10000000"
+                  persistent-hint
+                  prepend-inner-icon="mdi-speedometer"
                 />
               </VCol>
               <VCol cols="12" md="6">
