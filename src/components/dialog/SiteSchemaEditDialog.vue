@@ -21,6 +21,7 @@ interface SiteSchema {
   detail_page: string
   is_https: boolean
   cookie_required: boolean
+  twofa_secret: string
   template: string
 }
 
@@ -55,6 +56,7 @@ const siteForm = ref<SiteSchema>({
   detail_page: '',
   is_https: true,
   cookie_required: true,
+  twofa_secret: '',
   template: '{}',
 })
 
@@ -316,6 +318,7 @@ async function fetchSiteInfo() {
       siteForm.value.detail_page = apiData.detail_page || ''
       siteForm.value.is_https = apiData.is_https !== undefined ? apiData.is_https : true
       siteForm.value.cookie_required = apiData.cookie_required !== undefined ? apiData.cookie_required : true
+      siteForm.value.twofa_secret = apiData.twofa_secret || ''
 
       // 确保template是字符串格式
       if (typeof apiData.template === 'object' && apiData.template !== null) {
@@ -442,6 +445,15 @@ onMounted(async () => {
                 :hint="t('siteshema.hints.upload_api')"
                 persistent-hint
                 prepend-inner-icon="mdi-upload"
+              />
+            </VCol>
+            <VCol cols="12" md="6">
+              <VTextField
+                v-model="siteForm.twofa_secret"
+                label="2FA 密钥(TOTP)"
+                hint="开启二次验证的站点填 TOTP 密钥(base32 或 otpauth://)，上传时自动过 2FA；无 2FA 留空"
+                persistent-hint
+                prepend-inner-icon="mdi-shield-key"
               />
             </VCol>
           </VRow>
