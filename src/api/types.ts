@@ -340,6 +340,34 @@ export interface MediaInfo {
   episode_group?: string
 }
 
+// PTGen 媒体信息（collect/ptgen/info 接口返回）
+export interface PtgenInfo {
+  // 中文标题
+  cn_title?: string
+  // 英文标题
+  en_title?: string
+  // 年份
+  year?: string
+  // 豆瓣ID
+  douban_id?: string
+  // IMDB ID
+  imdb_id?: string
+  // TMDB ID
+  tmdb_id?: string
+  // TMDB 链接
+  tmdb_link?: string
+  // 副标题
+  sub_title?: string
+  // 海报
+  poster?: string
+  // 简介
+  overview?: string
+  // 简介（兼容字段）
+  description?: string
+  // 季号
+  season?: number
+}
+
 // 季信息
 export interface MediaSeason {
   // 上映日期

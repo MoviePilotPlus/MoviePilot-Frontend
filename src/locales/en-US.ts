@@ -1745,6 +1745,8 @@ export default {
       secondPtgenUrlHint: 'Alternative PTGen URL when primary fails',
       downloaderDeleteAfterDone: 'Clear Cache',
       downloaderDeleteAfterDoneHint: 'Remove temporary files after download completion',
+      seedSkipHashCheck: 'Skip Hash Check When Seeding',
+      seedSkipHashCheckHint: 'Skip hash checking when adding torrents to the downloader for seeding (faster startup). Unsupported downloaders (e.g. Transmission) will ignore it.',
       raiseException: 'Throw Exceptions',
       raiseExceptionHint: 'Enable exception throwing for debugging purposes',
       apiDebug: 'API Debugging',

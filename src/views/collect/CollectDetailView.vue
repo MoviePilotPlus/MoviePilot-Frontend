@@ -61,6 +61,7 @@ const showSaveIcons = ref({
   overview: false,
   douban_id: false,
   imdb_id: false,
+  tmdb_id: false,
   season: false,
   year: false,
   sub_title: false,
@@ -82,6 +83,7 @@ const addForm = ref<CollectCreate>({
   defn: '',
   douban_id: '',
   imdb_id: '',
+  tmdb_id: '',
   cn_title: '',
   en_title: '',
   sub_title: '',
@@ -129,6 +131,20 @@ function openImdbDetail(imdbId: string) {
   }
   window.open(`https://www.imdb.com/title/${imdbId}/`, '_blank')
 }
+
+function openTmdbDetail(tmdbId: string) {
+  if (!tmdbId) {
+    $toast.warning('TMDB ID不存在，无法打开详情页！')
+    return
+  }
+  // 优先使用 PTGen 返回的 TMDB 链接（已区分电影/剧集），否则按当前分类拼接
+  let link = ptgen.value.tmdb_link
+  if (!link) {
+    const tmdbType = collectDetail.value.cate === 'Movie' ? 'movie' : 'tv'
+    link = `https://www.themoviedb.org/${tmdbType}/${tmdbId}`
+  }
+  window.open(link, '_blank')
+}
 // 查询所有站点
 async function querySites() {
   try {
@@ -164,6 +180,7 @@ async function getDetail() {
     addForm.value.tags = JSON.parse(collectDetail.value?.tags) ?? []
     addForm.value.douban_id = collectDetail.value.douban_id ?? ''
     addForm.value.imdb_id = collectDetail.value.imdb_id ?? ''
+    addForm.value.tmdb_id = collectDetail.value.tmdb_id ?? ''
     addForm.value.sub_title = collectDetail.value.sub_title ?? ''
     addForm.value.overview = collectDetail.value.overview ?? ''
     addForm.value.cn_title = collectDetail.value.cn_title ?? ''
@@ -445,6 +462,7 @@ async function getPtgen(url: string) {
     addForm.value.cn_title = ptgen.value.cn_title
     addForm.value.sub_title = ptgen.value.sub_title
     addForm.value.imdb_id = ptgen.value.imdb_id || ''
+    addForm.value.tmdb_id = ptgen.value.tmdb_id || ''
     addForm.value.season = ptgen.value.season || 1
     // 处理可能为 null 的情况，确保赋值给 addForm.value.overview 的是 string 类型
     addForm.value.overview = ptgen.value.description || collectDetail.value.overview
@@ -452,6 +470,38 @@ async function getPtgen(url: string) {
   } catch (error) {
     isLoading.value = false
     console.error(error)
+  }
+}
+
+// 根据豆瓣ID或IMDB ID 走 ptgen/info 自动获取并更新 TMDB 信息（仅更新 tmdb_id 并自动保存）
+async function fetchTmdbId() {
+  const doubanId = addForm.value.douban_id
+  const imdbId = addForm.value.imdb_id
+  let url = ''
+  if (doubanId) {
+    url = `https://movie.douban.com/subject/${doubanId}/`
+  } else if (imdbId) {
+    url = `https://www.imdb.com/title/${imdbId}/`
+  } else {
+    $toast.warning('豆瓣ID或IMDB ID不存在，无法获取TMDB信息！')
+    return
+  }
+  try {
+    isLoading.value = true
+    const info = (await api.get('collect/ptgen/info?url=' + url)) as PtgenInfo
+    ptgen.value = info
+    addForm.value.tmdb_id = info.tmdb_id || ''
+    if (addForm.value.tmdb_id) {
+      // 自动保存解析到的 tmdb_id
+      await updateCollect('tmdb_id')
+    } else {
+      $toast.warning('未能解析到TMDB信息')
+    }
+  } catch (error) {
+    console.error(error)
+    $toast.error('获取TMDB信息失败')
+  } finally {
+    isLoading.value = false
   }
 }
 
@@ -918,6 +968,50 @@ watch(
                       v-if="showSaveIcons.imdb_id"
                       icon="mdi-content-save"
                       @mousedown.stop="updateCollect('imdb_id')"
+                      class="cursor-pointer save-icon"
+                      color="primary"
+                    />
+                  </transition>
+                </div>
+              </template>
+            </VTextField>
+          </v-col>
+          <v-col cols="6" md="6">
+            <VTextField
+              v-model="addForm.tmdb_id"
+              placeholder="PTGen 解析后自动填充"
+              label="TMDB ID"
+              variant="plain"
+              persistent-hint
+              class="max-w mt-1"
+              :loading="isLoading"
+              density="compact"
+              @focus="showSaveIcons.tmdb_id = true"
+              @blur="showSaveIcons.tmdb_id = false"
+            >
+              <template #prepend-inner>
+                <VIcon
+                  v-if="addForm.douban_id || addForm.imdb_id"
+                  icon="mdi-magnify"
+                  class="cursor-pointer text-lg mt-1"
+                  title="根据豆瓣/IMDB ID 获取TMDB"
+                  @click="fetchTmdbId"
+                />
+                <VIcon
+                  v-if="addForm.tmdb_id"
+                  icon="mdi-cloud-outline"
+                  class="cursor-pointer text-lg mt-1"
+                  title="打开TMDB详情页"
+                  @click="addForm.tmdb_id && openTmdbDetail(addForm.tmdb_id)"
+                />
+              </template>
+              <template #append-inner>
+                <div class="absolute-icon-container">
+                  <transition name="fade">
+                    <v-icon
+                      v-if="showSaveIcons.tmdb_id"
+                      icon="mdi-content-save"
+                      @mousedown.stop="updateCollect('tmdb_id')"
                       class="cursor-pointer save-icon"
                       color="primary"
                     />

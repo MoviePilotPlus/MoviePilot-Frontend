@@ -1736,6 +1736,8 @@ export default {
       secondPtgenUrlHint: '当 PTGen 地址失效时，使用备用 PTGen 地址',
       downloaderDeleteAfterDone: '清除下载缓存',
       downloaderDeleteAfterDoneHint: '下载完成后清除下载产生的临时文件',
+      seedSkipHashCheck: '做种跳过Hash校验',
+      seedSkipHashCheckHint: '把种子添加到下载器做种时跳过hash校验，可加快做种启动；部分下载器（如Transmission）不支持，将自动忽略',
       raiseException: '异常抛出',
       raiseExceptionHint: '下载工具发生异常时的抛出异常信息方便调试',
       apiDebug: '日志调试',

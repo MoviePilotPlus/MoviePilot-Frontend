@@ -178,6 +178,7 @@ const addForm = ref<CollectCreate>({
   defn: '',
   douban_id: '',
   imdb_id: '',
+  tmdb_id: '',
   cn_title: '',
   en_title: '',
   sub_title: '',
@@ -325,6 +326,7 @@ async function getPtgen(url: string) {
     addForm.value.cn_title = ptgen.value.cn_title || mediaDetail.value.title
     addForm.value.sub_title = ptgen.value.sub_title
     addForm.value.imdb_id = ptgen.value.imdb_id || ''
+    addForm.value.tmdb_id = ptgen.value.tmdb_id || ''
     addForm.value.season = ptgen.value.season || 1
     // 处理可能为 null 的情况，确保赋值给 addForm.value.overview 的是 string 类型
     addForm.value.overview = ptgen.value.description || mediaDetail.value.overview || ''
@@ -845,6 +847,20 @@ function openImdbDetail(imdbId: string) {
   window.open(`https://www.imdb.com/title/${imdbId}/`, '_blank')
 }
 
+function openTmdbDetail(tmdbId: string) {
+  if (!tmdbId) {
+    $toast.warning('TMDB ID不存在，无法打开详情页！')
+    return
+  }
+  // 优先使用 PTGen 返回的 TMDB 链接（已区分电影/剧集），否则按当前分类拼接
+  let link = ptgen.value.tmdb_link
+  if (!link) {
+    const tmdbType = addForm.value.cate === 'Movie' ? 'movie' : 'tv'
+    link = `https://www.themoviedb.org/${tmdbType}/${tmdbId}`
+  }
+  window.open(link, '_blank')
+}
+
 // 资源浏览弹窗
 const resourceDialog = ref(false)
 // 本地存在状态
@@ -1123,6 +1139,27 @@ function handleIgnore() {
                     icon="mdi-cloud-outline"
                     class="cursor-pointer text-lg"
                     @click="addForm.imdb_id && openImdbDetail(addForm.imdb_id)"
+                  />
+                </template>
+              </VTextField>
+            </v-col>
+            <!-- TMDB ID输入框 -->
+            <v-col cols="12" md="12">
+              <VTextField
+                v-model="addForm.tmdb_id"
+                placeholder="PTGen 解析后自动填充"
+                hint="如：12345（根据 IMDB ID 自动解析）"
+                label="TMDB ID"
+                variant="outlined"
+                persistent-hint
+                class="max-w-sm mt-1"
+                density="compact"
+              >
+                <template #prepend-inner v-if="addForm.tmdb_id">
+                  <VIcon
+                    icon="mdi-cloud-outline"
+                    class="cursor-pointer text-lg"
+                    @click="addForm.tmdb_id && openTmdbDetail(addForm.tmdb_id)"
                   />
                 </template>
               </VTextField>

@@ -118,6 +118,7 @@ const CollectSettings = ref<any>({
     SCREENSHOT_TEMPLATE_CONFIG: '',
     SCREENSHOT_HDR_PROCESSOR: 'auto',
     DOWNLOADER_DELETE_AFTER_DONE: true,
+    SEED_SKIP_HASH_CHECK: false,
     TV_FILE_FORMAT: '',
     MOVIE_FILE_FORMAT: '',
     TV_TITLE_FORMAT: '',
@@ -843,6 +844,14 @@ onDeactivated(() => {
                   v-model="CollectSettings.Basic.DOWNLOADER_DELETE_AFTER_DONE"
                   :label="t('setting.collect.downloaderDeleteAfterDone')"
                   :hint="t('setting.collect.downloaderDeleteAfterDoneHint')"
+                  persistent-hint
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VSwitch
+                  v-model="CollectSettings.Basic.SEED_SKIP_HASH_CHECK"
+                  :label="t('setting.collect.seedSkipHashCheck')"
+                  :hint="t('setting.collect.seedSkipHashCheckHint')"
                   persistent-hint
                 />
               </VCol>
