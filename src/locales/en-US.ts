@@ -1251,6 +1251,7 @@ export default {
     filterEdition: 'Quality',
     filterResolution: 'Resolution',
     filterReleaseGroup: 'Release Group',
+    filterMediaBaseDir: 'Base Directory',
     deleteConfirm: 'Confirm task deletion',
     selectedTasks: 'Selected Tasks',
     removeSeed: 'Remove seeding tasks',

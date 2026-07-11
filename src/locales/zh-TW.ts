@@ -1235,6 +1235,7 @@ export default {
     filterEdition: '畫質',
     filterResolution: '分辨率',
     filterReleaseGroup: '製作組',
+    filterMediaBaseDir: '採集目錄',
     deleteConfirm: '確認刪除任務',
     selectedTasks: '已選任務',
     removeSeed: '刪除做種任務',

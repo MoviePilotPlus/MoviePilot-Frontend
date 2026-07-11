@@ -1243,6 +1243,7 @@ export default {
     filterEdition: '质量',
     filterResolution: '分辨率',
     filterReleaseGroup: '制作组',
+    filterMediaBaseDir: '采集目录',
     deleteConfirm: '确认删除任务',
     selectedTasks: '已选任务',
     removeSeed: '删除做种任务',

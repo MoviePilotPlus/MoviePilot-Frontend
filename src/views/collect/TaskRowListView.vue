@@ -51,6 +51,8 @@ const filterForm: Record<string, string[]> = reactive({
   cate: [] as string[],
   // 文件大小范围
   fileSizeRange: [] as string[],
+  // 采集目录
+  mediaBaseDir: [] as string[],
 })
 function getFilterItemName(key: string, option: string) {
   if (key == 'status') {
@@ -79,6 +81,7 @@ const filterOptions: Record<string, string[]> = reactive({
   // 使用 categoryOptions 中的键作为媒体类型选项
   cate: Object.keys(categoryOptions),
   fileSizeRange: ['tiny', 'small', 'medium', 'large', 'xlarge'],
+  mediaBaseDir: [] as string[],
 })
 
 // 过滤项映射
@@ -94,6 +97,7 @@ const filterTitles: Record<string, string> = {
   // 媒体类型和文件大小使用国际化翻译
   cate: t('filterRule.mediaType'),
   fileSizeRange: t('workflow.filterTorrents.size'),
+  mediaBaseDir: t('collect.filterMediaBaseDir'),
 }
 
 // 排序中文名
@@ -201,6 +205,7 @@ function initOptions(data: Collect) {
   optionValue(filterOptions.videoCode, data?.video_codec)
   optionValue(filterOptions.edition, data?.hdr_format)
   optionValue(filterOptions.resolution, data?.resolution)
+  optionValue(filterOptions.mediaBaseDir, data?.media_base_dir)
 }
 // 查询所有站点
 async function querySites() {
@@ -301,7 +306,9 @@ function filterData() {
         // 媒体类型过滤
         match(filterForm.cate, data.cate) &&
         // 文件大小范围过滤
-        matchFileSizeRange(filterForm.fileSizeRange, data.file_size)
+        matchFileSizeRange(filterForm.fileSizeRange, data.file_size) &&
+        // 采集目录过滤
+        match(filterForm.mediaBaseDir, data.media_base_dir)
       ) {
         filteredData.push(data)
       }
