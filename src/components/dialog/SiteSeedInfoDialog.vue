@@ -4,6 +4,7 @@
 import api from '@/api'
 import { CollectProgress, SiteSeed } from '@/api/types'
 import { useToast } from 'vue-toastification'
+
 const progress = ref<Array<CollectProgress>>([])
 const siteSeed = ref<SiteSeed>()
 // 注册事件
@@ -19,6 +20,77 @@ const props = defineProps({
 const $toast = useToast()
 // 加载中
 const loading = ref(false)
+// 是否仅执行当前步骤（不自动续跑后续）
+const onlyCurrentStep = ref(false)
+
+// 种子操作配置表
+const actions = {
+  torrent_publish: {
+    name: '发布种子',
+    icon: 'mdi-progress-upload',
+    color: 'primary',
+    api: 'collect/torrent_publish/{id}',
+    supportsNextStep: true,
+    flag: 'torrent_uploaded',
+  },
+  torrent_download: {
+    name: '下载种子',
+    icon: 'mdi-arrow-down',
+    color: 'primary',
+    api: 'collect/torrent_download/{id}',
+    supportsNextStep: true,
+    flag: 'torrent_downloaded',
+  },
+  torrent_seed: {
+    name: '做种',
+    icon: 'mdi-arrow-up',
+    color: 'primary',
+    api: 'collect/torrent_seed/{id}',
+    supportsNextStep: false,
+    flag: 'torrent_seeded',
+  },
+  torrent_update: {
+    name: '更新种子',
+    icon: 'mdi-refresh',
+    color: 'secondary',
+    api: 'collect/torrent_update/{id}',
+    supportsNextStep: false,
+    flag: null,
+  },
+}
+
+type SeedAction = keyof typeof actions
+
+const POLL_INTERVAL_MS = 1500
+const POLL_MAX_ATTEMPTS = 8
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function getSeedSnapshot(seed?: SiteSeed | null) {
+  return {
+    uploaded: Boolean(seed?.torrent_uploaded),
+    downloaded: Boolean(seed?.torrent_downloaded),
+    seeded: Boolean(seed?.torrent_seeded),
+    lastError: seed?.last_error || '',
+    torrentId: seed?.torrent_id || '',
+    torrentHash: seed?.torrent_hash || '',
+    progressLen: progress.value?.length || 0,
+  }
+}
+
+function hasStateChanged(before: ReturnType<typeof getSeedSnapshot>, after: ReturnType<typeof getSeedSnapshot>) {
+  return (
+    before.uploaded !== after.uploaded ||
+    before.downloaded !== after.downloaded ||
+    before.seeded !== after.seeded ||
+    before.lastError !== after.lastError ||
+    before.torrentId !== after.torrentId ||
+    before.torrentHash !== after.torrentHash ||
+    before.progressLen !== after.progressLen
+  )
+}
 
 async function getProgressInfo() {
   try {
@@ -27,6 +99,7 @@ async function getProgressInfo() {
     console.error(error)
   }
 }
+
 async function getSeedInfo() {
   try {
     siteSeed.value = await api.get(`collect/seed/detail/${props?.seed.id}`)
@@ -35,61 +108,105 @@ async function getSeedInfo() {
   }
 }
 
-function getBtnIcon() {
-  if (!siteSeed.value?.torrent_uploaded) {
-    return 'mdi-progress-upload'
-  } else if (!siteSeed.value?.torrent_downloaded) {
-    return 'mdi-arrow-down'
-  } else if (!siteSeed.value?.torrent_seeded) {
-    return 'mdi-arrow-up'
-  } else {
-    return 'mdi-progress-upload'
+async function refreshAll() {
+  await Promise.all([getProgressInfo(), getSeedInfo()])
+}
+
+/** 提交后短轮询，直到状态变化或超时 */
+async function pollUntilChanged(before: ReturnType<typeof getSeedSnapshot>) {
+  for (let i = 0; i < POLL_MAX_ATTEMPTS; i++) {
+    await sleep(POLL_INTERVAL_MS)
+    await refreshAll()
+    const after = getSeedSnapshot(siteSeed.value)
+    if (hasStateChanged(before, after)) {
+      return true
+    }
   }
+  return false
+}
+
+/** 根据状态位决定当前应执行的步骤 */
+function getCurrentAction(): SeedAction {
+  if (!siteSeed.value?.torrent_uploaded) {
+    return 'torrent_publish'
+  }
+  if (!siteSeed.value?.torrent_downloaded) {
+    return 'torrent_download'
+  }
+  if (!siteSeed.value?.torrent_seeded) {
+    return 'torrent_seed'
+  }
+  return 'torrent_update'
+}
+
+function getActionMeta(action: SeedAction) {
+  return actions[action]
+}
+
+function getBtnIcon() {
+  return getActionMeta(getCurrentAction()).icon
 }
 
 function getActionName() {
-  if (!siteSeed.value?.torrent_uploaded) {
-    return '上传'
-  } else if (!siteSeed.value?.torrent_downloaded) {
-    return '下载'
-  } else if (!siteSeed.value?.torrent_seeded) {
-    return '发布'
-  } else {
-    return '更新'
+  return getActionMeta(getCurrentAction()).name
+}
+
+function getActionColor() {
+  return getActionMeta(getCurrentAction()).color
+}
+
+/** 失败进度节点是否展示重试按钮 */
+function canRetryAction(action: string) {
+  return Boolean(action && actions[action as SeedAction])
+}
+
+function getRetryActionName(action: string) {
+  return actions[action as SeedAction]?.name || action
+}
+
+function getRetryActionIcon(action: string) {
+  return actions[action as SeedAction]?.icon || 'mdi-refresh'
+}
+
+function getRetryActionColor(action: string) {
+  return actions[action as SeedAction]?.color || 'error'
+}
+
+function buildApiUrl(action: SeedAction) {
+  const meta = getActionMeta(action)
+  let apiUrl = meta.api.replace('{id}', String(props?.seed.id))
+  if (meta.supportsNextStep) {
+    const nextStep = onlyCurrentStep.value ? 'false' : 'true'
+    apiUrl += `?next_step=${nextStep}`
   }
+  return apiUrl
 }
-function getAction() {
-  if (!siteSeed.value?.torrent_uploaded) {
-    return 'torrent_publish'
-  } else if (!siteSeed.value?.torrent_downloaded) {
-    return 'torrent_download'
-  } else if (!siteSeed.value?.torrent_seeded) {
-    return 'torrent_seed'
-  } else {
-    return 'torrent_update'
+
+// 调用API提交种子操作（底部主按钮 / 时间线失败重试共用）
+async function handleSubmit(action?: string) {
+  if (loading.value) {
+    return
   }
-}
-function hideHandleBtn() {
-  return siteSeed.value?.torrent_uploaded && siteSeed.value?.torrent_downloaded && siteSeed.value?.torrent_seeded
-}
-// 调用API添加采集任务
-async function handleSubmit(id: number) {
   loading.value = true
+  const act = (action || getCurrentAction()) as SeedAction
+  const meta = getActionMeta(act)
+  const before = getSeedSnapshot(siteSeed.value)
   try {
-    // 请求API
-    const action = getAction()
-
-    const result: { [key: string]: any } = await api.get('collect/' + action + '/' + props?.seed.id)
-    // 添加采集任务状态
+    const apiUrl = buildApiUrl(act)
+    const result: { [key: string]: any } = await api.get(apiUrl)
     if (result.success) {
-      // 成功
-      $toast.success(getActionName() + '事件提交成功！')
-
+      const modeText = onlyCurrentStep.value && meta.supportsNextStep ? '（仅本步）' : ''
+      $toast.success(`${meta.name}事件提交成功${modeText}！`)
+      // 异步任务：短轮询直到状态变化
+      await pollUntilChanged(before)
     } else {
-      $toast.error(getActionName() + '事件提交失败')
+      $toast.error(result.message || `${meta.name}事件提交失败`)
+      await refreshAll()
     }
   } catch (error) {
     console.error(error)
+    $toast.error(`${meta.name}事件提交失败`)
+    await refreshAll()
   }
   loading.value = false
 }
@@ -97,11 +214,8 @@ async function handleSubmit(id: number) {
 async function deleteSeed() {
   try {
     loading.value = true
-    // 请求API
     const result: { [key: string]: any } = await api.delete('collect/seed/' + props?.seed.id)
-    // 添加采集任务状态
     if (result.success) {
-      // 成功
       $toast.success(`删除成功！`)
     } else {
       $toast.error(`删除失败`)
@@ -113,12 +227,12 @@ async function deleteSeed() {
   loading.value = false
 }
 
-
 onMounted(() => {
   getProgressInfo()
   getSeedInfo()
 })
 </script>
+
 <template>
   <VDialog scrollable max-width="60rem" :scrim="false" transition="dialog-bottom-transition">
     <VCard>
@@ -134,31 +248,91 @@ onMounted(() => {
           </VToolbarItems>
         </VToolbar>
       </div>
-      <VCardText class="d-flex flex-row  justify-center ">
-        <v-sheet class="d-flex align-center justify-center flex-wrap mx-auto px-4" elevation="0">
-          <VTimeline align="start" side="end">
-            <VTimelineItem :dot-color="item.success ? 'success' : 'error'" size="small"
-              v-for="(item, index) in progress">
+
+      <!-- 最近错误 -->
+      <VCardText v-if="siteSeed?.last_error" class="pb-0">
+        <VAlert type="error" variant="tonal" density="compact" class="text-caption">
+          {{ siteSeed.last_error }}
+        </VAlert>
+      </VCardText>
+
+      <VCardText class="d-flex flex-row justify-center">
+        <div class="d-flex align-center justify-center flex-wrap mx-auto px-4" width="100%" elevation="0">
+          <VTimeline align="start" density="compact" side="end">
+            <VTimelineItem
+              v-for="(item, index) in progress"
+              :key="index"
+              :dot-color="item.success ? 'success' : 'error'"
+              size="small"
+            >
               <div class="d-flex">
-                <strong class="me-4">{{ item.created_at }}</strong>
+                <strong class="me-4"></strong>
                 <div>
                   <strong>{{ item.name }}</strong>
+                  <div class="text-caption">
+                    {{ item.created_at }}
+                  </div>
                   <div class="text-caption" v-if="!item.success">
                     {{ item.error_msg }}
+                  </div>
+                  <!-- 失败节点：重试当前 action -->
+                  <div class="text-caption mt-1" v-if="!item.success && canRetryAction(item.action)">
+                    <VBtn
+                      variant="elevated"
+                      @click="handleSubmit(item.action)"
+                      :disabled="loading"
+                      :color="getRetryActionColor(item.action)"
+                      :prepend-icon="getRetryActionIcon(item.action)"
+                      class="px-5"
+                      size="small"
+                    >
+                      重试：{{ getRetryActionName(item.action) }}
+                    </VBtn>
                   </div>
                 </div>
               </div>
             </VTimelineItem>
           </VTimeline>
-        </v-sheet>
+        </div>
       </VCardText>
-      <VCardItem class="text-center mt-10">
-        <VBtn variant="elevated" @click="handleSubmit" :disabled="loading" color="success" :prepend-icon="getBtnIcon()"
-          class="px-5" size="small">
-          {{ getActionName() }}
+
+      <VCardItem class="text-center mt-4">
+        <div class="d-flex align-center justify-center mb-3">
+          <VCheckbox
+            v-model="onlyCurrentStep"
+            density="compact"
+            hide-details
+            label="仅执行当前步骤（不自动续跑）"
+            :disabled="loading"
+          />
+        </div>
+        <VBtn
+          variant="elevated"
+          @click="handleSubmit()"
+          :disabled="loading"
+          :color="getActionColor()"
+          :prepend-icon="getBtnIcon()"
+          class="px-5"
+          size="small"
+        >
+          <VProgressCircular
+            v-if="loading"
+            indeterminate
+            size="16"
+            width="2"
+            class="me-2"
+          />
+          {{ loading ? '执行中...' : getActionName() }}
         </VBtn>
-        <VBtn variant="elevated" @click="deleteSeed" :disabled="loading" color="error" prepend-icon="mdi-delete"
-          class="px-5 ml-5" size="small">
+        <VBtn
+          variant="elevated"
+          @click="deleteSeed"
+          :disabled="loading"
+          color="error"
+          prepend-icon="mdi-delete"
+          class="px-5 ml-5"
+          size="small"
+        >
           删除
         </VBtn>
       </VCardItem>
