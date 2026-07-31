@@ -446,6 +446,10 @@ async function updateCollect(field: string) {
       id: collectDetail.value.id,
       [field]: addForm.value[field as keyof typeof addForm.value],
     })
+    // 同步本地详情，避免刷新前展示旧值
+    if (field in collectDetail.value) {
+      ;(collectDetail.value as any)[field] = addForm.value[field as keyof typeof addForm.value]
+    }
     $toast.success(`更新 ${field} 成功！`)
   } catch (error) {
     console.error(`${field} 更新失败:`, error)
@@ -466,46 +470,90 @@ function onClickImdb() {
     getPtgen(url)
   }
 }
+
+/** 用 Bangumi ID 直接拉 ptgen 信息并回填 */
+function onClickBangumi() {
+  if (!addForm.value.bangumi_id) {
+    $toast.warning('Bangumi ID不存在，无法获取信息！')
+    return
+  }
+  isLoading.value = true
+  const id = String(addForm.value.bangumi_id).trim()
+  const url = id.startsWith('http') ? id : `https://bangumi.tv/subject/${id}`
+  getPtgen(url)
+}
+
 async function getPtgen(url: string) {
   try {
     ptgen.value = (await api.get('collect/ptgen/info?url=' + url)) as PtgenInfo
     addForm.value.en_title = ptgen.value.en_title
     addForm.value.cn_title = ptgen.value.cn_title
     addForm.value.sub_title = ptgen.value.sub_title
-    addForm.value.imdb_id = ptgen.value.imdb_id || ''
-    addForm.value.tmdb_id = ptgen.value.tmdb_id || ''
-    addForm.value.bangumi_id = ptgen.value.bangumi_id || ''
-    addForm.value.season = ptgen.value.season || 1
+    if (ptgen.value.imdb_id) {
+      addForm.value.imdb_id = ptgen.value.imdb_id
+    }
+    if (ptgen.value.tmdb_id) {
+      addForm.value.tmdb_id = ptgen.value.tmdb_id
+    }
+    // 有解析到 bangumi_id 才覆盖，避免空结果清空已有值
+    if (ptgen.value.bangumi_id) {
+      addForm.value.bangumi_id = ptgen.value.bangumi_id
+    }
+    if (ptgen.value.douban_id) {
+      addForm.value.douban_id = ptgen.value.douban_id
+    }
+    addForm.value.season = ptgen.value.season || addForm.value.season || 1
     // 后端返回 overview，兼容 description 字段
     addForm.value.overview =
-      ptgen.value.overview || ptgen.value.description || collectDetail.value.overview
-    isLoading.value = false
+      ptgen.value.overview || ptgen.value.description || collectDetail.value.overview || addForm.value.overview
+    if (ptgen.value.year) {
+      addForm.value.year = ptgen.value.year
+    }
+    // 编辑页：解析到的 ID 自动落库，避免只回填表单、刷新后丢失
+    if (ptgen.value.bangumi_id) {
+      await updateCollect('bangumi_id')
+    }
+    if (ptgen.value.tmdb_id) {
+      await updateCollect('tmdb_id')
+    }
+    if (ptgen.value.imdb_id) {
+      await updateCollect('imdb_id')
+    }
   } catch (error) {
-    isLoading.value = false
     console.error(error)
+    $toast.error('获取 PTGen 信息失败')
+  } finally {
+    isLoading.value = false
   }
 }
 
-// 根据豆瓣ID或IMDB ID 走 ptgen/info 自动获取并更新 TMDB 信息（仅更新 tmdb_id 并自动保存）
+// 根据豆瓣/IMDB/Bangumi ID 走 ptgen/info 自动获取并更新 TMDB（及 bangumi）信息
 async function fetchTmdbId() {
   const doubanId = addForm.value.douban_id
   const imdbId = addForm.value.imdb_id
+  const bangumiId = addForm.value.bangumi_id
   let url = ''
   if (doubanId) {
     url = `https://movie.douban.com/subject/${doubanId}/`
   } else if (imdbId) {
     url = `https://www.imdb.com/title/${imdbId}/`
+  } else if (bangumiId) {
+    const id = String(bangumiId).trim()
+    url = id.startsWith('http') ? id : `https://bangumi.tv/subject/${id}`
   } else {
-    $toast.warning('豆瓣ID或IMDB ID不存在，无法获取TMDB信息！')
+    $toast.warning('豆瓣/IMDB/Bangumi ID不存在，无法获取TMDB信息！')
     return
   }
   try {
     isLoading.value = true
     const info = (await api.get('collect/ptgen/info?url=' + url)) as PtgenInfo
     ptgen.value = info
-    addForm.value.tmdb_id = info.tmdb_id || ''
+    addForm.value.tmdb_id = info.tmdb_id || addForm.value.tmdb_id || ''
+    if (info.bangumi_id) {
+      addForm.value.bangumi_id = info.bangumi_id
+      await updateCollect('bangumi_id')
+    }
     if (addForm.value.tmdb_id) {
-      // 自动保存解析到的 tmdb_id
       await updateCollect('tmdb_id')
     } else {
       $toast.warning('未能解析到TMDB信息')
@@ -1004,10 +1052,10 @@ watch(
             >
               <template #prepend-inner>
                 <VIcon
-                  v-if="addForm.douban_id || addForm.imdb_id"
+                  v-if="addForm.douban_id || addForm.imdb_id || addForm.bangumi_id"
                   icon="mdi-magnify"
                   class="cursor-pointer text-lg mt-1"
-                  title="根据豆瓣/IMDB ID 获取TMDB"
+                  title="根据豆瓣/IMDB/Bangumi ID 获取TMDB"
                   @click="fetchTmdbId"
                 />
                 <VIcon
@@ -1037,6 +1085,7 @@ watch(
             <VTextField
               v-model="addForm.bangumi_id"
               placeholder="PTGen 解析后自动填充，可手动修改"
+              hint="如：228715"
               label="Bangumi ID"
               variant="plain"
               persistent-hint
@@ -1046,12 +1095,20 @@ watch(
               @focus="showSaveIcons.bangumi_id = true"
               @blur="showSaveIcons.bangumi_id = false"
             >
-              <template #prepend-inner v-if="addForm.bangumi_id">
+              <template #prepend-inner>
                 <VIcon
+                  v-if="addForm.bangumi_id"
+                  icon="mdi-magnify"
+                  class="cursor-pointer text-lg mt-1"
+                  title="根据 Bangumi ID 获取信息"
+                  @click="onClickBangumi"
+                />
+                <VIcon
+                  v-if="addForm.bangumi_id"
                   icon="mdi-cloud-outline"
                   class="cursor-pointer text-lg mt-1"
                   title="打开Bangumi详情页"
-                  @click="addForm.bangumi_id && openBangumiDetail(addForm.bangumi_id)"
+                  @click="openBangumiDetail(addForm.bangumi_id)"
                 />
               </template>
               <template #append-inner>
