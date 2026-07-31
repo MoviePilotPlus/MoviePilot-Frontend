@@ -356,6 +356,8 @@ export interface PtgenInfo {
   tmdb_id?: string
   // TMDB 链接
   tmdb_link?: string
+  // Bangumi ID
+  bangumi_id?: string
   // 副标题
   sub_title?: string
   // 海报

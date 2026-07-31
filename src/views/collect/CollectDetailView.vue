@@ -62,6 +62,7 @@ const showSaveIcons = ref({
   douban_id: false,
   imdb_id: false,
   tmdb_id: false,
+  bangumi_id: false,
   season: false,
   year: false,
   sub_title: false,
@@ -84,6 +85,7 @@ const addForm = ref<CollectCreate>({
   douban_id: '',
   imdb_id: '',
   tmdb_id: '',
+  bangumi_id: '',
   cn_title: '',
   en_title: '',
   sub_title: '',
@@ -145,6 +147,14 @@ function openTmdbDetail(tmdbId: string) {
   }
   window.open(link, '_blank')
 }
+
+function openBangumiDetail(bangumiId: string) {
+  if (!bangumiId) {
+    $toast.warning('Bangumi ID不存在，无法打开详情页！')
+    return
+  }
+  window.open(`https://bangumi.tv/subject/${bangumiId}`, '_blank')
+}
 // 查询所有站点
 async function querySites() {
   try {
@@ -181,6 +191,7 @@ async function getDetail() {
     addForm.value.douban_id = collectDetail.value.douban_id ?? ''
     addForm.value.imdb_id = collectDetail.value.imdb_id ?? ''
     addForm.value.tmdb_id = collectDetail.value.tmdb_id ?? ''
+    addForm.value.bangumi_id = collectDetail.value.bangumi_id ?? ''
     addForm.value.sub_title = collectDetail.value.sub_title ?? ''
     addForm.value.overview = collectDetail.value.overview ?? ''
     addForm.value.cn_title = collectDetail.value.cn_title ?? ''
@@ -463,9 +474,11 @@ async function getPtgen(url: string) {
     addForm.value.sub_title = ptgen.value.sub_title
     addForm.value.imdb_id = ptgen.value.imdb_id || ''
     addForm.value.tmdb_id = ptgen.value.tmdb_id || ''
+    addForm.value.bangumi_id = ptgen.value.bangumi_id || ''
     addForm.value.season = ptgen.value.season || 1
-    // 处理可能为 null 的情况，确保赋值给 addForm.value.overview 的是 string 类型
-    addForm.value.overview = ptgen.value.description || collectDetail.value.overview
+    // 后端返回 overview，兼容 description 字段
+    addForm.value.overview =
+      ptgen.value.overview || ptgen.value.description || collectDetail.value.overview
     isLoading.value = false
   } catch (error) {
     isLoading.value = false
@@ -1012,6 +1025,42 @@ watch(
                       v-if="showSaveIcons.tmdb_id"
                       icon="mdi-content-save"
                       @mousedown.stop="updateCollect('tmdb_id')"
+                      class="cursor-pointer save-icon"
+                      color="primary"
+                    />
+                  </transition>
+                </div>
+              </template>
+            </VTextField>
+          </v-col>
+          <v-col cols="6" md="6">
+            <VTextField
+              v-model="addForm.bangumi_id"
+              placeholder="PTGen 解析后自动填充，可手动修改"
+              label="Bangumi ID"
+              variant="plain"
+              persistent-hint
+              class="max-w mt-1"
+              :loading="isLoading"
+              density="compact"
+              @focus="showSaveIcons.bangumi_id = true"
+              @blur="showSaveIcons.bangumi_id = false"
+            >
+              <template #prepend-inner v-if="addForm.bangumi_id">
+                <VIcon
+                  icon="mdi-cloud-outline"
+                  class="cursor-pointer text-lg mt-1"
+                  title="打开Bangumi详情页"
+                  @click="addForm.bangumi_id && openBangumiDetail(addForm.bangumi_id)"
+                />
+              </template>
+              <template #append-inner>
+                <div class="absolute-icon-container">
+                  <transition name="fade">
+                    <v-icon
+                      v-if="showSaveIcons.bangumi_id"
+                      icon="mdi-content-save"
+                      @mousedown.stop="updateCollect('bangumi_id')"
                       class="cursor-pointer save-icon"
                       color="primary"
                     />

@@ -179,6 +179,7 @@ const addForm = ref<CollectCreate>({
   douban_id: '',
   imdb_id: '',
   tmdb_id: '',
+  bangumi_id: '',
   cn_title: '',
   en_title: '',
   sub_title: '',
@@ -333,9 +334,11 @@ async function getPtgen(url: string) {
     addForm.value.sub_title = ptgen.value.sub_title
     addForm.value.imdb_id = ptgen.value.imdb_id || ''
     addForm.value.tmdb_id = ptgen.value.tmdb_id || ''
+    addForm.value.bangumi_id = ptgen.value.bangumi_id || ''
     addForm.value.season = ptgen.value.season || 1
-    // 处理可能为 null 的情况，确保赋值给 addForm.value.overview 的是 string 类型
-    addForm.value.overview = ptgen.value.description || mediaDetail.value.overview || ''
+    // 后端返回 overview，兼容 description 字段
+    addForm.value.overview =
+      ptgen.value.overview || ptgen.value.description || mediaDetail.value.overview || ''
     addForm.value.year = ptgen.value.year || mediaDetail.value.year || ''
     if (addForm.value.year) {
       mediaDetail.value.year = addForm.value.year
@@ -867,6 +870,14 @@ function openTmdbDetail(tmdbId: string) {
   window.open(link, '_blank')
 }
 
+function openBangumiDetail(bangumiId: string) {
+  if (!bangumiId) {
+    $toast.warning('Bangumi ID不存在，无法打开详情页！')
+    return
+  }
+  window.open(`https://bangumi.tv/subject/${bangumiId}`, '_blank')
+}
+
 // 资源浏览弹窗
 const resourceDialog = ref(false)
 // 本地存在状态
@@ -1166,6 +1177,28 @@ function handleIgnore() {
                     icon="mdi-cloud-outline"
                     class="cursor-pointer text-lg"
                     @click="addForm.tmdb_id && openTmdbDetail(addForm.tmdb_id)"
+                  />
+                </template>
+              </VTextField>
+            </v-col>
+            <!-- Bangumi ID输入框 -->
+            <v-col cols="12" md="12">
+              <VTextField
+                v-model="addForm.bangumi_id"
+                placeholder="PTGen 解析后自动填充，可手动修改"
+                hint="如：350235（根据标题/年份匹配 Bangumi）"
+                label="Bangumi ID"
+                variant="outlined"
+                :loading="isLoading"
+                persistent-hint
+                class="max-w-sm mt-1"
+                density="compact"
+              >
+                <template #prepend-inner v-if="addForm.bangumi_id">
+                  <VIcon
+                    icon="mdi-cloud-outline"
+                    class="cursor-pointer text-lg"
+                    @click="addForm.bangumi_id && openBangumiDetail(addForm.bangumi_id)"
                   />
                 </template>
               </VTextField>
