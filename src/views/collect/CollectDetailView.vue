@@ -980,11 +980,20 @@ watch(
               @focus="showSaveIcons.douban_id = true"
               @blur="showSaveIcons.douban_id = false"
             >
-              <template #prepend-inner v-if="addForm.douban_id">
+              <template #prepend-inner>
                 <VIcon
+                  v-if="addForm.douban_id"
                   icon="mdi-magnify"
                   class="cursor-pointer text-lg mt-1"
-                  @click="addForm.douban_id && onClickDouban()"
+                  title="根据豆瓣 ID 获取信息"
+                  @click="onClickDouban"
+                />
+                <VIcon
+                  v-if="addForm.douban_id"
+                  icon="mdi-cloud-outline"
+                  class="cursor-pointer text-lg mt-1"
+                  title="打开豆瓣详情页"
+                  @click="openDoubanDetail(addForm.douban_id)"
                 />
               </template>
               <template #append-inner>
@@ -1015,11 +1024,20 @@ watch(
               @focus="showSaveIcons.imdb_id = true"
               @blur="showSaveIcons.imdb_id = false"
             >
-              <template #prepend-inner v-if="addForm.imdb_id">
+              <template #prepend-inner>
                 <VIcon
+                  v-if="addForm.imdb_id"
                   icon="mdi-magnify"
                   class="cursor-pointer text-lg mt-1"
-                  @click="addForm.imdb_id && onClickImdb()"
+                  title="根据 IMDB ID 获取信息"
+                  @click="onClickImdb"
+                />
+                <VIcon
+                  v-if="addForm.imdb_id"
+                  icon="mdi-cloud-outline"
+                  class="cursor-pointer text-lg mt-1"
+                  title="打开 IMDB 详情页"
+                  @click="openImdbDetail(addForm.imdb_id)"
                 />
               </template>
               <template #append-inner>
