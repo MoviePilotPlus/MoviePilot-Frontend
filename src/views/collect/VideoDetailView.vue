@@ -864,7 +864,7 @@ function openTmdbDetail(tmdbId: string) {
   // 优先使用 PTGen 返回的 TMDB 链接（已区分电影/剧集），否则按当前分类拼接
   let link = ptgen.value.tmdb_link
   if (!link) {
-    const tmdbType = addForm.value.cate === 'Movie' ? 'movie' : 'tv'
+    const tmdbType = addForm.value.type === 'Movie' ? 'movie' : 'tv'
     link = `https://www.themoviedb.org/${tmdbType}/${tmdbId}`
   }
   window.open(link, '_blank')
