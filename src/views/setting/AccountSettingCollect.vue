@@ -549,6 +549,7 @@ function addTeamConfig() {
     team: '',
     copyright: '',
     declare: '',
+    ban_reprint: '',
     default: false,
     order: teamConfigs.value.length + 1,
   }
@@ -595,6 +596,7 @@ type TeamConfig = {
   team: string
   copyright: string
   declare: string
+  ban_reprint: string
   default: boolean
   order: number
 }
@@ -665,6 +667,7 @@ async function saveTeamConfigs() {
       team: item.team,
       copyright: item.copyright,
       declare: item.declare,
+      ban_reprint: item.ban_reprint,
       default: item.default,
       order: index + 1,
     }))
@@ -1606,6 +1609,14 @@ onDeactivated(() => {
                       <VTextField
                         v-model="element.declare"
                         :label="t('common.declare')"
+                        dense
+                        outlined
+                        hide-details
+                        full-width
+                      />
+                      <VTextField
+                        v-model="element.ban_reprint"
+                        :label="t('collect.banReprint')"
                         dense
                         outlined
                         hide-details

@@ -1259,6 +1259,7 @@ export default {
     copyright: '版權資訊',
     defaultTeam: '預設',
     order: '排序',
+    banReprint: '禁轉資訊',
     detail: {
       episodes: '劇集列表',
       definition: '可用清晰度',

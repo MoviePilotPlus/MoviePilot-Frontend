@@ -1267,6 +1267,7 @@ export default {
     copyright: '版权信息',
     defaultTeam: '默认',
     order: '排序',
+    banReprint: '禁转信息',
     detail: {
       episodes: '剧集列表',
       definition: '可用清晰度',

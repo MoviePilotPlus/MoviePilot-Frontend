@@ -1275,6 +1275,7 @@ export default {
     copyright: 'Copyright',
     defaultTeam: 'Default',
     order: 'Order',
+    banReprint: 'Ban Reprint',
     detail: {
       episodes: 'Episode List',
       definition: 'Available Definition',
