@@ -7,6 +7,9 @@ import { default as MediaCardListView } from '@/views/collect/MediaCardListView.
 import { default as MediaSearchView } from '@/views/collect/MediaSearchView.vue'
 import { VTextField, VDialog, VCard, VCardTitle, VCardText, VCardActions, VBtn, VIcon, VImg } from 'vuetify/components'
 
+// 线路：normal=普通优酷 / bluray=酷喵帧享影院
+const sourceType = ref<'normal' | 'bluray'>('normal')
+
 // 排序 类型 资费 出品 地区 年份 状态 画风 年龄 全部 性别 语言  动画明星 剧场 奖项 其他-characteristic
 // 电影或者电视剧 movies/tvs
 const type = ref('电视剧')
@@ -22,13 +25,33 @@ const hiddenFilterCount = computed(() => Math.max(cateEntries.value.length - 3, 
 const searchWord = ref<string | null>(null)
 const isSearch = ref(false)
 
+// ========= 帧享影院专用状态 =========
+// 左侧菜单节点（杜比全景声/IMAX专区等）
+const blurayNodes = ref<any[]>([])
+const blurayNodeId = ref<string>('')  // 当前选中的菜单节点 id（空=未选，走 filter.show.list）
+// 帧享分类筛选参数（type/pay_type/main_area/year/sort，来自 condition.list）
+const blurayFilter = reactive({
+  type: '',
+  pay_type: '',
+  main_area: '',
+  year: '',
+  sort: '',
+})
+// 帧享分类筛选是否可见（选中了左侧菜单节点时隐藏分类筛选，因为两者互斥）
+const blurayFilterVisible = computed(() => true)  // 两者都显示，由后端按 nodeId 优先级处理
+
 // 用户信息
 const userInfo = ref({ is_login: false });
 const loginDialogVisible = ref(false);
 const loginStep = ref('qr-code');
+// 登录方式：web=网页端登录（原逻辑，只拿cookie）/ tv=TV端登录（拿stoken）
+const loginMode = ref('web');
 const qrCodeUrl = ref('');
 const qrCodeId = ref('');
 const qrCodeT = ref('');
+// TV 端登录专用
+const tvQrToken = ref('');
+const tvPollInterval = ref(null);
 const loginError = ref('');
 const pollingTimer = ref(null);
 
@@ -107,12 +130,76 @@ function searchClear() {
   searchWord.value = null
   isSearch.value = false
 }
+
+// ========= 帧享影院：加载左侧菜单 =========
+async function queryBlurayNodes() {
+  try {
+    const data: any[] = await api.get('youku/bluray/nodes')
+    blurayNodes.value = Array.isArray(data) ? data : []
+    // 默认不选中任何节点（blurayNodeId=''），走 filter.show.list 全部分类
+  } catch (error) {
+    console.log('加载帧享菜单失败', error)
+    blurayNodes.value = []
+  }
+}
+// ========= 帧享影院：加载分类筛选条件 =========
+async function queryBlurayConditions() {
+  try {
+    const data: CategoryInfo[] = await api.get('youku/bluray/conditions')
+    const groupedData: Record<string, CategoryInfo[]> = {}
+    data.forEach((item: CategoryInfo) => {
+      const filter_key = item.filter_key
+      if (!groupedData[filter_key]) groupedData[filter_key] = []
+      groupedData[filter_key].push(item)
+    })
+    cates.value = groupedData
+  } catch (error) {
+    console.log('加载帧享筛选条件失败', error)
+    cates.value = {}
+  }
+}
+// 帧享列表组件的 params（动态计算）
+const blurayListParams = computed(() => {
+  if (blurayNodeId.value) {
+    // 选了左侧菜单节点 → show-list
+    return { node_id: blurayNodeId.value }
+  }
+  // 否则 → filter-show-list（分类筛选）
+  return { ...blurayFilter }
+})
+// 帧享列表接口路径（动态切换 show-list / filter-show-list）
+const blurayListApiPath = computed(() => {
+  return blurayNodeId.value ? 'youku/bluray/show-list' : 'youku/bluray/filter-show-list'
+})
+// 帧享搜索接口路径
+const bluraySearchApiPath = 'youku/bluray/search'
+
+// 切换线路
+function switchSource(s: 'normal' | 'bluray') {
+  if (sourceType.value === s) return
+  sourceType.value = s
+  isSearch.value = false
+  searchWord.value = null
+  // 重置状态
+  blurayNodeId.value = ''
+  Object.assign(blurayFilter, { type: '', pay_type: '', main_area: '', year: '', sort: '' })
+  if (s === 'normal') {
+    type.value = defaultType
+    queryCate(defaultType)
+  } else {
+    queryBlurayNodes()
+    queryBlurayConditions()
+  }
+  currentKey.value++
+}
+
 onMounted(async () => {
   queryCate(defaultType)
   await getUserInfo()
 })
-// 类型变化
+// 类型变化（普通优酷）
 watch(type, () => {
+  if (sourceType.value !== 'normal') return
   // 类型变化时，将 filterParams 恢复到初始化状态
   Object.assign(filterParams, {
     'sort': defaultSort,
@@ -141,8 +228,9 @@ watch(type, () => {
   currentKey.value++
 })
 
-// 过滤参数变化
+// 过滤参数变化（普通优酷）
 watch(filterParams, () => {
+  if (sourceType.value !== 'normal') return
   if (!filterParams.sort) {
     filterParams.sort = ''
   }
@@ -151,6 +239,12 @@ watch(filterParams, () => {
   }
   currentKey.value++
 })
+
+// 帧享：菜单节点变化 / 分类筛选变化 → 重新加载
+watch([blurayNodeId, blurayFilter], () => {
+  if (sourceType.value !== 'bluray') return
+  currentKey.value++
+}, { deep: true })
 
 // 获取用户信息
 const getUserInfo = async () => {
@@ -166,6 +260,9 @@ const getUserInfo = async () => {
 
 // 生成登录二维码
 const generateQRCode = async () => {
+  if (loginMode.value === 'tv') {
+    return generateTVQRCode();
+  }
   try {
     const res = await api.get('/youku/qr-code');
     if (res && res.url) {
@@ -180,6 +277,83 @@ const generateQRCode = async () => {
     loginError.value = '生成二维码失败，请重试';
     loginStep.value = 'failed';
   }
+};
+
+// TV端登录-生成二维码
+const generateTVQRCode = async () => {
+  try {
+    const res = await api.get('/youku/tv/qr-code');
+    console.log('[TV登录] /youku/tv/qr-code 响应:', res);
+    if (res && res.token) {
+      tvQrToken.value = res.token;
+      // qrCodeUrl 是扫码网址（不是图片）；qrCodeImgUrl 才是二维码图片
+      // 优先用预渲染图片，退回用扫码网址本地生成
+      const imgUrl = res.qrCodeImgUrl;
+      const scanUrl = res.qrCodeUrl;
+      console.log('[TV登录] imgUrl=', imgUrl, 'scanUrl=', scanUrl);
+      if (imgUrl) {
+        qrCodeUrl.value = imgUrl;
+      } else if (scanUrl) {
+        // 没有预渲染图，用扫码网址本地生成二维码
+        try {
+          const { default: QRCode } = await import('qrcode');
+          qrCodeUrl.value = await QRCode.toDataURL(scanUrl, { width: 240 });
+        } catch {
+          qrCodeUrl.value = scanUrl;
+        }
+      } else {
+        qrCodeUrl.value = '';
+      }
+      qrCodeId.value = '';
+      qrCodeT.value = '';
+      loginStep.value = 'qr-code';
+      startTVPolling(res.pollMilliseconds || 3000);
+    } else {
+      loginError.value = '生成二维码失败：未获取到token';
+      loginStep.value = 'failed';
+    }
+  } catch (error) {
+    console.error('TV端生成二维码失败:', error);
+    loginError.value = (error as any)?.response?.data?.message || '生成二维码失败，请确认签名服务(Plus-Api)已启动';
+    loginStep.value = 'failed';
+  }
+};
+
+// TV端登录-轮询扫码状态
+const startTVPolling = (intervalMs: number = 3000) => {
+  let count = 0;
+  const maxCount = Math.floor(180000 / intervalMs); // 3分钟
+  tvPollInterval.value = setInterval(async () => {
+    count++;
+    if (count >= maxCount) {
+      clearInterval(tvPollInterval.value);
+      loginError.value = '二维码已过期，请重新生成';
+      loginStep.value = 'failed';
+      return;
+    }
+    try {
+      const res = await api.get(`/youku/tv/qr-code-status?token=${tvQrToken.value}`);
+      if (res && res.status) {
+        if (res.status === 'success') {
+          clearInterval(tvPollInterval.value);
+          loginStep.value = 'success';
+          setTimeout(() => {
+            loginDialogVisible.value = false;
+            getUserInfo();
+          }, 1000);
+        } else if (res.status === 'expired' || res.status === 'failed') {
+          clearInterval(tvPollInterval.value);
+          loginError.value = res.msg || '登录失败';
+          loginStep.value = 'failed';
+        } else if (res.status === 'scanned') {
+          loginStep.value = 'scanning';
+        }
+        // waiting 继续轮询
+      }
+    } catch (error) {
+      console.error('TV端获取扫码状态失败:', error);
+    }
+  }, intervalMs);
 };
 
 // 开始轮询二维码状态
@@ -228,7 +402,22 @@ const startPolling = () => {
 // 处理登录
 const handleLogin = () => {
   loginStep.value = 'qr-code';
+  // 清理可能的旧轮询
+  if (tvPollInterval.value) { clearInterval(tvPollInterval.value); tvPollInterval.value = null; }
   loginDialogVisible.value = true;
+  generateQRCode();
+};
+
+// 切换登录方式时清理并重新生成
+const switchLoginMode = (mode: string) => {
+  loginMode.value = mode;
+  // 清理两种轮询
+  if (pollingTimer.value) { clearInterval(pollingTimer.value); pollingTimer.value = null; }
+  if (tvPollInterval.value) { clearInterval(tvPollInterval.value); tvPollInterval.value = null; }
+  qrCodeUrl.value = '';
+  tvQrToken.value = '';
+  loginError.value = '';
+  loginStep.value = 'qr-code';
   generateQRCode();
 };
 
@@ -255,15 +444,20 @@ const handleLogout = async () => {
         prepend-inner-icon="mdi-magnify"
         append-inner-icon="mdi-close"
         @click:append-inner="searchClear()"
-        placeholder="搜索优酷"
+        :placeholder="sourceType === 'bluray' ? '搜索帧享影院' : '搜索优酷'"
         @keydown.enter="searchMedia()"
         hide-details
       />
       <div class="flex items-center">
+        <!-- 线路切换 -->
+        <VBtnGroup class="mr-3">
+          <VBtn size="small" :color="sourceType === 'normal' ? 'primary' : 'default'" @click="switchSource('normal')">普通</VBtn>
+          <VBtn size="small" :color="sourceType === 'bluray' ? 'primary' : 'default'" @click="switchSource('bluray')">帧享影院</VBtn>
+        </VBtnGroup>
         <!-- 用户信息 -->
         <VMenu v-if="userInfo && userInfo.is_login" location="bottom center" transition="scale-transition" nudge-bottom="10">
           <template #activator="{ props }">
-            <div v-bind="props" class="relative cursor-pointer mr-3 transition-all duration-300 hover:scale-105" role="button" tabindex="0">
+            <div v-bind="props" class="relative cursor-pointer transition-all duration-300 hover:scale-105" role="button" tabindex="0">
               <VImg :src="userInfo.icon" class="rounded-full border-2 border-transparent hover:border-primary transition-all duration-300" style="block-size: 36px; inline-size: 36px;" />
               <div v-if="userInfo.is_vip" class="absolute -top-1 -right-1 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-full p-0.5 shadow-lg w-5 h-5 flex items-center justify-center">
                 <VIcon size="14" color="white">mdi-crown</VIcon>
@@ -296,7 +490,9 @@ const handleLogout = async () => {
         </VBtn>
       </div>
     </div>
-    <div class="collect-filter-panel px-3" v-show="!isSearch">
+
+    <!-- ========== 普通优酷筛选 ========== -->
+    <div class="collect-filter-panel px-3" v-show="!isSearch && sourceType === 'normal'">
       <div class="collect-chip-row flex justify-start align-center">
         <VChipGroup v-model="type" column mandatory class="collect-chip-group">
           <!-- 遍历数组 -->
@@ -344,38 +540,131 @@ const handleLogout = async () => {
       </div>
     </div>
 
-    <div class="pt-3">
-      <MediaSearchView
-        v-if="isSearch"
-        :key="currentKey"
-        :apipath="`youku/search`"
-        :keyword="searchWord || ''"
-        :cate="cate"
-        grid-class="grid-media-card--landscape"
-      />
-      <MediaCardListView
-        v-show="!isSearch"
-        :key="currentKey"
-        :apipath="`youku/page_data`"
-        :params="filterParams"
-        :first-page="1"
-        :cate="cate"
-        grid-class="grid-media-card--landscape"
-      />
+    <!-- ========== 帧享影院筛选（双筛选区）========== -->
+    <div class="collect-filter-panel px-3" v-show="!isSearch && sourceType === 'bluray'">
+      <!-- 左侧菜单：杜比全景声/IMAX专区/DTS专区等（选中走 show-list） -->
+      <div class="collect-chip-row flex justify-start align-center" v-if="blurayNodes.length">
+        <span class="text-xs text-gray-400 mr-2 whitespace-nowrap">专区</span>
+        <VChipGroup v-model="blurayNodeId" column class="collect-chip-group">
+          <VChip
+            :color="blurayNodeId === '' ? 'primary' : ''"
+            class="collect-filter-chip"
+            tile
+            value=""
+            size="small"
+          >
+            全部
+          </VChip>
+          <VChip
+            :color="blurayNodeId === String(node.id) ? 'primary' : ''"
+            class="collect-filter-chip"
+            tile
+            :value="String(node.id)"
+            size="small"
+            v-for="node in blurayNodes"
+            :key="node.id"
+          >
+            {{ node.name }}
+          </VChip>
+        </VChipGroup>
+      </div>
+      <!-- 顶部分类筛选（仅当未选菜单节点时生效，走 filter-show-list） -->
+      <template v-if="!blurayNodeId">
+        <div
+          class="collect-chip-row flex justify-start align-center"
+          v-for="[key, item] in visibleCateEntries"
+          :key="key"
+        >
+          <VChipGroup
+            v-model="blurayFilter[key as keyof typeof blurayFilter]"
+            column
+            mandatory
+            class="collect-chip-group"
+          >
+            <VChip
+              :color="blurayFilter[key as keyof typeof blurayFilter] == option.option_value ? 'primary' : ''"
+              class="collect-filter-chip"
+              tile
+              :value="option.option_value"
+              v-for="option in item"
+              :key="option.option_value"
+              size="small"
+            >
+              {{ option.option_name }}
+            </VChip>
+          </VChipGroup>
+        </div>
+        <div v-if="hiddenFilterCount > 0" class="collect-filter-toggle-row">
+          <VBtn variant="text" size="small" class="collect-filter-toggle" @click="showMoreFilters = !showMoreFilters">
+            {{ showMoreFilters ? '收起筛选' : `更多筛选（+${hiddenFilterCount}项）` }}
+          </VBtn>
+        </div>
+      </template>
     </div>
-    
+
+    <div class="pt-3">
+      <!-- 普通优酷 -->
+      <template v-if="sourceType === 'normal'">
+        <MediaSearchView
+          v-if="isSearch"
+          :key="currentKey"
+          :apipath="`youku/search`"
+          :keyword="searchWord || ''"
+          :cate="cate"
+          grid-class="grid-media-card--landscape"
+        />
+        <MediaCardListView
+          v-show="!isSearch"
+          :key="currentKey"
+          :apipath="`youku/page_data`"
+          :params="filterParams"
+          :first-page="1"
+          :cate="cate"
+          grid-class="grid-media-card--landscape"
+        />
+      </template>
+      <!-- 帧享影院 -->
+      <template v-else>
+        <MediaSearchView
+          v-if="isSearch"
+          :key="currentKey"
+          :apipath="bluraySearchApiPath"
+          :keyword="searchWord || ''"
+          :cate="cate"
+          grid-class="grid-media-card--landscape"
+        />
+        <MediaCardListView
+          v-show="!isSearch"
+          :key="currentKey"
+          :apipath="blurayListApiPath"
+          :params="blurayListParams"
+          :first-page="1"
+          :cate="cate"
+          grid-class="grid-media-card--landscape"
+        />
+      </template>
+    </div>
+
     <!-- 登录弹窗 -->
     <VDialog v-model="loginDialogVisible" max-width="500px">
       <VCard>
         <VCardTitle>优酷扫码登录</VCardTitle>
         <VCardText class="text-center">
+          <!-- 登录方式切换 -->
+          <div class="d-flex justify-center mb-3 gap-2">
+            <VBtnGroup>
+              <VBtn size="small" :color="loginMode === 'web' ? 'primary' : 'default'" @click="switchLoginMode('web')">网页端</VBtn>
+              <VBtn size="small" :color="loginMode === 'tv' ? 'primary' : 'default'" @click="switchLoginMode('tv')">TV端(推荐)</VBtn>
+            </VBtnGroup>
+          </div>
           <VImg v-if="qrCodeUrl" :src="qrCodeUrl" class="mx-auto" style=" block-size: 200px;inline-size: 200px;" />
           <div v-else class="text-gray-500 py-4">生成二维码中...</div>
           <p class="mt-4" v-if="loginStep === 'qr-code'">等待扫码</p>
           <p class="mt-4" v-else-if="loginStep === 'scanning'">正在扫码...</p>
           <p class="mt-4 text-green-500" v-else-if="loginStep === 'success'">登录成功</p>
           <p class="mt-4 text-red-500" v-else-if="loginStep === 'failed'">登录失败</p>
-          <p class="text-sm text-gray-500 mt-2" v-if="loginStep === 'qr-code'">请使用优酷APP扫描二维码登录</p>
+          <p class="text-sm text-gray-500 mt-2" v-if="loginStep === 'qr-code' && loginMode === 'web'">请使用优酷APP扫描二维码登录</p>
+          <p class="text-sm text-gray-500 mt-2" v-else-if="loginStep === 'qr-code' && loginMode === 'tv'">请使用优酷APP扫描二维码（TV端登录可直接获取stoken）</p>
           <p class="text-sm text-gray-500 mt-2" v-else-if="loginStep === 'scanning'">请在手机上确认登录</p>
           <p class="text-sm text-gray-500 mt-2" v-else-if="loginStep === 'success'">正在跳转...</p>
           <p class="text-sm text-gray-500 mt-2" v-else-if="loginStep === 'failed'">{{ loginError }}</p>
