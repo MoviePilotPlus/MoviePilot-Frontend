@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // @ts-nocheck
 import api from '@/api'
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onActivated } from 'vue'
 import type { CategoryInfo, CategoryItem, UserInfo } from '@/api/types'
 import { default as MediaCardListView } from '@/views/collect/MediaCardListView.vue'
 import { default as MediaSearchView } from '@/views/collect/MediaSearchView.vue'
@@ -346,6 +346,11 @@ function getChipColor(option: CategoryInfo, groupKey: string): string {
 onMounted(async () => {
   queryCate(defaultType)
   // 检测登录状态
+  await checkLoginStatus()
+})
+// keep-alive 激活时（切回 tab）也重新拉取，避免缓存导致首次不渲染
+onActivated(async () => {
+  queryCate(defaultType)
   await checkLoginStatus()
 })
 // 类型变化

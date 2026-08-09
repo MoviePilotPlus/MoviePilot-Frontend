@@ -89,37 +89,37 @@ onActivated(loadExtraDiscoverSources)
     </div>
 
     <VWindow v-model="activeTab" class="mt-3 disable-tab-transition" :touch="false">
-      <VWindowItem value="tencent">
+      <VWindowItem value="tencent" eager>
         <transition name="fade-slide" appear>
           <div><TencentView /></div>
         </transition>
       </VWindowItem>
-      <VWindowItem value="mgtv">
+      <VWindowItem value="mgtv" eager>
         <transition name="fade-slide" appear>
           <div><MgtvView /></div>
         </transition>
       </VWindowItem>
-      <VWindowItem value="iqiyi">
+      <VWindowItem value="iqiyi" eager>
         <transition name="fade-slide" appear>
           <div><IQiyiView /></div>
         </transition>
       </VWindowItem>
-      <VWindowItem value="youku">
+      <VWindowItem value="youku" eager>
         <transition name="fade-slide" appear>
           <div><YoukuView /></div>
         </transition>
       </VWindowItem>
-      <VWindowItem value="bilibili">
+      <VWindowItem value="bilibili" eager>
         <transition name="fade-slide" appear>
           <div><BilibiliView /></div>
         </transition>
       </VWindowItem>
-      <VWindowItem value="ysp">
+      <VWindowItem value="ysp" eager>
         <transition name="fade-slide" appear>
           <div><YspView /></div>
         </transition>
       </VWindowItem>
-      <VWindowItem v-for="item in extraDiscoverSources" :key="item.mediaid_prefix" :value="item.mediaid_prefix">
+      <VWindowItem v-for="item in extraDiscoverSources" :key="item.mediaid_prefix" :value="item.mediaid_prefix" eager>
         <transition name="fade-slide" appear>
           <div><ExtraSourceView :source="item" /></div>
         </transition>

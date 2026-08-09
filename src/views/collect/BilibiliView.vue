@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // @ts-nocheck
 import api from '@/api'
-import { ref, reactive, watch, onMounted, computed } from 'vue'
+import { ref, reactive, watch, onMounted, onActivated, computed } from 'vue'
 import type { CategoryInfo, CategoryItem, UserInfo } from '@/api/types'
 import { default as MediaCardListView } from '@/views/collect/MediaCardListView.vue'
 import { default as MediaSearchView } from '@/views/collect/MediaSearchView.vue'
@@ -139,6 +139,13 @@ onMounted(async () => {
   await checkLoginStatus('tv')
   await checkLoginStatus('web')
   // 默认显示web端用户信息
+  updateCurrentUserInfo('web')
+})
+// keep-alive 激活时（切回 tab）也重新拉取，避免缓存导致首次不渲染
+onActivated(async () => {
+  queryCate(defaultType)
+  await checkLoginStatus('tv')
+  await checkLoginStatus('web')
   updateCurrentUserInfo('web')
 })
 // 更新当前显示的用户信息

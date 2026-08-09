@@ -1,14 +1,11 @@
 <script setup lang="ts">
 // @ts-nocheck
 import api from '@/api'
-import { ref, reactive, watch, onMounted, computed } from 'vue'
+import { ref, reactive, watch, onMounted, onActivated, computed } from 'vue'
 import type { CategoryInfo, CategoryItem } from '@/api/types'
 import { default as MediaCardListView } from '@/views/collect/MediaCardListView.vue'
 import { default as MediaSearchView } from '@/views/collect/MediaSearchView.vue'
 import { VTextField, VDialog, VCard, VCardTitle, VCardText, VCardActions, VBtn, VIcon, VImg } from 'vuetify/components'
-
-// 线路：normal=普通优酷 / bluray=酷喵帧享影院
-const sourceType = ref<'normal' | 'bluray'>('normal')
 
 // 排序 类型 资费 出品 地区 年份 状态 画风 年龄 全部 性别 语言  动画明星 剧场 奖项 其他-characteristic
 // 电影或者电视剧 movies/tvs
@@ -19,26 +16,25 @@ const currentKey = ref(0)
 const cates = ref<Record<string, CategoryInfo[]>>({})
 const showMoreFilters = ref(false)
 const cateEntries = computed(() => Object.entries(cates.value))
-const visibleCateEntries = computed(() => (showMoreFilters.value ? cateEntries.value : cateEntries.value.slice(0, 3)))
-const hiddenFilterCount = computed(() => Math.max(cateEntries.value.length - 3, 0))
+// 是否帧享线路（从后端 categorys 是否含 node 维度判断，避免前端单独配置）
+const isBlurayLine = computed(() => Object.prototype.hasOwnProperty.call(cates.value, 'node'))
+// 选了具体专区时（node 非空），隐藏分类筛选（专区与分类互斥，避免混乱）
+const hasNodeSelected = computed(() => !!filterParams.node)
+// 动态筛选维度：
+// - 普通：原样显示
+// - 帧享：node 专区在最前；选了具体专区时只显示 node 行，隐藏 type/pay_area 等分类筛选
+const dynamicCateEntries = computed(() => {
+  if (isBlurayLine.value && hasNodeSelected.value) {
+    // 选了专区，只留 node 维度
+    return cateEntries.value.filter(([key]) => key === 'node')
+  }
+  return cateEntries.value
+})
+const visibleCateEntries = computed(() => (showMoreFilters.value ? dynamicCateEntries.value : dynamicCateEntries.value.slice(0, 3)))
+const hiddenFilterCount = computed(() => Math.max(dynamicCateEntries.value.length - 3, 0))
 // 搜索词
 const searchWord = ref<string | null>(null)
 const isSearch = ref(false)
-
-// ========= 帧享影院专用状态 =========
-// 左侧菜单节点（杜比全景声/IMAX专区等）
-const blurayNodes = ref<any[]>([])
-const blurayNodeId = ref<string>('')  // 当前选中的菜单节点 id（空=未选，走 filter.show.list）
-// 帧享分类筛选参数（type/pay_type/main_area/year/sort，来自 condition.list）
-const blurayFilter = reactive({
-  type: '',
-  pay_type: '',
-  main_area: '',
-  year: '',
-  sort: '',
-})
-// 帧享分类筛选是否可见（选中了左侧菜单节点时隐藏分类筛选，因为两者互斥）
-const blurayFilterVisible = computed(() => true)  // 两者都显示，由后端按 nodeId 优先级处理
 
 // 用户信息
 const userInfo = ref({ is_login: false });
@@ -55,7 +51,7 @@ const tvPollInterval = ref(null);
 const loginError = ref('');
 const pollingTimer = ref(null);
 
-// 过滤参数
+// 过滤参数（普通优酷 + 帧享影院复用同一套，帧享的『专区』作为 node 维度并入）
 const defaultType = '电视剧'
 const defaultSort = ''
 const cate = ref('TV')
@@ -81,9 +77,10 @@ const filterParams = reactive({
   'division': '',
   'game_brand': '',
   'game_type': '',
+  'node': '',  // 帧享专区维度（杜比/IMAX 等），普通线路不用
 })
 
-// 分类字典
+// 分类字典（普通优酷顶部类型切换；帧享线路由后端 categorys 返回，不依赖此数组）
 const cateDictArray: CategoryItem[] = [
   { 'key': '电视剧', 'value': '电视剧', 'cate': 'TV' },
   { 'key': '电影', 'value': '电影', 'cate': 'Movie' },
@@ -130,76 +127,17 @@ function searchClear() {
   searchWord.value = null
   isSearch.value = false
 }
-
-// ========= 帧享影院：加载左侧菜单 =========
-async function queryBlurayNodes() {
-  try {
-    const data: any[] = await api.get('youku/bluray/nodes')
-    blurayNodes.value = Array.isArray(data) ? data : []
-    // 默认不选中任何节点（blurayNodeId=''），走 filter.show.list 全部分类
-  } catch (error) {
-    console.log('加载帧享菜单失败', error)
-    blurayNodes.value = []
-  }
-}
-// ========= 帧享影院：加载分类筛选条件 =========
-async function queryBlurayConditions() {
-  try {
-    const data: CategoryInfo[] = await api.get('youku/bluray/conditions')
-    const groupedData: Record<string, CategoryInfo[]> = {}
-    data.forEach((item: CategoryInfo) => {
-      const filter_key = item.filter_key
-      if (!groupedData[filter_key]) groupedData[filter_key] = []
-      groupedData[filter_key].push(item)
-    })
-    cates.value = groupedData
-  } catch (error) {
-    console.log('加载帧享筛选条件失败', error)
-    cates.value = {}
-  }
-}
-// 帧享列表组件的 params（动态计算）
-const blurayListParams = computed(() => {
-  if (blurayNodeId.value) {
-    // 选了左侧菜单节点 → show-list
-    return { node_id: blurayNodeId.value }
-  }
-  // 否则 → filter-show-list（分类筛选）
-  return { ...blurayFilter }
-})
-// 帧享列表接口路径（动态切换 show-list / filter-show-list）
-const blurayListApiPath = computed(() => {
-  return blurayNodeId.value ? 'youku/bluray/show-list' : 'youku/bluray/filter-show-list'
-})
-// 帧享搜索接口路径
-const bluraySearchApiPath = 'youku/bluray/search'
-
-// 切换线路
-function switchSource(s: 'normal' | 'bluray') {
-  if (sourceType.value === s) return
-  sourceType.value = s
-  isSearch.value = false
-  searchWord.value = null
-  // 重置状态
-  blurayNodeId.value = ''
-  Object.assign(blurayFilter, { type: '', pay_type: '', main_area: '', year: '', sort: '' })
-  if (s === 'normal') {
-    type.value = defaultType
-    queryCate(defaultType)
-  } else {
-    queryBlurayNodes()
-    queryBlurayConditions()
-  }
-  currentKey.value++
-}
-
 onMounted(async () => {
   queryCate(defaultType)
   await getUserInfo()
 })
-// 类型变化（普通优酷）
+// keep-alive 激活时（切回优酷 tab）也重新拉取，避免缓存导致首次不渲染
+onActivated(async () => {
+  queryCate(defaultType)
+  await getUserInfo()
+})
+// 类型变化
 watch(type, () => {
-  if (sourceType.value !== 'normal') return
   // 类型变化时，将 filterParams 恢复到初始化状态
   Object.assign(filterParams, {
     'sort': defaultSort,
@@ -221,6 +159,7 @@ watch(type, () => {
     'division': '',
     'game_brand': '',
     'game_type': '',
+    'node': '',
   })
   filterParams.type = type.value
   queryCate(type.value)
@@ -228,21 +167,15 @@ watch(type, () => {
   currentKey.value++
 })
 
-// 过滤参数变化（普通优酷）
+// 过滤参数变化（含 node 专区切换）
 watch(filterParams, () => {
-  if (sourceType.value !== 'normal') return
   if (!filterParams.sort) {
     filterParams.sort = ''
   }
-  if (!filterParams.type) {
+  // 帧享线路下 type 可以为空（『全部』），普通线路默认电视剧
+  if (!filterParams.type && !isBlurayLine.value) {
     filterParams.type = '电视剧'
   }
-  currentKey.value++
-})
-
-// 帧享：菜单节点变化 / 分类筛选变化 → 重新加载
-watch([blurayNodeId, blurayFilter], () => {
-  if (sourceType.value !== 'bluray') return
   currentKey.value++
 }, { deep: true })
 
@@ -444,20 +377,15 @@ const handleLogout = async () => {
         prepend-inner-icon="mdi-magnify"
         append-inner-icon="mdi-close"
         @click:append-inner="searchClear()"
-        :placeholder="sourceType === 'bluray' ? '搜索帧享影院' : '搜索优酷'"
+        placeholder="搜索优酷"
         @keydown.enter="searchMedia()"
         hide-details
       />
       <div class="flex items-center">
-        <!-- 线路切换 -->
-        <VBtnGroup class="mr-3">
-          <VBtn size="small" :color="sourceType === 'normal' ? 'primary' : 'default'" @click="switchSource('normal')">普通</VBtn>
-          <VBtn size="small" :color="sourceType === 'bluray' ? 'primary' : 'default'" @click="switchSource('bluray')">帧享影院</VBtn>
-        </VBtnGroup>
         <!-- 用户信息 -->
         <VMenu v-if="userInfo && userInfo.is_login" location="bottom center" transition="scale-transition" nudge-bottom="10">
           <template #activator="{ props }">
-            <div v-bind="props" class="relative cursor-pointer transition-all duration-300 hover:scale-105" role="button" tabindex="0">
+            <div v-bind="props" class="relative cursor-pointer mr-3 transition-all duration-300 hover:scale-105" role="button" tabindex="0">
               <VImg :src="userInfo.icon" class="rounded-full border-2 border-transparent hover:border-primary transition-all duration-300" style="block-size: 36px; inline-size: 36px;" />
               <div v-if="userInfo.is_vip" class="absolute -top-1 -right-1 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-full p-0.5 shadow-lg w-5 h-5 flex items-center justify-center">
                 <VIcon size="14" color="white">mdi-crown</VIcon>
@@ -491,9 +419,10 @@ const handleLogout = async () => {
       </div>
     </div>
 
-    <!-- ========== 普通优酷筛选 ========== -->
-    <div class="collect-filter-panel px-3" v-show="!isSearch && sourceType === 'normal'">
-      <div class="collect-chip-row flex justify-start align-center">
+    <div class="collect-filter-panel px-3" v-show="!isSearch">
+      <!-- 普通线路：顶部固定类型切换（电视剧/电影…）；帧享线路：类型由后端 categorys 返回（type 维度），
+           不再渲染固定 cateDictArray，避免重复 -->
+      <div class="collect-chip-row flex justify-start align-center" v-if="!isBlurayLine">
         <VChipGroup v-model="type" column mandatory class="collect-chip-group">
           <!-- 遍历数组 -->
           <VChip
@@ -509,6 +438,9 @@ const handleLogout = async () => {
           </VChip>
         </VChipGroup>
       </div>
+      <!-- 动态筛选维度（categorys 返回）：
+           - 帧享：node 专区在最前，type/pay_type 等在后；选了具体专区时隐藏分类筛选（互斥）
+           - 普通：原 sort/main_area 等维度 -->
       <div
         class="collect-chip-row flex justify-start align-center"
         v-for="[key, item] in visibleCateEntries"
@@ -540,109 +472,24 @@ const handleLogout = async () => {
       </div>
     </div>
 
-    <!-- ========== 帧享影院筛选（双筛选区）========== -->
-    <div class="collect-filter-panel px-3" v-show="!isSearch && sourceType === 'bluray'">
-      <!-- 左侧菜单：杜比全景声/IMAX专区/DTS专区等（选中走 show-list） -->
-      <div class="collect-chip-row flex justify-start align-center" v-if="blurayNodes.length">
-        <span class="text-xs text-gray-400 mr-2 whitespace-nowrap">专区</span>
-        <VChipGroup v-model="blurayNodeId" column class="collect-chip-group">
-          <VChip
-            :color="blurayNodeId === '' ? 'primary' : ''"
-            class="collect-filter-chip"
-            tile
-            value=""
-            size="small"
-          >
-            全部
-          </VChip>
-          <VChip
-            :color="blurayNodeId === String(node.id) ? 'primary' : ''"
-            class="collect-filter-chip"
-            tile
-            :value="String(node.id)"
-            size="small"
-            v-for="node in blurayNodes"
-            :key="node.id"
-          >
-            {{ node.name }}
-          </VChip>
-        </VChipGroup>
-      </div>
-      <!-- 顶部分类筛选（仅当未选菜单节点时生效，走 filter-show-list） -->
-      <template v-if="!blurayNodeId">
-        <div
-          class="collect-chip-row flex justify-start align-center"
-          v-for="[key, item] in visibleCateEntries"
-          :key="key"
-        >
-          <VChipGroup
-            v-model="blurayFilter[key as keyof typeof blurayFilter]"
-            column
-            mandatory
-            class="collect-chip-group"
-          >
-            <VChip
-              :color="blurayFilter[key as keyof typeof blurayFilter] == option.option_value ? 'primary' : ''"
-              class="collect-filter-chip"
-              tile
-              :value="option.option_value"
-              v-for="option in item"
-              :key="option.option_value"
-              size="small"
-            >
-              {{ option.option_name }}
-            </VChip>
-          </VChipGroup>
-        </div>
-        <div v-if="hiddenFilterCount > 0" class="collect-filter-toggle-row">
-          <VBtn variant="text" size="small" class="collect-filter-toggle" @click="showMoreFilters = !showMoreFilters">
-            {{ showMoreFilters ? '收起筛选' : `更多筛选（+${hiddenFilterCount}项）` }}
-          </VBtn>
-        </div>
-      </template>
-    </div>
-
     <div class="pt-3">
-      <!-- 普通优酷 -->
-      <template v-if="sourceType === 'normal'">
-        <MediaSearchView
-          v-if="isSearch"
-          :key="currentKey"
-          :apipath="`youku/search`"
-          :keyword="searchWord || ''"
-          :cate="cate"
-          grid-class="grid-media-card--landscape"
-        />
-        <MediaCardListView
-          v-show="!isSearch"
-          :key="currentKey"
-          :apipath="`youku/page_data`"
-          :params="filterParams"
-          :first-page="1"
-          :cate="cate"
-          grid-class="grid-media-card--landscape"
-        />
-      </template>
-      <!-- 帧享影院 -->
-      <template v-else>
-        <MediaSearchView
-          v-if="isSearch"
-          :key="currentKey"
-          :apipath="bluraySearchApiPath"
-          :keyword="searchWord || ''"
-          :cate="cate"
-          grid-class="grid-media-card--landscape"
-        />
-        <MediaCardListView
-          v-show="!isSearch"
-          :key="currentKey"
-          :apipath="blurayListApiPath"
-          :params="blurayListParams"
-          :first-page="1"
-          :cate="cate"
-          grid-class="grid-media-card--landscape"
-        />
-      </template>
+      <MediaSearchView
+        v-if="isSearch"
+        :key="currentKey"
+        :apipath="`youku/search`"
+        :keyword="searchWord || ''"
+        :cate="cate"
+        grid-class="grid-media-card--landscape"
+      />
+      <MediaCardListView
+        v-show="!isSearch"
+        :key="currentKey"
+        :apipath="`youku/page_data`"
+        :params="filterParams"
+        :first-page="1"
+        :cate="cate"
+        grid-class="grid-media-card--landscape"
+      />
     </div>
 
     <!-- 登录弹窗 -->
