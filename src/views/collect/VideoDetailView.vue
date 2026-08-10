@@ -30,6 +30,7 @@ const containerRef = ref<HTMLElement | null>(null)
 const mediaProps = defineProps({
   source: String,
   mediaid: String,
+  vid: String,
   title: String,
   year: String,
   type: String,
@@ -153,6 +154,17 @@ function optionLabel(option: any) {
 }
 
 const isYoukuSource = computed(() => mediaProps.source === 'YouKu' || mediaProps.source === 'youku')
+// 帧享影院技术参数（来自 bluray detail show 节点，直接展示）
+const blurayTechInfo = computed(() => {
+  const d = mediaDetail.value || {}
+  return {
+    frameRate: d.bluray_frame_rate || '',
+    bitRate: d.bluray_bit_rate || '',
+    capacity: d.bluray_capacity || '',
+    resolution: d.bluray_resolution || '',
+    hqIcons: d.bluray_hq_icons || [],
+  }
+})
 
 const youkuVideoQualityOptions = computed(() => {
   const options = mediaDetail.value.video_quality_options || []
@@ -229,6 +241,7 @@ async function getMediaDetail() {
     mediaDetail.value = await api.get(`${mediaProps.source?.toLowerCase()}/detail`, {
       params: {
         cid: mediaProps.mediaid,
+        vid: mediaProps.vid || '',
       },
     })
     componentLoaded.value = true
@@ -1027,6 +1040,14 @@ function handleIgnore() {
               mediaDetail.douban_info.card_subtitle
             }}</span>
           </span>
+          <!-- 帧享影院技术参数（顶部 banner 副标题位置）-->
+          <div v-if="blurayTechInfo.resolution || blurayTechInfo.frameRate || blurayTechInfo.bitRate || blurayTechInfo.capacity" class="bluray-tech-badges mt-2">
+            <span v-if="blurayTechInfo.resolution" class="bluray-badge">{{ blurayTechInfo.resolution }}</span>
+            <span v-if="blurayTechInfo.frameRate" class="bluray-badge">{{ blurayTechInfo.frameRate }}</span>
+            <span v-if="blurayTechInfo.bitRate" class="bluray-badge">{{ blurayTechInfo.bitRate }}</span>
+            <span v-if="blurayTechInfo.capacity" class="bluray-badge">{{ blurayTechInfo.capacity }}</span>
+            <img v-for="(icon, i) in blurayTechInfo.hqIcons" :key="'hq'+i" :src="icon" class="bluray-hq-icon" />
+          </div>
         </div>
         <div class="media-actions">
           <VBtn variant="tonal" color="info" class="mb-2" @click="addCollect">
@@ -1888,5 +1909,43 @@ a.crew-name {
     font-size: 1.5rem;
     line-height: 2rem;
   }
+}
+
+.bluray-tech-info {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+}
+.bluray-tech-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(var(--v-theme-primary), 0.1);
+  color: rgb(var(--v-theme-primary));
+  font-weight: 500;
+}
+.bluray-tech-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.bluray-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgb(var(--v-theme-primary));
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.bluray-hq-icon {
+  height: 18px;
+  width: auto;
+  object-fit: contain;
 }
 </style>

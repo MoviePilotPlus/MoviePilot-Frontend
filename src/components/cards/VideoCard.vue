@@ -124,6 +124,7 @@ function goMediaDetail() {
     query: {
       source: props.media?.source,
       mediaid: props.media?.cid,
+      vid: props.media?.vid,
       title: props.media?.title,
       year: props.media?.year,
       type: props.media?.type,
