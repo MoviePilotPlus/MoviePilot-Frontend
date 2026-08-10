@@ -5,8 +5,10 @@ import VideoDetailView from '@/views/collect/VideoDetailView.vue'
 // 路由参数
 const route = useRoute()
 
-// TMDBID
+// TMDBID / 节目 cid
 const mediaid = route.query?.mediaid?.toString()
+// 帧享 programId（列表/搜索写入 vid，详情用来直查 fireworks）
+const vid = route.query?.vid?.toString()
 
 // 类型
 const type = route.query?.type?.toString()
@@ -24,6 +26,6 @@ const source = route.query?.source?.toString()
 
 <template>
   <div>
-    <VideoDetailView :mediaid="mediaid" :source="source" :type="type" :cate="cate" :title="title" :year="year" link_to="disabled"/>
+    <VideoDetailView :mediaid="mediaid" :vid="vid" :source="source" :type="type" :cate="cate" :title="title" :year="year" link_to="disabled"/>
   </div>
 </template>

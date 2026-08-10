@@ -28,6 +28,8 @@ const isYspSource = computed(() => {
 })
 
 const mediaid = computed(() => route.query?.cid?.toString() || route.query?.mediaid?.toString() || '')
+// 帧享 programId（列表/搜索写入 vid，详情用来直查 fireworks）
+const vid = computed(() => route.query?.vid?.toString() || '')
 const title = computed(() => route.query?.title?.toString() || '')
 const year = computed(() => route.query?.year?.toString() || '')
 const type = computed(() => route.query?.type?.toString() || 'TV')
@@ -64,6 +66,7 @@ const endTime = computed(() => route.query?.endTime?.toString() || '')
       v-else
       :source="source"
       :mediaid="mediaid"
+      :vid="vid"
       :title="title"
       :year="year"
       :type="type"
