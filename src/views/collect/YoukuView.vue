@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // @ts-nocheck
 import api from '@/api'
-import { ref, reactive, watch, onMounted, onActivated, computed } from 'vue'
+import { ref, reactive, watch, onMounted, onActivated, onDeactivated, onUnmounted, computed } from 'vue'
 import type { CategoryInfo, CategoryItem } from '@/api/types'
 import { default as MediaCardListView } from '@/views/collect/MediaCardListView.vue'
 import { default as MediaSearchView } from '@/views/collect/MediaSearchView.vue'
@@ -40,16 +40,13 @@ const isSearch = ref(false)
 const userInfo = ref({ is_login: false });
 const loginDialogVisible = ref(false);
 const loginStep = ref('qr-code');
-// 登录方式：web=网页端登录（原逻辑，只拿cookie）/ tv=TV端登录（拿stoken）
-const loginMode = ref('web');
 const qrCodeUrl = ref('');
-const qrCodeId = ref('');
-const qrCodeT = ref('');
-// TV 端登录专用
+// TV 端扫码登录（可直接获取 stoken）
 const tvQrToken = ref('');
 const tvPollInterval = ref(null);
+// 登录成功后延时关闭弹窗的定时器
+const loginSuccessTimer = ref(null);
 const loginError = ref('');
-const pollingTimer = ref(null);
 
 // 过滤参数（普通优酷 + 帧享影院复用同一套，帧享的『专区』作为 node 维度并入）
 const defaultType = '电视剧'
@@ -136,6 +133,15 @@ onActivated(async () => {
   queryCate(defaultType)
   await getUserInfo()
 })
+// 切换 tab 离开本页（keep-alive 失活）时结束扫码登录：关闭弹窗并停止轮询
+onDeactivated(() => {
+  loginDialogVisible.value = false;
+  stopPolling();
+})
+// 组件卸载时兜底清理轮询
+onUnmounted(() => {
+  stopPolling();
+})
 // 类型变化
 watch(type, () => {
   // 类型变化时，将 filterParams 恢复到初始化状态
@@ -191,29 +197,10 @@ const getUserInfo = async () => {
   }
 };
 
-// 生成登录二维码
+// 生成登录二维码（仅 TV 端，可直接获取 stoken）
 const generateQRCode = async () => {
-  if (loginMode.value === 'tv') {
-    return generateTVQRCode();
-  }
-  try {
-    const res = await api.get('/youku/qr-code');
-    if (res && res.url) {
-      qrCodeUrl.value = res.url;
-      qrCodeId.value = res.qr_code_id;
-      qrCodeT.value = res.t;
-      loginStep.value = 'qr-code';
-      startPolling();
-    }
-  } catch (error) {
-    console.error('生成二维码失败:', error);
-    loginError.value = '生成二维码失败，请重试';
-    loginStep.value = 'failed';
-  }
-};
-
-// TV端登录-生成二维码
-const generateTVQRCode = async () => {
+  // 重新生成前先停掉旧轮询，避免多个定时器并存
+  stopPolling();
   try {
     const res = await api.get('/youku/tv/qr-code');
     console.log('[TV登录] /youku/tv/qr-code 响应:', res);
@@ -237,8 +224,6 @@ const generateTVQRCode = async () => {
       } else {
         qrCodeUrl.value = '';
       }
-      qrCodeId.value = '';
-      qrCodeT.value = '';
       loginStep.value = 'qr-code';
       startTVPolling(res.pollMilliseconds || 3000);
     } else {
@@ -252,30 +237,49 @@ const generateTVQRCode = async () => {
   }
 };
 
+// 停止扫码轮询（并取消登录成功后待执行的延时关闭）
+const stopPolling = () => {
+  if (tvPollInterval.value) {
+    clearInterval(tvPollInterval.value);
+    tvPollInterval.value = null;
+  }
+  if (loginSuccessTimer.value) {
+    clearTimeout(loginSuccessTimer.value);
+    loginSuccessTimer.value = null;
+  }
+};
+
 // TV端登录-轮询扫码状态
 const startTVPolling = (intervalMs: number = 3000) => {
+  const token = tvQrToken.value;
   let count = 0;
   const maxCount = Math.floor(180000 / intervalMs); // 3分钟
   tvPollInterval.value = setInterval(async () => {
+    // 弹窗已关闭或 token 已更换则不再轮询（双保险）
+    if (!loginDialogVisible.value || !tvQrToken.value || tvQrToken.value !== token) {
+      stopPolling();
+      return;
+    }
     count++;
     if (count >= maxCount) {
-      clearInterval(tvPollInterval.value);
+      stopPolling();
       loginError.value = '二维码已过期，请重新生成';
       loginStep.value = 'failed';
       return;
     }
     try {
-      const res = await api.get(`/youku/tv/qr-code-status?token=${tvQrToken.value}`);
+      const res = await api.get(`/youku/tv/qr-code-status?token=${token}`);
       if (res && res.status) {
         if (res.status === 'success') {
-          clearInterval(tvPollInterval.value);
+          stopPolling();
           loginStep.value = 'success';
-          setTimeout(() => {
+          loginSuccessTimer.value = setTimeout(() => {
+            loginSuccessTimer.value = null;
             loginDialogVisible.value = false;
             getUserInfo();
           }, 1000);
         } else if (res.status === 'expired' || res.status === 'failed') {
-          clearInterval(tvPollInterval.value);
+          stopPolling();
           loginError.value = res.msg || '登录失败';
           loginStep.value = 'failed';
         } else if (res.status === 'scanned') {
@@ -289,68 +293,18 @@ const startTVPolling = (intervalMs: number = 3000) => {
   }, intervalMs);
 };
 
-// 开始轮询二维码状态
-const startPolling = () => {
-  let count = 0;
-  const maxCount = 120; // 2分钟
-  
-  pollingTimer.value = setInterval(async () => {
-    count++;
-    if (count >= maxCount) {
-      clearInterval(pollingTimer.value);
-      loginError.value = '二维码已过期，请重新生成';
-      loginStep.value = 'failed';
-      return;
-    }
-    
-    try {
-      const res = await api.get(`/youku/qr-code-status?ck=${qrCodeId.value}&t=${qrCodeT.value}`);
-      if (res && res.content && res.content.data) {
-        const status = res.content.data.qrCodeStatus;
-        if (status === 'CONFIRMED') {
-          clearInterval(pollingTimer.value);
-          loginStep.value = 'success';
-          setTimeout(() => {
-            loginDialogVisible.value = false;
-            getUserInfo();
-          }, 1000);
-        } else if (status === 'EXPIRED') {
-          clearInterval(pollingTimer.value);
-          loginError.value = '二维码已过期，请重新生成';
-          loginStep.value = 'failed';
-        } else if (status === 'CANCELED') {
-          clearInterval(pollingTimer.value);
-          loginError.value = '登录已取消';
-          loginStep.value = 'failed';
-        } else if (status === 'SCANNED') {
-          loginStep.value = 'scanning';
-        }
-      }
-    } catch (error) {
-      console.error('获取二维码状态失败:', error);
-    }
-  }, 3000);
-};
+// 弹窗关闭（点取消 / 点遮罩 / ESC）即取消轮询
+watch(loginDialogVisible, (visible) => {
+  if (!visible) {
+    stopPolling();
+  }
+});
 
 // 处理登录
 const handleLogin = () => {
   loginStep.value = 'qr-code';
-  // 清理可能的旧轮询
-  if (tvPollInterval.value) { clearInterval(tvPollInterval.value); tvPollInterval.value = null; }
-  loginDialogVisible.value = true;
-  generateQRCode();
-};
-
-// 切换登录方式时清理并重新生成
-const switchLoginMode = (mode: string) => {
-  loginMode.value = mode;
-  // 清理两种轮询
-  if (pollingTimer.value) { clearInterval(pollingTimer.value); pollingTimer.value = null; }
-  if (tvPollInterval.value) { clearInterval(tvPollInterval.value); tvPollInterval.value = null; }
-  qrCodeUrl.value = '';
-  tvQrToken.value = '';
   loginError.value = '';
-  loginStep.value = 'qr-code';
+  loginDialogVisible.value = true;
   generateQRCode();
 };
 
@@ -497,21 +451,13 @@ const handleLogout = async () => {
       <VCard>
         <VCardTitle>优酷扫码登录</VCardTitle>
         <VCardText class="text-center">
-          <!-- 登录方式切换 -->
-          <div class="d-flex justify-center mb-3 gap-2">
-            <VBtnGroup>
-              <VBtn size="small" :color="loginMode === 'web' ? 'primary' : 'default'" @click="switchLoginMode('web')">网页端</VBtn>
-              <VBtn size="small" :color="loginMode === 'tv' ? 'primary' : 'default'" @click="switchLoginMode('tv')">TV端(推荐)</VBtn>
-            </VBtnGroup>
-          </div>
           <VImg v-if="qrCodeUrl" :src="qrCodeUrl" class="mx-auto" style=" block-size: 200px;inline-size: 200px;" />
           <div v-else class="text-gray-500 py-4">生成二维码中...</div>
           <p class="mt-4" v-if="loginStep === 'qr-code'">等待扫码</p>
           <p class="mt-4" v-else-if="loginStep === 'scanning'">正在扫码...</p>
           <p class="mt-4 text-green-500" v-else-if="loginStep === 'success'">登录成功</p>
           <p class="mt-4 text-red-500" v-else-if="loginStep === 'failed'">登录失败</p>
-          <p class="text-sm text-gray-500 mt-2" v-if="loginStep === 'qr-code' && loginMode === 'web'">请使用优酷APP扫描二维码登录</p>
-          <p class="text-sm text-gray-500 mt-2" v-else-if="loginStep === 'qr-code' && loginMode === 'tv'">请使用优酷APP扫描二维码（TV端登录可直接获取stoken）</p>
+          <p class="text-sm text-gray-500 mt-2" v-if="loginStep === 'qr-code'">请使用优酷APP扫描二维码（TV端登录可直接获取stoken）</p>
           <p class="text-sm text-gray-500 mt-2" v-else-if="loginStep === 'scanning'">请在手机上确认登录</p>
           <p class="text-sm text-gray-500 mt-2" v-else-if="loginStep === 'success'">正在跳转...</p>
           <p class="text-sm text-gray-500 mt-2" v-else-if="loginStep === 'failed'">{{ loginError }}</p>
