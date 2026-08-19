@@ -1,24 +1,32 @@
 <script lang="ts" setup>
 import api from '@/api'
-import type { MediaInfo } from '@/api/types'
+import type { MediaDataSource, MediaInfo } from '@/api/types'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 // 定义输入变量
-const props = defineProps({
-  type: String, // 来源 themoviedb | douban
-})
+const props = defineProps<{
+  type?: MediaDataSource
+}>()
 
-interface TmdbItem {
+interface MediaSelectorItem {
+  // 数据源原生ID
+  id: string
+  // 媒体标题
   title: string
+  // 媒体简介，包含类型标签
   overview: string
-  tmdbid: number
-  doubanid: string
+  // 海报地址
   poster: string
+  // 媒体类型
+  type?: string
 }
 
 // update:modelValue 事件
-const emit = defineEmits(['update:modelValue', 'close'])
+const emit = defineEmits(['update:modelValue', 'select', 'close'])
 
-const items = ref<TmdbItem[]>([])
+const items = ref<MediaSelectorItem[]>([])
 
 // 搜索词
 const keyword = ref('')
@@ -29,9 +37,10 @@ const loading = ref(false)
 // ref
 const inputKeyword = ref<HTMLElement | null>(null)
 
-// 选中条目
-function selectMedia(item: TmdbItem) {
-  emit('update:modelValue', item.tmdbid || item.doubanid)
+// 选中条目并通知父组件同步额外媒体信息。
+function selectMedia(item: MediaSelectorItem) {
+  emit('update:modelValue', item.id)
+  emit('select', item)
   emit('close')
 }
 
@@ -43,16 +52,18 @@ function getW500Image(url = '') {
 
 // 搜索词条
 async function searchMedias() {
-  if (!keyword) return
+  const searchKeyword = keyword.value.trim()
+  if (!searchKeyword) return
 
   // 调用API搜索词条
   try {
     loading.value = true
     const result: MediaInfo[] = await api.get('media/search', {
       params: {
-        title: keyword.value,
+        title: searchKeyword,
         page: 1,
         count: 20,
+        source: props.type,
       },
     })
 
@@ -61,18 +72,25 @@ async function searchMedias() {
 
     // 赋值
     for (const item of result) {
-      if (props.type && props.type !== item.source) continue
+      const mediaId =
+        item.media_id ||
+        item.tmdb_id?.toString() ||
+        item.douban_id ||
+        item.bangumi_id?.toString() ||
+        item.anilist_id?.toString()
+      if (!mediaId) continue
       items.value.push({
-        tmdbid: item.tmdb_id || 0,
-        doubanid: item.douban_id || '',
+        id: mediaId,
         poster: getW500Image(item.poster_path),
-        title: `${item.title}（${item.year}）`,
+        type: item.type,
+        title: item.year ? `${item.title}（${item.year}）` : item.title || '',
         overview: `<span class="text-primary">${item.type}</span> ${item.overview}`,
       })
     }
-    loading.value = false
   } catch (e) {
     console.error(e)
+  } finally {
+    loading.value = false
   }
 }
 
@@ -86,33 +104,38 @@ onMounted(() => {
 </script>
 
 <template>
-  <VCard class="mx-auto" width="100%">
-    <VToolbar flat class="p-0">
+  <VCard class="media-id-selector mx-auto" width="100%">
+    <VCardTitle class="d-flex align-center justify-space-between">
+      <span>{{ t('dialog.reorganize.mediaSearchInput') }}</span>
+      <VDialogCloseBtn
+        :aria-label="t('common.close')"
+        inner-class="media-id-selector__close"
+        @click="
+          () => {
+            emit('close')
+          }
+        "
+      />
+    </VCardTitle>
+    <VCardText class="media-id-selector__search">
       <VTextField
         ref="inputKeyword"
         v-model="keyword"
-        label="输入名称搜索"
+        :mobile-layout="false"
         single-line
-        placeholder="电影或电视剧名称"
-        variant="solo"
-        prepend-inner-icon="mdi-magnify"
+        :placeholder="t('dialog.reorganize.mediaSearchPlaceholder')"
+        variant="outlined"
+        append-inner-icon="mdi-magnify"
         flat
-        class="mx-1"
+        hide-details
         :loading="loading"
         @click:append-inner="searchMedias"
         @keydown.enter="searchMedias"
       />
-    </VToolbar>
-    <VDialogCloseBtn
-      @click="
-        () => {
-          emit('close')
-        }
-      "
-    />
+    </VCardText>
     <VDivider />
-    <VList v-if="items.length > 0" lines="three">
-      <template v-for="(item, i) in items" :key="i">
+    <VList v-if="items.length > 0" class="media-id-selector__results" lines="three">
+      <template v-for="item in items" :key="`${item.type || 'media'}-${item.id}`">
         <VListItem @click="selectMedia(item)">
           <template #prepend>
             <VImg
@@ -139,3 +162,29 @@ onMounted(() => {
     </VList>
   </VCard>
 </template>
+
+<style lang="scss" scoped>
+.media-id-selector {
+  overflow: hidden !important;
+}
+
+.media-id-selector__search {
+  flex: 0 0 auto;
+  overflow: visible !important;
+  padding-block: 0.25rem 1rem !important;
+}
+
+.media-id-selector__close {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.media-id-selector__results {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-anchor: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+</style>

@@ -3,7 +3,14 @@ import api from '@/api'
 import type { ScheduleInfo, TransferQueue } from '@/api/types'
 import { useI18n } from 'vue-i18n'
 import { useBackground } from '@/composables/useBackground'
-import { isScheduleRunning, useScheduleProgress } from '@/composables/useScheduleProgress'
+import {
+  getScheduleName,
+  getScheduleNextRunText,
+  getScheduleProvider,
+  getScheduleStatusText,
+  isScheduleRunning,
+  useScheduleProgress,
+} from '@/composables/useScheduleProgress'
 import { getSchedulerVisual } from '@/utils/schedulerVisual'
 
 // 国际化
@@ -37,6 +44,9 @@ interface BackgroundTaskItem {
   title: string
 }
 
+const BACKGROUND_TASK_RUNNING_ICON = 'mdi-loading'
+const BACKGROUND_TASK_WAITING_ICON = 'mdi-clock-outline'
+
 // 将正在运行的服务和整理队列排在前面，再补充最近即将执行的定时任务。
 const backgroundTasks = computed<BackgroundTaskItem[]>(() => {
   const runningSchedulers = schedulerList.value.filter(isScheduleRunning)
@@ -47,9 +57,10 @@ const backgroundTasks = computed<BackgroundTaskItem[]>(() => {
 
     return {
       id: `schedule-${item.id}`,
-      title: item.name || t('dashboard.scheduler'),
-      subtitle: (isRunning && getScheduleProgressText(item)) || item.provider || item.next_run || '',
-      status: isRunning ? t('dashboard.taskRunning') : item.status || t('dashboard.taskWaiting'),
+      title: getScheduleName(item) || t('dashboard.scheduler'),
+      subtitle:
+        (isRunning && getScheduleProgressText(item)) || getScheduleProvider(item) || getScheduleNextRunText(item),
+      status: isRunning ? t('dashboard.taskRunning') : getScheduleStatusText(item) || t('dashboard.taskWaiting'),
       icon: visual.icon,
       color: visual.color,
       progress: isRunning ? getScheduleProgressValue(item) : undefined,
@@ -81,10 +92,7 @@ async function loadSchedulerList() {
     return
   }
   try {
-    const [schedulers, queue] = await Promise.all([
-      api.get('dashboard/schedule'),
-      api.get('transfer/queue'),
-    ])
+    const [schedulers, queue] = await Promise.all([api.get('dashboard/schedule'), api.get('transfer/queue')])
     schedulerList.value = schedulers as unknown as ScheduleInfo[]
     transferQueue.value = queue as unknown as TransferQueue[]
   } catch (e) {
@@ -97,7 +105,7 @@ useDataRefresh(
   'dashboard-scheduler',
   loadSchedulerList,
   3000, // 3秒间隔，及时发现任务启停；运行中进度由独立轮询每秒刷新
-  true // 立即执行
+  true, // 立即执行
 )
 </script>
 
@@ -130,9 +138,12 @@ useDataRefresh(
               <div class="background-task-state">
                 <span class="background-task-status">{{ item.status }}</span>
                 <VIcon
-                  :icon="item.progress === undefined ? 'mdi-clock-outline' : 'mdi-progress-clock'"
+                  :icon="item.progress === undefined ? BACKGROUND_TASK_WAITING_ICON : BACKGROUND_TASK_RUNNING_ICON"
                   :color="item.progress === undefined ? undefined : 'primary'"
-                  :class="{ 'text-medium-emphasis': item.progress === undefined }"
+                  :class="{
+                    'background-task-running-icon': item.progress !== undefined,
+                    'text-medium-emphasis': item.progress === undefined,
+                  }"
                   size="15"
                 />
               </div>
@@ -168,11 +179,11 @@ useDataRefresh(
 .card-list {
   --v-card-list-gap: 0.45rem;
 
+  overflow: hidden auto;
   flex: 1 1 auto;
   min-block-size: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: none;
 }
 
 .background-task-item {
@@ -220,16 +231,31 @@ useDataRefresh(
   margin-block-start: 0.4rem;
 }
 
+.background-task-running-icon {
+  animation: background-task-rotate 1s linear infinite;
+}
+
 .dashboard-work-content {
   display: flex;
+  overflow: hidden;
   flex: 1 1 auto;
   flex-direction: column;
   min-block-size: 0;
-  overflow: hidden;
 }
 
-.card-list::-webkit-scrollbar {
-  display: none;
+@supports not (scrollbar-width: none) {
+  .card-list::-webkit-scrollbar {
+    display: none;
+  }
 }
 
+@keyframes background-task-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
 </style>

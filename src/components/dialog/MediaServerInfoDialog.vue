@@ -26,6 +26,10 @@ const props = defineProps({
     type: Array as PropType<MediaServerConf[]>,
     required: true,
   },
+  defaultSyncInterval: {
+    type: Number,
+    default: null,
+  },
 })
 
 // 定义触发的自定义事件
@@ -203,6 +207,20 @@ onMounted(() => {
                   prepend-inner-icon="mdi-key"
                 />
               </VCol>
+              <VCol cols="12" md="6">
+                <VTextField
+                  v-model.number="mediaServerInfo.sync_interval"
+                  type="number"
+                  min="0"
+                  step="1"
+                  clearable
+                  :label="t('mediaserver.syncInterval')"
+                  :hint="t('mediaserver.syncIntervalHint', { interval: props.defaultSyncInterval ?? 6 })"
+                  persistent-hint
+                  suffix="h"
+                  prepend-inner-icon="mdi-sync"
+                />
+              </VCol>
               <VCol cols="12">
                 <VAutocomplete
                   v-model="mediaServerInfo.sync_libraries"
@@ -243,7 +261,7 @@ onMounted(() => {
                   prepend-inner-icon="mdi-server"
                 />
               </VCol>
-              <VCol cols="12">
+              <VCol cols="6">
                 <VTextField
                   v-model="mediaServerInfo.config.play_host"
                   :label="t('mediaserver.playHost')"
@@ -269,9 +287,24 @@ onMounted(() => {
                   type="password"
                   v-model="mediaServerInfo.config.password"
                   :label="t('mediaserver.password')"
+                  :hint="t('mediaserver.passwordHint')"
                   persistent-hint
                   active
                   prepend-inner-icon="mdi-lock"
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VTextField
+                  v-model.number="mediaServerInfo.sync_interval"
+                  type="number"
+                  min="0"
+                  step="1"
+                  clearable
+                  :label="t('mediaserver.syncInterval')"
+                  :hint="t('mediaserver.syncIntervalHint', { interval: props.defaultSyncInterval ?? 6 })"
+                  persistent-hint
+                  suffix="h"
+                  prepend-inner-icon="mdi-sync"
                 />
               </VCol>
               <VCol cols="12">
@@ -335,6 +368,20 @@ onMounted(() => {
                   prepend-inner-icon="mdi-key"
                 />
               </VCol>
+              <VCol cols="12" md="6">
+                <VTextField
+                  v-model.number="mediaServerInfo.sync_interval"
+                  type="number"
+                  min="0"
+                  step="1"
+                  clearable
+                  :label="t('mediaserver.syncInterval')"
+                  :hint="t('mediaserver.syncIntervalHint', { interval: props.defaultSyncInterval ?? 6 })"
+                  persistent-hint
+                  suffix="h"
+                  prepend-inner-icon="mdi-sync"
+                />
+              </VCol>
               <VCol cols="12">
                 <VAutocomplete
                   v-model="mediaServerInfo.sync_libraries"
@@ -375,7 +422,7 @@ onMounted(() => {
                   prepend-inner-icon="mdi-server"
                 />
               </VCol>
-              <VCol cols="12">
+              <VCol cols="6">
                 <VTextField
                   v-model="mediaServerInfo.config.play_host"
                   :label="t('mediaserver.playHost')"
@@ -390,6 +437,8 @@ onMounted(() => {
                 <VTextField
                   v-model="mediaServerInfo.config.username"
                   :label="t('mediaserver.username')"
+                  :hint="t('mediaserver.usernameHint')"
+                  persistent-hint
                   active
                   prepend-inner-icon="mdi-account"
                 />
@@ -399,8 +448,35 @@ onMounted(() => {
                   type="password"
                   v-model="mediaServerInfo.config.password"
                   :label="t('mediaserver.password')"
+                  :hint="t('mediaserver.passwordHint')"
+                  persistent-hint
                   active
                   prepend-inner-icon="mdi-lock"
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VTextField
+                  type="password"
+                  v-model="mediaServerInfo.config.access_code"
+                  :label="t('mediaserver.accessCode')"
+                  :hint="t('mediaserver.accessCodeHint')"
+                  persistent-hint
+                  active
+                  prepend-inner-icon="mdi-shield-key"
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VTextField
+                  v-model.number="mediaServerInfo.sync_interval"
+                  type="number"
+                  min="0"
+                  step="1"
+                  clearable
+                  :label="t('mediaserver.syncInterval')"
+                  :hint="t('mediaserver.syncIntervalHint', { interval: props.defaultSyncInterval ?? 6 })"
+                  persistent-hint
+                  suffix="h"
+                  prepend-inner-icon="mdi-sync"
                 />
               </VCol>
               <VCol cols="12">
@@ -443,7 +519,7 @@ onMounted(() => {
                   prepend-inner-icon="mdi-server"
                 />
               </VCol>
-              <VCol cols="12">
+              <VCol cols="6">
                 <VTextField
                   v-model="mediaServerInfo.config.play_host"
                   :label="t('mediaserver.playHost')"
@@ -458,6 +534,8 @@ onMounted(() => {
                 <VTextField
                   v-model="mediaServerInfo.config.username"
                   :label="t('mediaserver.username')"
+                  :hint="t('mediaserver.usernameHint')"
+                  persistent-hint
                   active
                   prepend-inner-icon="mdi-account"
                 />
@@ -467,24 +545,24 @@ onMounted(() => {
                   type="password"
                   v-model="mediaServerInfo.config.password"
                   :label="t('mediaserver.password')"
+                  :hint="t('mediaserver.passwordHint')"
+                  persistent-hint
                   active
                   prepend-inner-icon="mdi-lock"
                 />
               </VCol>
-              <VCol cols="12">
-                <VAutocomplete
-                  v-model="mediaServerInfo.sync_libraries"
-                  :label="t('mediaserver.syncLibraries')"
-                  :items="librariesOptions"
-                  chips
-                  multiple
+              <VCol cols="12" md="6">
+                <VTextField
+                  v-model.number="mediaServerInfo.sync_interval"
+                  type="number"
+                  min="0"
+                  step="1"
                   clearable
-                  :hint="t('mediaserver.syncLibrariesHint')"
+                  :label="t('mediaserver.syncInterval')"
+                  :hint="t('mediaserver.syncIntervalHint', { interval: props.defaultSyncInterval ?? 6 })"
                   persistent-hint
-                  active
-                  append-inner-icon="mdi-refresh"
-                  prepend-inner-icon="mdi-library"
-                  @click:append-inner="loadLibrary(mediaServerInfo.name)"
+                  suffix="h"
+                  prepend-inner-icon="mdi-sync"
                 />
               </VCol>
               <VCol cols="12" md="6">
@@ -506,6 +584,22 @@ onMounted(() => {
                   persistent-hint
                   color="primary"
                   inset
+                />
+              </VCol>
+              <VCol cols="12">
+                <VAutocomplete
+                  v-model="mediaServerInfo.sync_libraries"
+                  :label="t('mediaserver.syncLibraries')"
+                  :items="librariesOptions"
+                  chips
+                  multiple
+                  clearable
+                  :hint="t('mediaserver.syncLibrariesHint')"
+                  persistent-hint
+                  active
+                  append-inner-icon="mdi-refresh"
+                  prepend-inner-icon="mdi-library"
+                  @click:append-inner="loadLibrary(mediaServerInfo.name)"
                 />
               </VCol>
             </VRow>
@@ -551,6 +645,20 @@ onMounted(() => {
                   persistent-hint
                   active
                   prepend-inner-icon="mdi-key"
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VTextField
+                  v-model.number="mediaServerInfo.sync_interval"
+                  type="number"
+                  min="0"
+                  step="1"
+                  clearable
+                  :label="t('mediaserver.syncInterval')"
+                  :hint="t('mediaserver.syncIntervalHint', { interval: props.defaultSyncInterval ?? 6 })"
+                  persistent-hint
+                  suffix="h"
+                  prepend-inner-icon="mdi-sync"
                 />
               </VCol>
               <VCol cols="12">

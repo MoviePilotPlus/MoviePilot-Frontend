@@ -62,6 +62,13 @@ export interface LlmModel {
   source?: string
   release_date?: string | null
   status?: string | null
+  server_tools?: LlmServerToolCapability[]
+}
+
+export interface LlmServerToolCapability {
+  id: string
+  required_api_protocol?: string
+  client_adapter?: string
 }
 
 export interface LlmProviderAuthSession {
@@ -85,6 +92,7 @@ interface UseLlmProviderDirectoryOptions {
   baseUrlPreset?: Ref<string>
   useProxy?: Ref<boolean>
   userAgent?: Ref<string>
+  apiProtocol?: Ref<string>
   model: Ref<string>
   maxContextTokens?: Ref<number>
   authConnected?: Ref<boolean>
@@ -112,6 +120,10 @@ export function useLlmProviderDirectory(options: UseLlmProviderDirectoryOptions)
   const selectedModel = computed(
     () => models.value.find(item => item.id === normalizeValue(options.model.value)) || null,
   )
+  const builtinWebSearchCapability = computed(() =>
+    selectedModel.value?.server_tools?.find(tool => tool.id === 'web_search'),
+  )
+  const supportsBuiltinWebSearch = computed(() => Boolean(builtinWebSearchCapability.value))
   const providerItems = computed(() => providers.value.map(item => ({ title: item.name, value: item.id })))
   const baseUrlPresetItems = computed<LlmProviderUrlPresetItem[]>(() =>
     (selectedProvider.value?.base_url_presets || []).map(item => ({
@@ -122,10 +134,16 @@ export function useLlmProviderDirectory(options: UseLlmProviderDirectoryOptions)
     })),
   )
   const providerConnected = computed(() => Boolean(selectedProvider.value?.auth_status?.connected))
-  const showBaseUrlField = computed(
-    () => Boolean(selectedProvider.value && (selectedProvider.value.oauth_methods || []).length === 0),
+  const showBaseUrlField = computed(() =>
+    Boolean(selectedProvider.value && (selectedProvider.value.oauth_methods || []).length === 0),
   )
   const showApiKeyField = computed(() => selectedProvider.value?.supports_api_key !== false)
+  // 通用 OpenAI 兼容入口或要求 Responses 的服务端工具需要显示协议选项。
+  const showApiProtocolField = computed(
+    () =>
+      selectedProvider.value?.runtime === 'openai_compatible' ||
+      builtinWebSearchCapability.value?.required_api_protocol === 'responses',
+  )
   const hasUsableCredential = computed(() => {
     if (providerConnected.value) return true
     return Boolean(normalizeValue(options.apiKey.value))
@@ -194,6 +212,9 @@ export function useLlmProviderDirectory(options: UseLlmProviderDirectoryOptions)
     options.apiKey.value = ''
     if (options.maxContextTokens) {
       options.maxContextTokens.value = 64
+    }
+    if (options.apiProtocol) {
+      options.apiProtocol.value = 'auto'
     }
     models.value = []
     options.model.value = ''
@@ -269,9 +290,7 @@ export function useLlmProviderDirectory(options: UseLlmProviderDirectoryOptions)
       updateProviderAuthStatus(normalizeValue(options.provider.value), payload.auth_status)
 
       const currentModelId = normalizeValue(options.model.value)
-      const matchedModel = currentModelId
-        ? models.value.find(item => item.id === currentModelId)
-        : null
+      const matchedModel = currentModelId ? models.value.find(item => item.id === currentModelId) : null
 
       if (matchedModel) {
         applyModelMetadata(matchedModel.id)
@@ -301,9 +320,7 @@ export function useLlmProviderDirectory(options: UseLlmProviderDirectoryOptions)
     authPolling.value = true
     clearPollTimer()
     try {
-      const result: { [key: string]: any } = await api.post(
-        `llm/provider-auth/${authSession.value.session_id}/poll`,
-      )
+      const result: { [key: string]: any } = await api.post(`llm/provider-auth/${authSession.value.session_id}/poll`)
       if (!result.success) {
         throw new Error(result.message || 'Poll LLM auth failed')
       }
@@ -388,11 +405,13 @@ export function useLlmProviderDirectory(options: UseLlmProviderDirectoryOptions)
     models,
     selectedProvider,
     selectedModel,
+    supportsBuiltinWebSearch,
     loadingProviders,
     loadingModels,
     providerConnected,
     showBaseUrlField,
     showApiKeyField,
+    showApiProtocolField,
     hasUsableCredential,
     canRefreshModels,
     setBaseUrlPreset,

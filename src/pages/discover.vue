@@ -3,6 +3,7 @@ import { getDiscoverTabs } from '@/router/i18n-menu'
 import TheMovieDbView from '@/views/discover/TheMovieDbView.vue'
 import DoubanView from '@/views/discover/DoubanView.vue'
 import BangumiView from '@/views/discover/BangumiView.vue'
+import AniListView from '@/views/discover/AniListView.vue'
 import ExtraSourceView from '@/views/discover/ExtraSourceView.vue'
 import { DiscoverSource } from '@/api/types'
 import api from '@/api'
@@ -41,61 +42,82 @@ const discoverTabItems = computed(() => {
 const extraDiscoverSources = ref<DiscoverSource[]>([])
 
 let orderDialogController: ReturnType<typeof openSharedDialog> | null = null
+let extraSourcesRequest: Promise<void> | null = null
+let initialLoadPromise: Promise<void> | null = null
 
 // 打开发现页标签排序共享弹窗。
 function openOrderConfigDialog() {
   orderDialogController?.close()
-  orderDialogController = openSharedDialog(
+  const releaseController = () => {
+    if (orderDialogController === controller) orderDialogController = null
+  }
+
+  const controller = openSharedDialog(
     DiscoverTabOrderDialog,
     {
       tabs: discoverTabs.value,
     },
     {
-      close: () => {
-        orderDialogController = null
-      },
-      save: saveTabOrder,
+      close: releaseController,
+      save: tabs => saveTabOrder(tabs, controller),
       'update:modelValue': (value: boolean) => {
-        if (!value) orderDialogController = null
+        if (!value) releaseController()
       },
     },
     { closeOn: ['close', 'update:modelValue'] },
   )
+  orderDialogController = controller
 }
 
 // 关闭发现页标签排序共享弹窗。
-function closeOrderConfigDialog() {
-  orderDialogController?.close()
+function closeOrderConfigDialog(controller = orderDialogController) {
+  if (!controller || orderDialogController !== controller) return
+  controller.close()
   orderDialogController = null
 }
 
-// 初始化发现标签
-function initDiscoverTabs() {
+// 构造内置发现标签，扩展来源刷新时以此为稳定基线。
+function createBuiltInDiscoverTabs() {
   const tabs = getDiscoverTabs(t)
-  for (const tab of tabs) {
-    discoverTabs.value.push({
+  return tabs.map(tab => {
+    return {
       name: tab.title,
       mediaid_prefix: tab.tab,
       api_path: '',
       filter_params: {},
       filter_ui: [],
-    })
-  }
+    }
+  })
 }
 
-// 加载额外的发现数据源
-async function loadExtraDiscoverSources() {
+// 用最近一次成功快照替换扩展来源，并保持 mediaid_prefix 唯一。
+function replaceExtraDiscoverSources(sources: DiscoverSource[]) {
+  const builtInTabs = createBuiltInDiscoverTabs()
+  const seenPrefixes = new Set(builtInTabs.map(tab => tab.mediaid_prefix))
+  const nextExtraSources = sources.filter(source => {
+    if (seenPrefixes.has(source.mediaid_prefix)) return false
+    seenPrefixes.add(source.mediaid_prefix)
+    return true
+  })
+
+  extraDiscoverSources.value = nextExtraSources
+  discoverTabs.value = [...builtInTabs, ...nextExtraSources]
+}
+
+// 加载额外的发现数据源；并发生命周期钩子共享同一次请求。
+function loadExtraDiscoverSources() {
+  if (extraSourcesRequest) return extraSourcesRequest
+
+  extraSourcesRequest = refreshExtraDiscoverSources().finally(() => {
+    extraSourcesRequest = null
+  })
+  return extraSourcesRequest
+}
+
+async function refreshExtraDiscoverSources() {
   try {
-    extraDiscoverSources.value = await api.get('discover/source')
-    if (extraDiscoverSources.value.length === 0) {
-      return
-    }
-    for (const source of extraDiscoverSources.value) {
-      if (discoverTabs.value.find(tab => tab.mediaid_prefix === source.mediaid_prefix)) {
-        continue
-      }
-      discoverTabs.value.push(source)
-    }
+    const sources: DiscoverSource[] = await api.get('discover/source')
+    replaceExtraDiscoverSources(sources)
   } catch (error) {
     console.log(error)
   }
@@ -121,18 +143,23 @@ async function loadOrderConfig() {
   // 顺序配置
   const local_order = localStorage.getItem(localOrderKey)
   if (local_order) {
-    orderConfig.value = JSON.parse(local_order)
-  } else {
-    const response = await api.get(`/user/config/${localOrderKey}`)
-    if (response && response.data && response.data.value) {
-      orderConfig.value = response.data.value
-      localStorage.setItem(localOrderKey, JSON.stringify(orderConfig.value))
+    try {
+      orderConfig.value = JSON.parse(local_order)
+      return
+    } catch {
+      localStorage.removeItem(localOrderKey)
     }
+  }
+
+  const response = await api.get(`/user/config/${localOrderKey}`)
+  if (response && response.data && response.data.value) {
+    orderConfig.value = response.data.value
+    localStorage.setItem(localOrderKey, JSON.stringify(orderConfig.value))
   }
 }
 
 // 保存顺序设置
-async function saveTabOrder(tabs = discoverTabs.value) {
+async function saveTabOrder(tabs = discoverTabs.value, controller = orderDialogController) {
   discoverTabs.value = [...tabs]
   // 顺序配置
   const orderObj = discoverTabs.value.map(item => ({ name: item.name }))
@@ -146,7 +173,7 @@ async function saveTabOrder(tabs = discoverTabs.value) {
   } catch (error) {
     console.error(error)
   }
-  closeOrderConfigDialog()
+  closeOrderConfigDialog(controller)
 }
 
 // 使用动态标签页
@@ -168,18 +195,33 @@ registerHeaderTab({
   ],
 })
 
-onBeforeMount(async () => {
-  initDiscoverTabs()
-  await loadOrderConfig()
+async function initializeDiscover() {
+  discoverTabs.value = createBuiltInDiscoverTabs()
+  try {
+    await loadOrderConfig()
+  } catch (error) {
+    console.log(error)
+  }
   await loadExtraDiscoverSources()
   sortSubscribeOrder()
   // 选中第一个标签页
   if (discoverTabs.value.length > 0) {
     activeTab.value = discoverTabs.value[0].mediaid_prefix
   }
+}
+
+onBeforeMount(() => {
+  initialLoadPromise = initializeDiscover().finally(() => {
+    initialLoadPromise = null
+  })
 })
 
 onActivated(async () => {
+  if (initialLoadPromise) {
+    await initialLoadPromise
+    return
+  }
+
   await loadExtraDiscoverSources()
   sortSubscribeOrder()
   // 如果当前没有选中任何标签页，或者当前选中的标签页不存在，则选中第一个标签页
@@ -195,32 +237,29 @@ onActivated(async () => {
   <div>
     <VWindow v-model="activeTab" class="disable-tab-transition" :touch="false">
       <VWindowItem value="themoviedb">
-        <transition name="fade-slide" appear>
-          <div>
-            <TheMovieDbView />
-          </div>
-        </transition>
+        <div>
+          <TheMovieDbView />
+        </div>
       </VWindowItem>
       <VWindowItem value="douban">
-        <transition name="fade-slide" appear>
-          <div>
-            <DoubanView />
-          </div>
-        </transition>
+        <div>
+          <DoubanView />
+        </div>
       </VWindowItem>
       <VWindowItem value="bangumi">
-        <transition name="fade-slide" appear>
-          <div>
-            <BangumiView />
-          </div>
-        </transition>
+        <div>
+          <BangumiView />
+        </div>
+      </VWindowItem>
+      <VWindowItem value="anilist">
+        <div>
+          <AniListView />
+        </div>
       </VWindowItem>
       <VWindowItem v-for="item in extraDiscoverSources" :key="item.mediaid_prefix" :value="item.mediaid_prefix">
-        <transition name="fade-slide" appear>
-          <div>
-            <ExtraSourceView :source="item" />
-          </div>
-        </transition>
+        <div>
+          <ExtraSourceView :source="item" />
+        </div>
       </VWindowItem>
     </VWindow>
     <!-- 快速滚动到顶部按钮 -->

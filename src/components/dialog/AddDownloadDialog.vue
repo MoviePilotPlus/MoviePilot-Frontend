@@ -2,7 +2,14 @@
 import { useToast } from 'vue-toastification'
 import api from '@/api'
 import { doneNProgress, startNProgress } from '@/api/nprogress'
-import type { DownloaderConf, MediaInfo, TorrentInfo, TransferDirectoryConf } from '@/api/types'
+import type {
+  ApiResponse,
+  DownloaderConf,
+  MediaDataSource,
+  MediaInfo,
+  TorrentInfo,
+  TransferDirectoryConf,
+} from '@/api/types'
 import { formatFileSize } from '@/@core/utils/formatters'
 import { VCardTitle, VChip } from 'vuetify/lib/components/index.mjs'
 import { useI18n } from 'vue-i18n'
@@ -18,7 +25,11 @@ const globalSettingsStore = useGlobalSettingsStore()
 const globalSettings = globalSettingsStore.globalSettings
 
 // 当前识别类型
-const mediaSource = ref(globalSettings.RECOGNIZE_SOURCE || 'themoviedb')
+const mediaSource = ref<MediaDataSource>(
+  ['themoviedb', 'douban', 'bangumi', 'anilist'].includes(globalSettings.RECOGNIZE_SOURCE)
+    ? globalSettings.RECOGNIZE_SOURCE
+    : 'themoviedb',
+)
 
 // 输入参数
 const props = defineProps({
@@ -40,7 +51,7 @@ const selectedDownloader = ref<string | null>(null)
 const selectedDirectory = ref<string | null>(null)
 
 // 下载器
-const downloaders = ref<DownloaderConf[]>([])
+const downloaders = ref<Array<Pick<DownloaderConf, 'name' | 'type'>>>([])
 
 // 所有目录设置
 const directories = ref<TransferDirectoryConf[]>([])
@@ -51,11 +62,19 @@ const loading = ref(false)
 // 是否显示高级选项
 const showAdvancedOptions = ref(false)
 
-// TMDB ID
-const tmdbid = ref<number | undefined>(undefined)
+// 当前数据源的原生媒体ID
+const mediaId = ref<string | undefined>(undefined)
 
-// 豆瓣ID
-const doubanId = ref<string | undefined>(undefined)
+// 当前数据源对应的原生ID标签。
+const mediaIdLabel = computed(() => {
+  const labels: Record<MediaDataSource, string> = {
+    themoviedb: t('dialog.reorganize.tmdbId'),
+    douban: t('dialog.reorganize.doubanId'),
+    bangumi: t('dialog.reorganize.bangumiId'),
+    anilist: t('dialog.reorganize.anilistId'),
+  }
+  return labels[mediaSource.value]
+})
 
 // TMDB选择对话框
 const mediaSelectorDialog = ref(false)
@@ -68,21 +87,34 @@ const buttonText = computed(() =>
   loading.value ? t('dialog.addDownload.downloading') : t('dialog.addDownload.startDownload'),
 )
 
+// 下载确认副标题，未传媒体标题时回退到种子标题。
+const dialogSubtitle = computed(() => {
+  const siteName = props.torrent?.site_name?.trim()
+  const displayTitle = props.title?.trim() || props.torrent?.title?.trim()
+
+  return [siteName, displayTitle].filter(Boolean).join(' - ')
+})
+
 // 加载目录设置
 async function loadDirectories() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/public/Directories')
+    const result = await api.get<
+      ApiResponse<{ value?: TransferDirectoryConf[] }>,
+      ApiResponse<{ value?: TransferDirectoryConf[] }>
+    >('system/setting/public/Directories')
     directories.value = result.data?.value ?? []
   } catch (error) {
     console.log(error)
   }
 }
 
+// 将下载目录配置转换为下载器可识别的存储路径。
 function convertToUri(item: TransferDirectoryConf) {
   if (!item.download_path) {
     return undefined
   }
-  if (item.storage === 'local') {
+  // storage 缺省是受支持的本地目录配置，不能生成 undefined/null 前缀。
+  if (item.storage === undefined || item.storage === null || item.storage === 'local') {
     return item.download_path
   }
   return item.storage + ':' + item.download_path
@@ -99,7 +131,10 @@ const targetDirectories = computed(() => {
 // 调用API查询下载器设置
 async function loadDownloaderSetting() {
   try {
-    downloaders.value = await api.get('download/clients')
+    downloaders.value = await api.get<
+      Array<Pick<DownloaderConf, 'name' | 'type'>>,
+      Array<Pick<DownloaderConf, 'name' | 'type'>>
+    >('download/clients')
   } catch (error) {
     console.log(error)
   }
@@ -118,9 +153,14 @@ async function addDownload() {
   startNProgress()
   loading.value = true
   try {
-    let result: { [key: string]: any }
-
-    const payload: any = {
+    const payload: {
+      downloader: string | null
+      media_id?: string
+      media_in?: MediaInfo
+      media_source?: MediaDataSource
+      save_path: string | null
+      torrent_in: TorrentInfo | undefined
+    } = {
       torrent_in: props.torrent,
       downloader: selectedDownloader.value,
       save_path: selectedDirectory.value,
@@ -131,16 +171,14 @@ async function addDownload() {
     }
 
     // 添加媒体ID辅助识别
-    if (tmdbid.value) {
-      payload.tmdbid = tmdbid.value
-    }
-    if (doubanId.value) {
-      payload.doubanid = doubanId.value
+    if (mediaId.value) {
+      payload.media_source = mediaSource.value
+      payload.media_id = mediaId.value
     }
 
     const endpoint = props.media ? 'download/' : 'download/add'
 
-    result = await api.post(endpoint, payload)
+    const result = await api.post<ApiResponse<unknown>, ApiResponse<unknown>>(endpoint, payload)
 
     if (result && result.success) {
       // 添加下载成功
@@ -181,7 +219,7 @@ onMounted(() => {
           <VIcon icon="mdi-monitor-arrow-down-variant" class="me-2" />
         </template>
         <VCardTitle>{{ t('dialog.addDownload.confirmDownload') }}</VCardTitle>
-        <VCardSubtitle>{{ torrent?.site_name }} - {{ title }}</VCardSubtitle>
+        <VCardSubtitle>{{ dialogSubtitle }}</VCardSubtitle>
       </VCardItem>
       <VDialogCloseBtn @click="emit('close')" />
       <VDivider />
@@ -260,23 +298,8 @@ onMounted(() => {
         <VRow v-show="showAdvancedOptions" class="px-5">
           <VCol cols="12">
             <VTextField
-              v-if="mediaSource === 'themoviedb'"
-              v-model="tmdbid"
-              :label="t('dialog.reorganize.tmdbId')"
-              :placeholder="t('dialog.reorganize.mediaIdPlaceholder')"
-              :rules="[numberValidator]"
-              append-inner-icon="mdi-magnify"
-              :hint="t('dialog.reorganize.mediaIdHint')"
-              persistent-hint
-              prepend-inner-icon="mdi-identifier"
-              variant="underlined"
-              density="comfortable"
-              @click:append-inner="mediaSelectorDialog = true"
-            />
-            <VTextField
-              v-else
-              v-model="doubanId"
-              :label="t('dialog.reorganize.doubanId')"
+              v-model="mediaId"
+              :label="mediaIdLabel"
               :placeholder="t('dialog.reorganize.mediaIdPlaceholder')"
               :rules="[numberValidator]"
               append-inner-icon="mdi-magnify"
@@ -298,13 +321,7 @@ onMounted(() => {
     </VCard>
     <!-- 媒体ID选择器 -->
     <VDialog v-model="mediaSelectorDialog" width="40rem" scrollable max-height="85vh">
-      <MediaIdSelector
-        v-if="mediaSource === 'themoviedb'"
-        v-model="tmdbid"
-        @close="mediaSelectorDialog = false"
-        :type="mediaSource"
-      />
-      <MediaIdSelector v-else v-model="doubanId" @close="mediaSelectorDialog = false" :type="mediaSource" />
+      <MediaIdSelector v-model="mediaId" @close="mediaSelectorDialog = false" :type="mediaSource" />
     </VDialog>
   </VDialog>
 </template>

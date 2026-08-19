@@ -30,11 +30,8 @@ const progressValue = computed(() => {
   return Math.min(Math.max(percent, 0), 100)
 })
 
-// 是否展示继续播放状态。
+// 是否存在可续播进度。
 const hasProgress = computed(() => progressValue.value > 0)
-
-// 顶部状态标签。
-const statusLabel = computed(() => (hasProgress.value ? '正在播放' : '待播放'))
 
 // 右上角进度标签。
 const progressLabel = computed(() => (hasProgress.value ? `${Math.round(progressValue.value)}%` : 'NEW'))
@@ -106,8 +103,10 @@ async function goPlay() {
           @keyup.enter="goPlay"
           @keyup.space="goPlay"
         >
+          <!-- 媒体服务器图片统一采用匿名 CORS，避免同一代理资源分裂为两种请求与缓存模式；Safari 普通 dev 可能重复请求，PWA 下由图片缓存路由统一处理。 -->
           <VImg
             :src="imageUrl"
+            crossorigin="anonymous"
             class="playing-card__image"
             :class="{ 'playing-card__image--loaded': imageLoaded }"
             cover
@@ -123,11 +122,6 @@ async function goPlay() {
 
           <div class="playing-card__scrim" />
           <div class="playing-card__bottom-scrim" />
-
-          <div class="playing-card__status">
-            <span class="playing-card__status-dot" />
-            <span class="playing-card__status-text">{{ statusLabel }}</span>
-          </div>
 
           <div class="playing-card__percent">
             {{ progressLabel }}
@@ -224,45 +218,15 @@ async function goPlay() {
 }
 
 .playing-card__bottom-scrim {
-  background:
-    linear-gradient(180deg, rgba(2, 6, 12, 0%) 24%, rgba(2, 6, 12, 72%) 68%, rgba(2, 6, 12, 96%) 100%);
+  background: linear-gradient(180deg, rgba(2, 6, 12, 0%) 24%, rgba(2, 6, 12, 72%) 68%, rgba(2, 6, 12, 96%) 100%);
 }
 
-.playing-card__status,
 .playing-card__percent,
 .playing-card__play,
 .playing-card__content,
 .playing-card__progress {
   position: absolute;
   z-index: 2;
-}
-
-.playing-card__status {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid rgba(255, 255, 255, 22%);
-  border-radius: 999px;
-  backdrop-filter: blur(12px);
-  background: rgba(5, 10, 16, 72%);
-  block-size: 26px;
-  gap: 8px;
-  inset-block-start: 12px;
-  inset-inline-start: 12px;
-  padding: 0 12px;
-}
-
-.playing-card__status-dot {
-  border-radius: 999px;
-  background: rgb(var(--v-theme-success));
-  block-size: 8px;
-  box-shadow: 0 0 0 4px rgba(var(--v-theme-success), 16%);
-  inline-size: 8px;
-}
-
-.playing-card__status-text {
-  font-size: 0.75rem;
-  font-weight: 700;
-  line-height: 1;
 }
 
 .playing-card__percent {

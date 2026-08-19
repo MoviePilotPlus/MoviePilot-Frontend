@@ -6,18 +6,20 @@ import type { StorageConf, TransferHistory } from '@/api/types'
 import ReorganizeDialog from '@/components/dialog/ReorganizeDialog.vue'
 import TransferQueueDialog from '@/components/dialog/TransferQueueDialog.vue'
 import ProgressDialog from '@/components/dialog/ProgressDialog.vue'
-import { useRoute } from 'vue-router'
-import router from '@/router'
+import { useRoute, useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import { formatFileSize } from '@/@core/utils/formatters'
 import { useI18n } from 'vue-i18n'
 import { usePWA } from '@/composables/usePWA'
+import ProgressiveCardGrid from '@/components/misc/ProgressiveCardGrid.vue'
 import { useDynamicButton, type DynamicButtonMenuItem } from '@/composables/useDynamicButton'
 import { useAvailableHeight } from '@/composables/useAvailableHeight'
 import { useBackground } from '@/composables/useBackground'
 import { useGlobalSettingsStore, useUserStore } from '@/stores'
 import { openSharedDialog } from '@/composables/useSharedDialog'
 import { buildUserPermissionContext, hasPermission } from '@/utils/permission'
+import { getDisplayImageUrl } from '@/utils/imageUtils'
+import noImage from '@images/no-image.jpeg'
 
 const TransferHistoryDeleteDialog = defineAsyncComponent(
   () => import('@/components/dialog/TransferHistoryDeleteDialog.vue'),
@@ -45,6 +47,7 @@ const $toast = useToast()
 
 // 路由
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 const canManage = computed(() =>
   hasPermission(buildUserPermissionContext(userStore.superUser, userStore.permissions), 'manage'),
@@ -52,6 +55,7 @@ const canManage = computed(() =>
 let syncingRouteQuery = false
 let fetchDataRequestSeed = 0
 let mobileFetchDataRequestSeed = 0
+let componentUnmounted = false
 
 // 组合式输入法状态
 const isComposing = ref(false)
@@ -393,9 +397,9 @@ const debouncedReloadSearchPage = debounce(() => {
   void reloadPage(true)
 }, 1000)
 
-// 延迟刷新移动端无限列表，输入完成后再从第一页重新加载。
+// 延迟同步移动端搜索参数，路由监听会按新查询重置无限列表。
 const debouncedReloadMobileSearchPage = debounce(() => {
-  resetMobileHistory()
+  void reloadMobileSearchPage()
 }, 600)
 
 // 切换页签
@@ -496,8 +500,15 @@ function updateSearchHintList(list: TransferHistory[]) {
   )
 }
 
+interface MobileHistoryResetOptions {
+  /** 是否保持批量模式，通常用于失败项重试。 */
+  preserveBatchMode?: boolean
+  /** 重置分页时仍需保持选中的记录。 */
+  selectedItems?: TransferHistory[]
+}
+
 // 重置移动端无限列表，让 VInfiniteScroll 从第一页重新触发加载。
-function resetMobileHistory() {
+function resetMobileHistory(options: MobileHistoryResetOptions = {}) {
   mobileFetchDataRequestSeed++
   mobileDataList.value = []
   mobileCurrentPage.value = 1
@@ -506,8 +517,8 @@ function resetMobileHistory() {
   isRefreshed.value = false
   totalItems.value = 0
   mobileExpandedPathIds.value = []
-  selected.value = []
-  mobileBatchMode.value = false
+  selected.value = options.selectedItems ?? []
+  mobileBatchMode.value = Boolean(options.preserveBatchMode && selected.value.length > 0)
   mobileInfiniteKey.value++
 }
 
@@ -581,6 +592,10 @@ function appendMobileHistory(list: TransferHistory[], total: number) {
   const newItems = list.filter(item => !existingIds.has(item.id))
 
   mobileDataList.value = [...mobileDataList.value, ...newItems]
+  if (selected.value.length > 0) {
+    const refreshedItems = new Map(mobileDataList.value.map(item => [item.id, item]))
+    selected.value = selected.value.map(item => refreshedItems.get(item.id) ?? item)
+  }
   mobileCurrentPage.value++
   mobileHasMore.value = mobileDataList.value.length < total && list.length >= mobilePageSize
   updateSearchHintList(mobileDataList.value)
@@ -616,9 +631,12 @@ async function refreshDataFromRouteQuery(options: { silent?: boolean } = {}) {
 }
 
 // 操作完成后刷新列表；如果当前页被删空，则跳回最后一个有效页。
-async function refreshDataAfterOperation() {
+async function refreshDataAfterOperation(mobileSelection: TransferHistory[] = []) {
   if (isMobile.value) {
-    resetMobileHistory()
+    resetMobileHistory({
+      preserveBatchMode: mobileSelection.length > 0,
+      selectedItems: mobileSelection,
+    })
     return
   }
 
@@ -629,7 +647,6 @@ async function refreshDataAfterOperation() {
   if (currentPage.value <= lastAvailablePage) return
 
   await router.replace(createHistoryUrl(false, lastAvailablePage))
-  await refreshDataFromRouteQuery()
 }
 
 // 根据 type 返回不同的图标
@@ -637,6 +654,18 @@ function getIcon(type: string) {
   if (type === '电影') return 'mdi-movie'
   else if (type === '电视剧') return 'mdi-television-classic'
   else return 'mdi-help-circle'
+}
+
+// 计算移动端卡片海报地址，优先使用后端图片代理并兼顾全局缓存设置。
+function getHistoryPosterUrl(item: TransferHistory) {
+  const image = item.image
+  if (!image) return noImage
+
+  if (!/^https?:\/\//i.test(image)) {
+    return `${import.meta.env.VITE_API_BASE_URL}system/img/0?imgurl=${encodeURIComponent(image)}`
+  }
+
+  return getDisplayImageUrl(image, globalSettingsStore.globalSettings.GLOBAL_IMAGE_CACHE)
 }
 
 // 删除历史记录
@@ -651,7 +680,7 @@ async function removeHistory(item: TransferHistory) {
 }
 
 // 调用API删除记录
-async function remove(item: TransferHistory, deleteSrc: boolean, deleteDest: boolean) {
+async function remove(item: TransferHistory, deleteSrc: boolean, deleteDest: boolean, notifyError = true) {
   try {
     // 调用删除API
     const result: {
@@ -660,9 +689,19 @@ async function remove(item: TransferHistory, deleteSrc: boolean, deleteDest: boo
       data: item,
     })
 
-    if (!result.success) $toast.error(`删除失败: ${result.message}`)
+    if (!result.success) {
+      if (notifyError) {
+        $toast.error(t('transferHistory.deleteFailed', { message: result.message || '' }))
+      }
+      return false
+    }
+    return true
   } catch (error) {
     console.error(error)
+    if (notifyError) {
+      $toast.error(t('transferHistory.deleteRequestFailed'))
+    }
+    return false
   }
 }
 
@@ -689,27 +728,36 @@ async function removeBatch(deleteSrc: boolean, deleteDest: boolean) {
 
   // 已处理条数
   let handled = 0
+  const failedItems: TransferHistory[] = []
   // 显示进度条
   openProgressDialog()
   // 循环调用removeHistory
   for (const item of selected.value) {
     // 开始删除
-    progressText.value = `正在删除 ${item.title} ${item.seasons}${item.episodes} ...`
-    await remove(item, deleteSrc, deleteDest)
+    const seasonEpisode = `${item.seasons || ''}${item.episodes || ''}`
+    const name = [item.title, seasonEpisode].filter(Boolean).join(' ')
+    progressText.value = t('transferHistory.deleting', { name })
+    const success = await remove(item, deleteSrc, deleteDest, false)
+    if (!success) {
+      failedItems.push(item)
+    }
     // 删除完成
     handled++
     progressValue.value = (handled / total) * 100
     progressDialogController?.updateProps({ text: progressText.value, value: progressValue.value })
   }
-  // 清空选中项
-  selected.value = []
-  if (isMobile.value) {
+  // 失败项保持选中，方便用户修正条件后重试。
+  selected.value = failedItems
+  if (isMobile.value && failedItems.length === 0) {
     mobileBatchMode.value = false
   }
   // 隐藏进度条
   closeProgressDialog()
+  if (failedItems.length > 0) {
+    $toast.error(t('transferHistory.batchDeleteFailed', { failed: failedItems.length, total }))
+  }
   // 重新获取数据
-  await refreshDataAfterOperation()
+  await refreshDataAfterOperation(failedItems)
 }
 
 // 响应删除操作
@@ -799,11 +847,11 @@ async function handleAiRedoProgressMessage(event: MessageEvent) {
   const progress = JSON.parse(event.data)
   if (!progress) return
 
-  aiRedoProgressText.value = progress.text || t('transferHistory.actions.aiRedoPending')
+  aiRedoProgressText.value = progress.text_i18n || progress.text || t('transferHistory.actions.aiRedoPending')
   aiRedoProgressDialogController?.updateProps({ text: aiRedoProgressText.value })
 
   if (progress.enable === false) {
-    await finishAiRedo(progress.data?.success !== false, progress.data?.error)
+    await finishAiRedo(progress.data?.success !== false, progress.data?.error_i18n || progress.data?.error)
   }
 }
 
@@ -850,6 +898,7 @@ async function triggerAiRedo(item: TransferHistory) {
   let progressStarted = false
   try {
     const result: { [key: string]: any } = await api.post(`history/transfer/${item.id}/ai-redo`)
+    if (componentUnmounted) return
 
     const progressKey = result.data?.progress_key
 
@@ -861,7 +910,9 @@ async function triggerAiRedo(item: TransferHistory) {
     progressStarted = true
   } catch (error) {
     console.error(error)
-    $toast.error(t('transferHistory.aiRedoFailed'))
+    if (!componentUnmounted) {
+      $toast.error(t('transferHistory.aiRedoFailed'))
+    }
   } finally {
     if (!progressStarted) {
       aiRedoIds.value = aiRedoIds.value.filter(id => id !== item.id)
@@ -886,6 +937,7 @@ async function triggerBatchAiRedo() {
     const result: { [key: string]: any } = await api.post('history/transfer/ai-redo', {
       history_ids: historyIds,
     })
+    if (componentUnmounted) return
 
     const progressKey = result.data?.progress_key
     const acceptedIds = (result.data?.history_ids as number[] | undefined) ?? historyIds
@@ -902,7 +954,9 @@ async function triggerBatchAiRedo() {
     progressStarted = true
   } catch (error) {
     console.error(error)
-    $toast.error(t('transferHistory.aiRedoFailed'))
+    if (!componentUnmounted) {
+      $toast.error(t('transferHistory.aiRedoFailed'))
+    }
   } finally {
     if (!progressStarted) {
       aiRedoIds.value = aiRedoIds.value.filter(id => !historyIds.includes(id))
@@ -976,6 +1030,11 @@ function createHistoryUrl(resetPage = false, page = resetPage ? 1 : currentPage.
 // 重载页面，先更新路由，再由路由监听统一拉取列表数据。
 async function reloadPage(resetPage = false) {
   await router.push(createHistoryUrl(resetPage))
+}
+
+// 移动端搜索同样以 URL 为持久事实源，刷新和断点切换后可恢复同一查询。
+async function reloadMobileSearchPage() {
+  await router.push(createHistoryUrl(true))
 }
 
 // 确保值为number类型
@@ -1090,6 +1149,11 @@ function toggleMobilePathExpanded(item: TransferHistory) {
 // 判断指定历史记录是否已被选中。
 function isHistorySelected(item: TransferHistory) {
   return selectedIdSet.value.has(item.id)
+}
+
+// 获取移动端历史记录卡片的稳定渲染 key。
+function getMobileHistoryItemKey(item: TransferHistory) {
+  return item.id
 }
 
 // 批量设置历史记录选中状态，并按 ID 去重。
@@ -1334,6 +1398,7 @@ onActivated(() => {
 })
 
 onUnmounted(() => {
+  componentUnmounted = true
   debouncedReloadPage.cancel()
   debouncedReloadSearchPage.cancel()
   debouncedReloadMobileSearchPage.cancel()
@@ -1607,7 +1672,9 @@ onUnmounted(() => {
         :aria-label="
           mobileBatchMode ? t('transferHistory.actions.exitBatchSelect') : t('transferHistory.actions.batchSelect')
         "
-        :title="mobileBatchMode ? t('transferHistory.actions.exitBatchSelect') : t('transferHistory.actions.batchSelect')"
+        :title="
+          mobileBatchMode ? t('transferHistory.actions.exitBatchSelect') : t('transferHistory.actions.batchSelect')
+        "
         variant="text"
         class="settings-icon-button transfer-history-mobile-titlebar__batch"
         @click="toggleMobileBatchMode"
@@ -1639,6 +1706,7 @@ onUnmounted(() => {
       mode="intersect"
       side="end"
       :items="mobileDataList"
+      :margin="mobileDataList.length > 0 ? 280 : 0"
       class="transfer-history-mobile-scroll"
       @load="loadMobileHistory"
     >
@@ -1648,16 +1716,26 @@ onUnmounted(() => {
         </div>
       </template>
       <template #empty />
+      <template #error="{ props: retryProps }">
+        <div class="transfer-history-mobile-state d-flex flex-column ga-2" role="alert">
+          <span class="text-body-2 text-medium-emphasis">{{ t('common.serverConnectionFailed') }}</span>
+          <VBtn v-bind="retryProps" prepend-icon="mdi-refresh" size="small" variant="tonal">
+            {{ t('common.retry') }}
+          </VBtn>
+        </div>
+      </template>
 
-      <VVirtualScroll
+      <ProgressiveCardGrid
         v-if="mobileDataList.length > 0"
-        renderless
         :items="mobileDataList"
-        :item-height="264"
+        :columns="1"
+        :gap="14"
+        :estimated-item-height="296"
+        :overscan-rows="5"
+        :get-item-key="getMobileHistoryItemKey"
       >
-        <template #default="{ item, itemRef }">
+        <template #default="{ item }">
           <article
-            :ref="itemRef"
             class="transfer-history-mobile-record"
             :class="{
               'transfer-history-mobile-record--batch': mobileBatchMode,
@@ -1667,9 +1745,29 @@ onUnmounted(() => {
             @click="handleMobileRecordClick(item)"
           >
             <header class="transfer-history-mobile-record__header">
-              <VAvatar class="transfer-history-mobile-record__avatar" size="40">
-                <VIcon :icon="getIcon(item.type || '')" />
-              </VAvatar>
+              <div class="transfer-history-mobile-record__poster-wrapper">
+                <VImg
+                  class="transfer-history-mobile-record__poster"
+                  :src="getHistoryPosterUrl(item)"
+                  :alt="item.title"
+                  cover
+                >
+                  <template #placeholder>
+                    <div class="transfer-history-mobile-record__poster-skeleton">
+                      <VSkeletonLoader class="h-full" />
+                    </div>
+                  </template>
+                  <template #error>
+                    <VImg
+                      :src="noImage"
+                      cover
+                      :alt="item.title"
+                      class="transfer-history-mobile-record__poster-fallback"
+                    />
+                  </template>
+                </VImg>
+                <VIcon class="transfer-history-mobile-record__poster-type" :icon="getIcon(item.type || '')" size="14" />
+              </div>
 
               <div class="transfer-history-mobile-record__heading">
                 <div class="transfer-history-mobile-record__title">
@@ -1680,7 +1778,12 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <VChip class="transfer-history-mobile-record__status" variant="tonal" :color="getHistoryStatusColor(item)" size="small">
+              <VChip
+                class="transfer-history-mobile-record__status"
+                variant="tonal"
+                :color="getHistoryStatusColor(item)"
+                size="small"
+              >
                 {{ getHistoryStatusText(item) }}
               </VChip>
 
@@ -1713,16 +1816,16 @@ onUnmounted(() => {
                   </VList>
                 </VMenu>
               </IconBtn>
-            </header>
 
-            <div class="transfer-history-mobile-record__meta">
-              <VChip class="transfer-history-mobile-record__mode" variant="outlined" color="primary" size="small">
-                {{ TransferDict[item?.mode ?? ''] || t('common.unknown') }}
-              </VChip>
-              <span>{{ formatFileSize(item?.src_fileitem?.size || 0) }}</span>
-              <span class="transfer-history-mobile-record__dot">·</span>
-              <span v-if="item?.date">{{ getHistoryDateText(item.date) }}</span>
-            </div>
+              <div class="transfer-history-mobile-record__meta">
+                <VChip class="transfer-history-mobile-record__mode" variant="outlined" color="primary" size="small">
+                  {{ TransferDict[item?.mode ?? ''] || t('common.unknown') }}
+                </VChip>
+                <span>{{ formatFileSize(item?.src_fileitem?.size || 0) }}</span>
+                <span class="transfer-history-mobile-record__dot">·</span>
+                <span v-if="item?.date">{{ getHistoryDateText(item.date) }}</span>
+              </div>
+            </header>
 
             <button
               type="button"
@@ -1753,7 +1856,7 @@ onUnmounted(() => {
             </div>
           </article>
         </template>
-      </VVirtualScroll>
+      </ProgressiveCardGrid>
     </VInfiniteScroll>
 
     <div v-if="mobileDataList.length === 0 && isRefreshed && !mobileLoading" class="transfer-history-mobile-empty">
@@ -1804,6 +1907,8 @@ onUnmounted(() => {
 </template>
 
 <style lang="scss">
+/* stylelint-disable selector-pseudo-class-no-unknown */
+
 .v-table th {
   white-space: nowrap;
 }
@@ -1821,17 +1926,18 @@ onUnmounted(() => {
   --transfer-history-mobile-surface-blur: none;
 
   display: flex;
-  min-block-size: 100%;
   flex-direction: column;
   gap: 1rem;
-  padding: 0.25rem 0.35rem 1.25rem;
+  min-block-size: 100%;
+  padding-block: 0.25rem 1.25rem;
+  padding-inline: 0.35rem;
 }
 
 .transfer-history-mobile-titlebar {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
   justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .transfer-history-mobile-title {
@@ -1862,13 +1968,13 @@ onUnmounted(() => {
 }
 
 .transfer-history-mobile-scroll {
-  min-block-size: 22rem;
   overflow: visible !important;
+  min-block-size: 22rem;
 }
 
 .transfer-history-mobile-scroll :deep(.v-infinite-scroll__container),
-.transfer-history-mobile-scroll :deep(.v-virtual-scroll),
-.transfer-history-mobile-scroll :deep(.v-virtual-scroll__container) {
+.transfer-history-mobile-scroll :deep(.progressive-card-grid),
+.transfer-history-mobile-scroll :deep(.progressive-card-grid__track) {
   overflow: visible !important;
 }
 
@@ -1889,9 +1995,9 @@ onUnmounted(() => {
 }
 
 .transfer-history-mobile-empty {
-  min-block-size: 18rem;
   flex-direction: column;
   gap: 0.75rem;
+  min-block-size: 18rem;
 }
 
 .transfer-history-mobile-record {
@@ -1911,28 +2017,65 @@ onUnmounted(() => {
   outline-offset: -2px;
 }
 
-.transfer-history-mobile-record + .transfer-history-mobile-record {
-  margin-block-start: 0.875rem;
-}
-
 .transfer-history-mobile-record__header {
   display: grid;
   align-items: start;
   gap: 0.75rem;
-  grid-template-columns: 3rem minmax(0, 1fr) auto 2rem;
-  padding: 1rem 0.85rem 0.75rem 1rem;
+  grid-template-columns: 3.5rem minmax(0, 1fr) auto 2rem;
+  grid-template-rows: auto auto;
+  padding-block: 0.85rem 0.75rem;
+  padding-inline: 1rem 0.85rem;
 }
 
-.transfer-history-mobile-record__avatar {
-  background: transparent;
-  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+.transfer-history-mobile-record__poster-wrapper {
+  position: relative;
+  grid-row: 1 / span 2;
+  inline-size: 3.5rem;
+  block-size: 5.25rem;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--transfer-history-mobile-muted-bg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
 }
 
-.transfer-history-mobile-record__avatar :deep(.v-icon) {
-  font-size: 2rem;
+.transfer-history-mobile-record__poster {
+  inline-size: 100%;
+  block-size: 100%;
+  border-radius: 8px;
+}
+
+.transfer-history-mobile-record__poster :deep(.v-img__img) {
+  transition: opacity 0.2s ease;
+}
+
+.transfer-history-mobile-record__poster-skeleton {
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.transfer-history-mobile-record__poster-skeleton :deep(.v-skeleton-loader) {
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.transfer-history-mobile-record__poster-fallback {
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.transfer-history-mobile-record__poster-type {
+  position: absolute;
+  inset-block-end: 4px;
+  inset-inline-start: 4px;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: rgb(255, 255, 255);
+  opacity: 0.92;
 }
 
 .transfer-history-mobile-record__heading {
+  align-self: center;
   min-inline-size: 0;
 }
 
@@ -1963,13 +2106,11 @@ onUnmounted(() => {
 }
 
 .transfer-history-mobile-record__menu {
-  align-self: start;
-  justify-self: end;
+  place-self: start end;
 }
 
 .transfer-history-mobile-record__checkbox {
-  align-self: start;
-  justify-self: end;
+  place-self: start end;
   margin-block-start: -0.35rem;
   margin-inline-end: -0.35rem;
 }
@@ -1979,22 +2120,24 @@ onUnmounted(() => {
 }
 
 .transfer-history-mobile-record__meta {
+  grid-column: 2 / -1;
+  grid-row: 2;
   display: flex;
   align-items: center;
-  padding: 0 1rem 0.85rem 1rem;
+  justify-content: flex-start;
   gap: 0.65rem;
-  overflow-x: auto;
-  scrollbar-width: none;
+  margin-block-start: 0;
+  min-inline-size: 0;
+  overflow: hidden;
   white-space: nowrap;
-}
-
-.transfer-history-mobile-record__meta::-webkit-scrollbar {
-  display: none;
 }
 
 .transfer-history-mobile-record__meta > span {
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.875rem;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .transfer-history-mobile-record__mode {
@@ -2011,14 +2154,15 @@ onUnmounted(() => {
 .transfer-history-mobile-record__paths {
   display: grid;
   border: 0;
-  border-block-start: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   background: transparent;
+  border-block-start: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   color: inherit;
   cursor: pointer;
   gap: 0.45rem;
   grid-template-columns: 1fr;
   inline-size: 100%;
-  padding: 0.85rem 1rem 0.95rem;
+  padding-block: 0.85rem 0.95rem;
+  padding-inline: 1rem;
   text-align: start;
 }
 
@@ -2032,15 +2176,15 @@ onUnmounted(() => {
 .transfer-history-mobile-record__path-arrow {
   display: flex;
   align-items: center;
+  justify-content: center;
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   inline-size: var(--transfer-history-mobile-storage-width);
-  justify-content: center;
   padding-inline-start: 0.5rem;
 }
 
 .transfer-history-mobile-record__storage {
   display: inline-flex;
-  max-inline-size: 100%;
+  overflow: hidden;
   align-items: center;
   justify-content: center;
   border-radius: 6px;
@@ -2048,8 +2192,8 @@ onUnmounted(() => {
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.75rem;
   line-height: 1.4;
+  max-inline-size: 100%;
   min-block-size: 1.55rem;
-  overflow: hidden;
   padding-block: 0.125rem;
   padding-inline: 0.425rem;
   text-overflow: ellipsis;
@@ -2082,9 +2226,11 @@ onUnmounted(() => {
   font-weight: 650;
   gap: 0.5rem;
   line-height: 1.45;
-  margin: 0 1rem 1rem;
+  margin-block: 0 1rem;
+  margin-inline: 1rem;
   overflow-wrap: anywhere;
-  padding: 0.65rem 0.75rem;
+  padding-block: 0.65rem;
+  padding-inline: 0.75rem;
 }
 
 html[data-theme='transparent'] .transfer-history-mobile-page,

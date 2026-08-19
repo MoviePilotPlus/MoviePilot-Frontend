@@ -1,6 +1,6 @@
 import type { ComputedRef, Ref } from 'vue'
 import { useTabStateRestore } from '@/composables/useStateRestore'
-import type { UserPermissionKey } from '@/utils/permission'
+import type { UserPermissionFeatureKey, UserPermissionKey } from '@/utils/permission'
 
 // 动态标签页相关类型
 interface DynamicHeaderTabButton {
@@ -11,6 +11,7 @@ interface DynamicHeaderTabButton {
   class?: string
   action?: () => void
   permission?: UserPermissionKey
+  feature?: UserPermissionFeatureKey
   show?: boolean | ComputedRef<boolean>
   loading?: boolean | ComputedRef<boolean>
   dataAttr?: string // 用于VMenu定位的data属性
@@ -20,6 +21,8 @@ interface DynamicHeaderTabItem {
   title: string
   icon?: string
   tab: string
+  permission?: UserPermissionKey
+  feature?: UserPermissionFeatureKey
 }
 
 interface DynamicHeaderTabConfig {
@@ -30,14 +33,15 @@ interface DynamicHeaderTabConfig {
   onUpdateModelValue?: (value: string) => void
 }
 
+/** 提供页面动态头部标签的注册、状态恢复和注销能力。 */
 export function useDynamicHeaderTab() {
   const route = useRoute()
 
   // 尝试从inject获取
   const registerDynamicHeaderTab = inject<(tab: DynamicHeaderTabConfig) => void>('registerDynamicHeaderTab')
-  const unregisterDynamicHeaderTab = inject<() => void>('unregisterDynamicHeaderTab')
+  const unregisterDynamicHeaderTab = inject<(routePath?: string) => void>('unregisterDynamicHeaderTab')
 
-  // 注册动态标签页
+  /** 注册当前页面的动态头部标签配置。 */
   const registerHeaderTab = (config: {
     items: DynamicHeaderTabItem[] | ComputedRef<DynamicHeaderTabItem[]> | Ref<DynamicHeaderTabItem[]>
     modelValue: Ref<string>
@@ -149,12 +153,12 @@ export function useDynamicHeaderTab() {
     // 取消注册函数
     const doUnregister = () => {
       if (unregisterDynamicHeaderTab) {
-        unregisterDynamicHeaderTab()
+        unregisterDynamicHeaderTab(tabConfig.routePath)
       }
     }
 
-    // 初始注册（延迟到下个tick，确保路由已经完全切换）
-    nextTick(() => {
+    // 页签高度必须在页面首帧布局前确定，避免内容先渲染后再整体下移。
+    onBeforeMount(() => {
       doRegister()
     })
 
@@ -162,15 +166,13 @@ export function useDynamicHeaderTab() {
     onActivated(() => {
       // 页面激活时，优先使用当前页面的实际状态，而不是恢复的PWA状态
       // 这样可以避免从后台切换回来时显示错误的标签页
-      nextTick(() => {
-        // 确保使用当前页面的实际modelValue，不受PWA状态恢复影响
-        tabConfig.modelValue = config.modelValue.value
-        // 同步当前状态到PWA存储，确保状态一致性
-        if (pwaTabState && config.modelValue.value) {
-          pwaTabState.activeTab.value = config.modelValue.value
-        }
-        doRegister()
-      })
+      // 确保使用当前页面的实际modelValue，不受PWA状态恢复影响
+      tabConfig.modelValue = config.modelValue.value
+      // 同步当前状态到PWA存储，确保状态一致性
+      if (pwaTabState && config.modelValue.value) {
+        pwaTabState.activeTab.value = config.modelValue.value
+      }
+      doRegister()
     })
 
     // 处理页面失活时取消注册（支持keep-alive缓存的页面）
@@ -184,7 +186,7 @@ export function useDynamicHeaderTab() {
     })
   }
 
-  // 取消注册
+  /** 取消当前页面注册的动态头部标签。 */
   const unregisterHeaderTab = () => {
     if (unregisterDynamicHeaderTab) {
       unregisterDynamicHeaderTab()

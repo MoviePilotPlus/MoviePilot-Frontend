@@ -12,7 +12,7 @@ import { usePWA } from '@/composables/usePWA'
 import { openSharedDialog } from '@/composables/useSharedDialog'
 import { useUserStore } from '@/stores'
 import { buildUserPermissionContext, hasPermission } from '@/utils/permission'
-import { useDisplay } from 'vuetify'
+import { useDisplay, useTheme } from 'vuetify'
 
 const ContentToggleSettingsDialog = defineAsyncComponent(
   () => import('@/components/dialog/ContentToggleSettingsDialog.vue'),
@@ -24,10 +24,11 @@ const { t } = useI18n()
 // PWA模式检测
 const { appMode } = usePWA()
 const display = useDisplay()
+const vuetifyTheme = useTheme()
 const userStore = useUserStore()
-const canAdmin = computed(() =>
-  hasPermission(buildUserPermissionContext(userStore.superUser, userStore.permissions), 'admin'),
-)
+const userPermissionContext = computed(() => buildUserPermissionContext(userStore.superUser, userStore.permissions))
+const canAdmin = computed(() => hasPermission(userPermissionContext.value, 'admin'))
+const canDiscovery = computed(() => hasPermission(userPermissionContext.value, 'discovery'))
 
 // 路由
 const route = useRoute()
@@ -40,9 +41,11 @@ const DASHBOARD_GRID_CELL_HEIGHT = 16
 const DASHBOARD_GRID_FALLBACK_ROWS = 4
 const DASHBOARD_GRID_MARGIN = 8
 const DASHBOARD_GRID_CONTENT_RESIZE_THRESHOLD = 4
+const DASHBOARD_GRID_SIZE_SOURCE_SELECTOR = '[data-layout-size-source]'
 const DASHBOARD_ENABLE_STORAGE_KEY = 'MP_DASHBOARD'
 const DASHBOARD_ORDER_STORAGE_KEY = 'MP_DASHBOARD_ORDER'
 const DASHBOARD_GRID_LAYOUT_STORAGE_KEY_PREFIX = 'MP_DASHBOARD_GRID_LAYOUT'
+const DASHBOARD_GRID_AUTO_HEIGHT_STORAGE_KEY_PREFIX = 'MP_DASHBOARD_GRID_AUTO_HEIGHTS'
 const DASHBOARD_ENABLE_CONFIG_KEY = 'Dashboard'
 const DASHBOARD_ORDER_CONFIG_KEY = 'DashboardOrder'
 const DASHBOARD_GRID_LAYOUT_CONFIG_KEY = 'DashboardGridLayout'
@@ -51,6 +54,7 @@ const DASHBOARD_GRID_LAYOUT_CONFIG_KEY_PREFIX = 'DashboardGridLayout'
 type DashboardEnableConfig = Record<string, boolean>
 type DashboardOrderConfig = { id: string; key: string }[]
 type DashboardGridLayoutConfig = Record<string, DashboardGridLayoutItem>
+type DashboardGridAutoHeightConfig = Record<string, number>
 type DashboardConfigNormalizer<T> = (value: unknown) => T | undefined
 type DashboardConfigRemoteValueBuilder<T> = (value: T) => unknown
 type DashboardLayoutProfile = 'desktop' | 'tablet' | 'mobile'
@@ -76,12 +80,14 @@ const DASHBOARD_DESKTOP_DEFAULT_LAYOUT: DashboardGridLayoutConfig = {
   cpu: { x: 4, y: 22, w: 4, h: DASHBOARD_RESOURCE_CHART_ROWS },
   quickActions: { x: 8, y: 22, w: 4, h: 5 },
   systemInfo: { x: 8, y: 27, w: 4, h: 6 },
+  mediaRecommend: { x: 0, y: 33, w: 8, h: 17 },
 }
 
 // 单个设备档位的仪表盘配置，将布局与显示项绑定到同一份持久化数据。
 interface DashboardProfileConfig {
   enabled?: DashboardEnableConfig
   items: DashboardGridLayoutConfig
+  updatedAt?: number
 }
 
 interface DashboardGridItem {
@@ -117,11 +123,17 @@ const isPersistingDashboardGridLayoutFromGrid = ref(false)
 // 仪表板本地布局覆盖配置
 const dashboardGridLayout = ref<DashboardGridLayoutConfig>({})
 
+// 当前设备档位最近一次测得的自动行高，仅作为下次首屏预排提示，不改变手动高度语义。
+const dashboardGridAutoHeights = shallowRef<DashboardGridAutoHeightConfig>({})
+
+// 最近一次已确认持久化的仪表板布局，用于编辑模式下避开临时布局草稿。
+let persistedDashboardGridLayout: DashboardGridLayoutConfig = {}
+
+// 是否处于“恢复默认布局”的临时草稿，确认前保持清空布局覆盖的语义。
+const isDashboardGridLayoutResetDraft = ref(false)
+
 // 当前仪表板布局档位，按 GridStack 响应式列数拆分跨端配置。
 const dashboardLayoutProfile = ref<DashboardLayoutProfile>('desktop')
-
-// 是否刚恢复过默认布局，用于避免退出编辑时立即把默认布局写回本地覆盖。
-const isDashboardGridLayoutResetPending = ref(false)
 
 // 旧版跨设备显示项配置，仅用于首次迁移到按设备拆分的仪表盘配置。
 let legacyDashboardEnableConfig: DashboardEnableConfig | undefined
@@ -130,12 +142,20 @@ let isLegacyDashboardEnableConfigLoaded = false
 const dashboardGridResizeStartHeights = new Map<string, number | undefined>()
 const dashboardGridPendingContentResize = new Set<GridItemHTMLElement>()
 const dashboardGridObservedContentHeights = new Map<string, number>()
+const dashboardGridObservedSizeSources = new Set<Element>()
 
 let dashboardGridContentObserver: ResizeObserver | null = null
+let dashboardGridContentMutationObserver: MutationObserver | null = null
 let dashboardGridContentResizeFrame: number | null = null
 let dashboardGridResizeRefreshFrame: number | null = null
+let dashboardGridAnimationFrame: number | null = null
 let dashboardRevealFrame: number | null = null
 let isDashboardRevealPending = false
+let dashboardProfileSaveQueue = Promise.resolve()
+// 档位切换必须等目标配置就绪后一次性重建，避免响应式列变化与 Vue 深度监听交叉改写节点。
+let isSwitchingDashboardLayoutProfile = false
+// 应用档位配置后的首次同步必须恢复缺失覆盖项的默认位置，不能沿用上一份配置的节点坐标。
+let shouldRestoreDashboardGridProfileDefaults = false
 // 标记最近一次响应式档位切换，避免快速缩放时较早的异步配置覆盖最新档位。
 let dashboardLayoutProfileSwitchId = 0
 
@@ -169,6 +189,15 @@ const dashboardConfigs = ref<DashboardItem[]>([
     attrs: {},
     cols: { cols: 12, md: 8 },
     rows: 7,
+    elements: [],
+  },
+  {
+    id: 'mediaRecommend',
+    name: t('dashboard.recommendedMedia'),
+    key: '',
+    attrs: {},
+    cols: { cols: 12, md: 8 },
+    rows: 17,
     elements: [],
   },
   {
@@ -287,7 +316,12 @@ const pluginDashboardRefreshStatus = ref<{ [key: string]: boolean }>({})
 // 当前启用且可渲染的仪表板 Grid 项。
 const dashboardGridItems = computed<DashboardGridItem[]>(() =>
   dashboardConfigs.value
-    .filter(item => enableConfig.value[buildPluginDashboardId(item.id, item.key)] && item.cols)
+    .filter(
+      item =>
+        enableConfig.value[buildPluginDashboardId(item.id, item.key)] &&
+        item.cols &&
+        (item.id !== 'mediaRecommend' || canDiscovery.value),
+    )
     .map(item => {
       const id = buildPluginDashboardId(item.id, item.key)
 
@@ -346,14 +380,39 @@ function scheduleDashboardReveal() {
     syncDashboardFillContentState()
     resizeAutoDashboardItemsToContent()
 
-    if (typeof window === 'undefined') {
-      return
-    }
+    if (typeof window === 'undefined') return
 
     dashboardRevealFrame = window.requestAnimationFrame(() => {
       dashboardRevealFrame = null
       notifyDashboardContentResize()
     })
+  })
+}
+
+// 程序化批量布局不播放中间态；稳定后恢复用户拖拽、缩放和让位动画。
+function pauseDashboardGridAnimation() {
+  if (dashboardGridAnimationFrame !== null) {
+    cancelAnimationFrame(dashboardGridAnimationFrame)
+    dashboardGridAnimationFrame = null
+  }
+  dashboardGrid.value?.setAnimation(false)
+}
+
+// 玻璃浏览态直接提交自动布局，普通主题和显式编辑交互保留 GridStack 过渡。
+function shouldAnimateDashboardGrid(editable = isLayoutEditing.value) {
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+
+  return !reduceMotion && (editable || vuetifyTheme.global.name.value !== 'glass')
+}
+
+// 批量布局同步期间暂停几何过渡，稳定后恢复浏览与编辑状态的卡片动画。
+function scheduleDashboardGridAnimationResume() {
+  if (typeof window === 'undefined') return
+  if (dashboardGridAnimationFrame !== null) cancelAnimationFrame(dashboardGridAnimationFrame)
+
+  dashboardGridAnimationFrame = requestAnimationFrame(() => {
+    dashboardGridAnimationFrame = null
+    dashboardGrid.value?.setAnimation(shouldAnimateDashboardGrid())
   })
 }
 
@@ -378,6 +437,7 @@ function clampGridNumber(value: unknown, min: number, max: number, fallback: num
 function getDefaultDashboardEnableConfig(): DashboardEnableConfig {
   return {
     mediaStatistic: true,
+    mediaRecommend: true,
     scheduler: true,
     speed: true,
     storage: true,
@@ -466,11 +526,24 @@ function normalizeDashboardGridLayout(value: unknown): DashboardGridLayoutConfig
   return normalizedLayout
 }
 
+// 校验本地自动行高提示，异常或过期字段不得进入 GridStack 首屏配置。
+function normalizeDashboardGridAutoHeightConfig(value: unknown): DashboardGridAutoHeightConfig | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+
+  return Object.entries(value).reduce<DashboardGridAutoHeightConfig>((config, [id, height]) => {
+    if (!id || !Number.isFinite(Number(height))) return config
+
+    config[id] = clampGridNumber(height, 1, 96, DASHBOARD_GRID_FALLBACK_ROWS)
+
+    return config
+  }, {})
+}
+
 // 校验并归一化单个设备档位的仪表盘配置，兼容旧版只保存 Grid 布局的数据。
 function normalizeDashboardProfileConfig(value: unknown): DashboardProfileConfig | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
 
-  const configValue = value as { enabled?: unknown; items?: unknown }
+  const configValue = value as { enabled?: unknown; items?: unknown; updatedAt?: unknown }
   const hasProfileField =
     Object.prototype.hasOwnProperty.call(configValue, 'items') ||
     Object.prototype.hasOwnProperty.call(configValue, 'enabled')
@@ -484,6 +557,11 @@ function normalizeDashboardProfileConfig(value: unknown): DashboardProfileConfig
     profileConfig.enabled = enabled
   }
 
+  const updatedAt = Number(configValue.updatedAt)
+  if (Number.isFinite(updatedAt) && updatedAt > 0) {
+    profileConfig.updatedAt = updatedAt
+  }
+
   return profileConfig
 }
 
@@ -491,10 +569,12 @@ function normalizeDashboardProfileConfig(value: unknown): DashboardProfileConfig
 function buildDashboardProfileConfig(
   layout: DashboardGridLayoutConfig = dashboardGridLayout.value,
   enabled: DashboardEnableConfig = enableConfig.value,
+  updatedAt = Date.now(),
 ): DashboardProfileConfig {
   return {
     enabled,
     items: layout,
+    updatedAt,
   }
 }
 
@@ -506,7 +586,33 @@ function buildRemoteDashboardProfileConfig(config: DashboardProfileConfig) {
     remoteConfig.enabled = config.enabled
   }
 
+  if (config.updatedAt !== undefined) {
+    remoteConfig.updatedAt = config.updatedAt
+  }
+
   return remoteConfig
+}
+
+// 判断本地仪表盘配置是否比服务端配置更新，用于保护刚保存但尚未同步成功的布局。
+function isLocalDashboardProfileConfigNewer(
+  localConfig: DashboardProfileConfig | undefined,
+  remoteConfig: DashboardProfileConfig | undefined,
+) {
+  return (
+    localConfig?.updatedAt !== undefined &&
+    (remoteConfig?.updatedAt === undefined || localConfig.updatedAt > remoteConfig.updatedAt)
+  )
+}
+
+// 串行写入仪表盘布局配置，避免较早的异步保存请求后完成并覆盖较新的布局。
+function queueDashboardProfileRemoteSave(configKey: string, profileConfig: DashboardProfileConfig) {
+  const remoteConfig = buildRemoteDashboardProfileConfig(profileConfig)
+
+  dashboardProfileSaveQueue = dashboardProfileSaveQueue
+    .catch(error => console.error(error))
+    .then(() => saveUserDashboardConfig(configKey, remoteConfig))
+
+  return dashboardProfileSaveQueue
 }
 
 // 根据当前视口判断仪表板布局档位，避免手机和桌面共用 Grid 坐标。
@@ -545,6 +651,13 @@ function getDashboardGridLayoutStorageKey(profile: DashboardLayoutProfile) {
   return `${DASHBOARD_GRID_LAYOUT_STORAGE_KEY_PREFIX}_${profile.toUpperCase()}`
 }
 
+// 自动行高提示按设备档位隔离，避免桌面内容密度覆盖手机和平板的首屏尺寸。
+function getDashboardGridAutoHeightStorageKey(profile: DashboardLayoutProfile) {
+  if (profile === 'desktop') return DASHBOARD_GRID_AUTO_HEIGHT_STORAGE_KEY_PREFIX
+
+  return `${DASHBOARD_GRID_AUTO_HEIGHT_STORAGE_KEY_PREFIX}_${profile.toUpperCase()}`
+}
+
 // 获取布局档位对应的用户配置键，桌面沿用旧键以兼容已同步配置。
 function getDashboardGridLayoutConfigKey(profile: DashboardLayoutProfile) {
   if (profile === 'desktop') return DASHBOARD_GRID_LAYOUT_CONFIG_KEY
@@ -563,7 +676,13 @@ async function loadDashboardProfileConfig(profile: DashboardLayoutProfile) {
     const remoteConfig = normalizeDashboardProfileConfig(response?.data?.value)
 
     if (remoteConfig !== undefined) {
-      const profileConfig: DashboardProfileConfig = { items: remoteConfig.items }
+      if (localConfig && isLocalDashboardProfileConfigNewer(localConfig, remoteConfig)) {
+        await queueDashboardProfileRemoteSave(configKey, localConfig)
+
+        return localConfig
+      }
+
+      const profileConfig: DashboardProfileConfig = { items: remoteConfig.items, updatedAt: remoteConfig.updatedAt }
       const enabled = remoteConfig.enabled ?? localConfig?.enabled
 
       if (enabled !== undefined) {
@@ -573,14 +692,15 @@ async function loadDashboardProfileConfig(profile: DashboardLayoutProfile) {
       saveLocalDashboardConfig(storageKey, profileConfig)
 
       if (remoteConfig.enabled === undefined && localConfig?.enabled !== undefined) {
-        await saveUserDashboardConfig(configKey, buildRemoteDashboardProfileConfig(profileConfig))
+        // 远端布局已是当前权威结果；兼容字段回填失败不能让本次加载退回旧的本地布局。
+        void queueDashboardProfileRemoteSave(configKey, profileConfig).catch(error => console.error(error))
       }
 
       return profileConfig
     }
 
     if (localConfig !== undefined) {
-      await saveUserDashboardConfig(configKey, buildRemoteDashboardProfileConfig(localConfig))
+      await queueDashboardProfileRemoteSave(configKey, localConfig)
     }
   } catch (error) {
     console.error(error)
@@ -606,6 +726,47 @@ function readLocalDashboardConfig<T>(storageKey: string, normalize: DashboardCon
 // 将仪表板配置写入本地存储，保留离线和接口失败时的兜底能力。
 function saveLocalDashboardConfig(storageKey: string, value: unknown) {
   localStorage.setItem(storageKey, JSON.stringify(value))
+}
+
+// 将同一份配置状态应用到首屏预水合和远端校验结果，保证两条路径的排序与迁移语义一致。
+function applyDashboardConfig(
+  profileConfig: DashboardProfileConfig | undefined,
+  legacyEnable: DashboardEnableConfig | undefined,
+  order: DashboardOrderConfig | undefined,
+) {
+  shouldRestoreDashboardGridProfileDefaults = true
+  if (order !== undefined) {
+    orderConfig.value = order
+  }
+
+  const loadedLayout = profileConfig?.items ?? {}
+  dashboardGridLayout.value = loadedLayout
+  persistedDashboardGridLayout = cloneDashboardGridLayout(loadedLayout)
+  isDashboardGridLayoutResetDraft.value = false
+  enableConfig.value = mergeDashboardEnableConfig(profileConfig?.enabled ?? legacyEnable)
+  sortDashboardConfigs()
+}
+
+// setup 阶段同步恢复当前设备档位，缓存命中时第一帧直接使用用户实际布局和显示项。
+function hydrateDashboardConfigFromLocal() {
+  dashboardLayoutProfile.value = resolveDashboardLayoutProfile()
+  const profileConfig = readLocalDashboardConfig(
+    getDashboardGridLayoutStorageKey(dashboardLayoutProfile.value),
+    normalizeDashboardProfileConfig,
+  )
+  const legacyEnable =
+    profileConfig?.enabled === undefined
+      ? readLocalDashboardConfig(DASHBOARD_ENABLE_STORAGE_KEY, normalizeDashboardEnableConfig)
+      : undefined
+  const order = readLocalDashboardConfig(DASHBOARD_ORDER_STORAGE_KEY, normalizeDashboardOrderConfig)
+  dashboardGridAutoHeights.value =
+    readLocalDashboardConfig(
+      getDashboardGridAutoHeightStorageKey(dashboardLayoutProfile.value),
+      normalizeDashboardGridAutoHeightConfig,
+    ) ?? {}
+  applyDashboardConfig(profileConfig, legacyEnable, order)
+
+  return profileConfig !== undefined
 }
 
 // 将仪表板配置写入用户配置，用于跨浏览器共享。
@@ -661,21 +822,32 @@ async function loadSharedDashboardConfig<T>(
   return localConfig
 }
 
-// 将当前仪表板布局覆盖配置保存到本地和用户配置。
-function saveDashboardProfileConfig(layout = dashboardGridLayout.value, enabled = enableConfig.value) {
+// 保存指定布局或当前已确认布局到本地和用户配置。
+function saveDashboardProfileConfig(layout?: DashboardGridLayoutConfig, enabled = enableConfig.value) {
   const profile = dashboardLayoutProfile.value
-  const profileConfig = buildDashboardProfileConfig(layout, enabled)
+  const layoutToPersist = layout ?? (isLayoutEditing.value ? persistedDashboardGridLayout : dashboardGridLayout.value)
+  const profileConfig = buildDashboardProfileConfig(layoutToPersist, enabled)
 
   saveLocalDashboardConfig(getDashboardGridLayoutStorageKey(profile), profileConfig)
-  void saveUserDashboardConfig(
-    getDashboardGridLayoutConfigKey(profile),
-    buildRemoteDashboardProfileConfig(profileConfig),
-  ).catch(error => console.error(error))
+  persistedDashboardGridLayout = cloneDashboardGridLayout(layoutToPersist)
+
+  return queueDashboardProfileRemoteSave(getDashboardGridLayoutConfigKey(profile), profileConfig).catch(error =>
+    console.error(error),
+  )
 }
 
-// 将当前仪表板布局覆盖配置保存到本地和用户配置。
+// 持久化指定的仪表板布局覆盖配置。
 function saveDashboardGridLayout(layout: DashboardGridLayoutConfig) {
-  saveDashboardProfileConfig(layout)
+  return saveDashboardProfileConfig(layout)
+}
+
+// 克隆仪表板布局配置，避免临时编辑草稿和已确认布局共用对象引用。
+function cloneDashboardGridLayout(layout: DashboardGridLayoutConfig): DashboardGridLayoutConfig {
+  return Object.entries(layout).reduce<DashboardGridLayoutConfig>((clonedLayout, [id, itemLayout]) => {
+    clonedLayout[id] = { ...itemLayout }
+
+    return clonedLayout
+  }, {})
 }
 
 // 获取仪表板组件的默认宽度，优先兼容插件旧版 cols.md / cols.cols 配置。
@@ -684,7 +856,7 @@ function getDefaultDashboardGridWidth(item: DashboardItem) {
   if (profile === 'mobile') return 1
 
   const columns = getDashboardGridColumnsForProfile(profile)
-  const requestedWidth = profile === 'tablet' ? item.cols?.sm ?? item.cols?.md : item.cols?.md ?? item.cols?.cols
+  const requestedWidth = profile === 'tablet' ? (item.cols?.sm ?? item.cols?.md) : (item.cols?.md ?? item.cols?.cols)
 
   return clampGridNumber(requestedWidth, 1, columns, columns)
 }
@@ -700,7 +872,8 @@ function buildDashboardGridWidget(item: DashboardItem, id: string): GridStackWid
   const defaultLayout = dashboardLayoutProfile.value === 'desktop' ? DASHBOARD_DESKTOP_DEFAULT_LAYOUT[id] : undefined
   const gridColumns = getDashboardGridColumnsForProfile(dashboardLayoutProfile.value)
   const width = savedLayout?.w ?? defaultLayout?.w ?? getDefaultDashboardGridWidth(item)
-  const height = savedLayout?.h ?? defaultLayout?.h ?? getDefaultDashboardGridRows(item)
+  const height =
+    savedLayout?.h ?? dashboardGridAutoHeights.value[id] ?? defaultLayout?.h ?? getDefaultDashboardGridRows(item)
   const normalizedWidth = clampGridNumber(width, 1, gridColumns, gridColumns)
   const widget: GridStackWidget = {
     id,
@@ -759,10 +932,11 @@ function updateDashboardSettingsDialog() {
   })
 }
 
-// 退出仪表板布局编辑模式；如果刚恢复默认布局，则跳过本次本地持久化。
+// 退出仪表板布局编辑模式；用户点击确认时才把临时布局草稿持久化。
 async function exitDashboardLayoutEditing() {
-  if (isDashboardGridLayoutResetPending.value) {
-    isDashboardGridLayoutResetPending.value = false
+  if (isDashboardGridLayoutResetDraft.value) {
+    await saveDashboardGridLayout(dashboardGridLayout.value)
+    isDashboardGridLayoutResetDraft.value = false
   } else {
     await persistCurrentDashboardGridLayout()
   }
@@ -775,21 +949,21 @@ async function exitDashboardLayoutEditing() {
   notifyDashboardContentResize()
 }
 
-// 清除用户本地布局覆盖，并恢复内置组件和插件声明的默认占位，然后退出编辑模式。
+// 清除用户布局覆盖并恢复默认占位；编辑中仅写入临时草稿并等待确认持久化。
 async function resetDashboardGridLayout() {
+  const shouldPersistImmediately = !isLayoutEditing.value
+
   dashboardGridLayout.value = {}
-  saveDashboardGridLayout({})
-  dashboardGrid.value?.removeAll(false, false)
-  isDashboardGridLayoutResetPending.value = true
-  await syncDashboardGrid()
-  if (isLayoutEditing.value) {
-    await exitDashboardLayoutEditing()
-  } else {
-    await nextTick()
-    syncDashboardFillContentState()
-    resizeAutoDashboardItemsToContent()
-    notifyDashboardContentResize()
+  if (shouldPersistImmediately) {
+    await saveDashboardGridLayout({})
   }
+  isDashboardGridLayoutResetDraft.value = isLayoutEditing.value
+  dashboardGrid.value?.removeAll(false, false)
+  await syncDashboardGrid()
+  await nextTick()
+  syncDashboardFillContentState()
+  resizeAutoDashboardItemsToContent()
+  notifyDashboardContentResize()
 }
 
 // 生成 appMode 底部动态按钮菜单，普通 Web 模式由页面内 FAB 承接。
@@ -834,41 +1008,48 @@ useDynamicButton({
   show: computed(() => appMode.value && route.path === '/dashboard'),
 })
 
-// 切换仪表板布局编辑模式，退出编辑时保存当前布局。
+// 切换仪表板布局编辑模式，点击确认退出时持久化当前布局草稿。
 function toggleDashboardLayoutEditing() {
   if (isLayoutEditing.value) {
     void exitDashboardLayoutEditing()
     return
   }
 
-  isDashboardGridLayoutResetPending.value = false
+  isDashboardGridLayoutResetDraft.value = false
   isLayoutEditing.value = true
   nextTick(syncDashboardGrid)
 }
 
 // 加载用户监控面板配置，优先使用服务端用户配置以支持跨浏览器同步。
 async function loadDashboardConfig() {
-  dashboardLayoutProfile.value = resolveDashboardLayoutProfile()
-  // 顺序配置
-  const order = await loadSharedDashboardConfig(
+  const profile = resolveDashboardLayoutProfile()
+  const profileSwitchId = dashboardLayoutProfileSwitchId
+  dashboardLayoutProfile.value = profile
+  // 顺序和当前设备档位互不依赖，并行校验可缩短无本地缓存时的首屏等待时间。
+  const orderPromise = loadSharedDashboardConfig(
     DASHBOARD_ORDER_CONFIG_KEY,
     DASHBOARD_ORDER_STORAGE_KEY,
     normalizeDashboardOrderConfig,
   )
-  if (order !== undefined) {
+  const profileConfigPromise = loadDashboardProfileConfig(profile)
+  // 共享顺序不得等待单个档位请求，否则设置保存可能把尚未应用的旧顺序写回服务端。
+  void orderPromise.then(order => {
+    if (order === undefined) return
+
     orderConfig.value = order
-  }
-  // 设备档位配置同时承载 Grid 布局和显示项，显示项缺失时从旧版全局配置迁移。
-  const profileConfig = await loadDashboardProfileConfig(dashboardLayoutProfile.value)
-  const legacyEnable = profileConfig?.enabled === undefined ? await loadLegacyDashboardEnableConfig() : undefined
-  dashboardGridLayout.value = profileConfig?.items ?? {}
-  enableConfig.value = mergeDashboardEnableConfig(profileConfig?.enabled ?? legacyEnable)
-  if (profileConfig?.enabled === undefined && legacyEnable !== undefined) {
-    saveDashboardProfileConfig()
-  }
-  // 排序
-  if (orderConfig.value) {
     sortDashboardConfigs()
+  })
+  const profileConfig = await profileConfigPromise
+  if (profileSwitchId !== dashboardLayoutProfileSwitchId || dashboardLayoutProfile.value !== profile) {
+    return
+  }
+
+  const legacyEnable = profileConfig?.enabled === undefined ? await loadLegacyDashboardEnableConfig() : undefined
+  if (profileSwitchId !== dashboardLayoutProfileSwitchId || dashboardLayoutProfile.value !== profile) return
+
+  applyDashboardConfig(profileConfig, legacyEnable, undefined)
+  if (profileConfig?.enabled === undefined && legacyEnable !== undefined) {
+    await saveDashboardProfileConfig()
   }
 }
 
@@ -894,7 +1075,7 @@ async function saveDashboardConfig(payload?: { enabled?: Record<string, boolean>
   // 顺序配置，从dashboardConfigs中提取
   const orderObj = dashboardConfigs.value.map(item => ({ id: item.id, key: item.key }))
   saveLocalDashboardConfig(DASHBOARD_ORDER_STORAGE_KEY, orderObj)
-  saveDashboardProfileConfig()
+  await saveDashboardProfileConfig()
 
   // 保存到服务端
   try {
@@ -1007,17 +1188,9 @@ function initializeDashboardGrid() {
 
   dashboardGrid.value = GridStack.init(
     {
-      animate: true,
+      animate: shouldAnimateDashboardGrid(),
       cellHeight: DASHBOARD_GRID_CELL_HEIGHT,
-      column: DASHBOARD_GRID_COLUMNS,
-      columnOpts: {
-        breakpoints: [
-          { w: DASHBOARD_GRID_MOBILE_BREAKPOINT, c: 1, layout: 'list' },
-          { w: DASHBOARD_GRID_TABLET_BREAKPOINT, c: 6, layout: 'moveScale' },
-          { w: DASHBOARD_GRID_DESKTOP_BREAKPOINT, c: DASHBOARD_GRID_COLUMNS, layout: 'moveScale' },
-        ],
-        layout: 'moveScale',
-      },
+      column: getDashboardGridColumnsForProfile(dashboardLayoutProfile.value),
       draggable: {
         cancel: 'input,textarea,button,select,option,a,.dashboard-grid-no-drag',
         handle: '.dashboard-grid-drag-handle',
@@ -1045,6 +1218,7 @@ function updateDashboardGridEditableState(editable: boolean) {
   if (!dashboardGrid.value) return
 
   dashboardGrid.value.setStatic(!editable)
+  dashboardGrid.value.setAnimation(shouldAnimateDashboardGrid(editable))
   if (editable) {
     dashboardGrid.value.enableMove(true)
     dashboardGrid.value.enableResize(true)
@@ -1052,18 +1226,32 @@ function updateDashboardGridEditableState(editable: boolean) {
 }
 
 // 将 Vue 渲染出的仪表板节点同步注册到 GridStack。
-async function syncDashboardGrid() {
+async function syncDashboardGrid(resumeAnimation = true) {
   const grid = dashboardGrid.value
   const gridElement = dashboardGridRef.value
   if (!grid || !gridElement) return
 
+  const restoreProfileDefaults = shouldRestoreDashboardGridProfileDefaults
+  shouldRestoreDashboardGridProfileDefaults = false
+  pauseDashboardGridAnimation()
   isSyncingDashboardGrid.value = true
   await nextTick()
   syncDashboardFillContentState()
 
   const items = dashboardGridItems.value
   const itemMap = new Map(items.map(item => [item.id, item]))
-  const elements = Array.from(gridElement.querySelectorAll<GridItemHTMLElement>('.dashboard-grid-item'))
+  const synchronizedWidgets = new Map<string, GridStackWidget>()
+  const elements = Array.from(gridElement.querySelectorAll<GridItemHTMLElement>('.dashboard-grid-item')).sort(
+    (a, b) => {
+      const aWidget = itemMap.get(a.getAttribute('gs-id') ?? '')?.widget
+      const bWidget = itemMap.get(b.getAttribute('gs-id') ?? '')?.widget
+
+      return (
+        (aWidget?.y ?? Number.MAX_SAFE_INTEGER) - (bWidget?.y ?? Number.MAX_SAFE_INTEGER) ||
+        (aWidget?.x ?? Number.MAX_SAFE_INTEGER) - (bWidget?.x ?? Number.MAX_SAFE_INTEGER)
+      )
+    },
+  )
 
   try {
     grid.batchUpdate()
@@ -1084,14 +1272,15 @@ async function syncDashboardGrid() {
       if (!item) return
 
       const widget = { ...item.widget }
-      if (element.gridstackNode && !dashboardGridLayout.value[id]) {
+      if (element.gridstackNode && !dashboardGridLayout.value[id] && !restoreProfileDefaults) {
         delete widget.autoPosition
-        delete widget.x
-        delete widget.y
+        widget.x = element.gridstackNode.x
+        widget.y = element.gridstackNode.y
       }
       if (element.gridstackNode && !hasManualDashboardGridHeight(id)) {
         widget.h = element.gridstackNode.h
       }
+      synchronizedWidgets.set(id, widget)
 
       if (element.gridstackNode) {
         grid.update(element, widget)
@@ -1101,6 +1290,11 @@ async function syncDashboardGrid() {
     })
 
     grid.batchUpdate(false)
+    // 完整档位布局由 GridStack 按坐标统一恢复，避免逐个注册时的页面节点顺序污染跨列和响应式布局。
+    grid.load(
+      items.map(item => ({ ...(synchronizedWidgets.get(item.id) ?? item.widget) })),
+      false,
+    )
     updateDashboardGridEditableState(isLayoutEditing.value)
     syncDashboardFillContentState()
     observeDashboardGridContent()
@@ -1111,6 +1305,7 @@ async function syncDashboardGrid() {
     })
   } finally {
     isSyncingDashboardGrid.value = false
+    if (resumeAnimation) scheduleDashboardGridAnimationResume()
   }
 }
 
@@ -1134,16 +1329,24 @@ function syncDashboardFillContentState(element?: GridItemHTMLElement) {
 // 监听仪表板组件内容尺寸变化，让未手动调高的组件按内容高度自适应。
 function observeDashboardGridContent() {
   const gridElement = dashboardGridRef.value
+  dashboardGridContentMutationObserver?.disconnect()
+  dashboardGridContentMutationObserver = null
+  dashboardGridContentObserver?.disconnect()
+  dashboardGridContentObserver = null
+  dashboardGridPendingContentResize.clear()
+  dashboardGridObservedContentHeights.clear()
+  dashboardGridObservedSizeSources.clear()
   if (!gridElement || typeof ResizeObserver === 'undefined') return
 
   syncDashboardFillContentState()
-  dashboardGridContentObserver?.disconnect()
-  dashboardGridPendingContentResize.clear()
-  dashboardGridObservedContentHeights.clear()
   dashboardGridContentObserver = new ResizeObserver(entries => {
     entries.forEach(entry => {
       const itemElement = entry.target.closest('.dashboard-grid-item') as GridItemHTMLElement | null
-      if (itemElement && shouldScheduleDashboardContentResize(itemElement, entry.contentRect.height)) {
+      const isSizeSource = entry.target.matches(DASHBOARD_GRID_SIZE_SOURCE_SELECTOR)
+      if (
+        itemElement &&
+        (isSizeSource || shouldScheduleDashboardContentResize(itemElement, entry.contentRect.height))
+      ) {
         scheduleDashboardItemContentResize(itemElement)
       }
     })
@@ -1152,6 +1355,46 @@ function observeDashboardGridContent() {
   gridElement.querySelectorAll<HTMLElement>('.dashboard-grid-auto-size').forEach(element => {
     dashboardGridContentObserver?.observe(element)
   })
+  gridElement.querySelectorAll<HTMLElement>(DASHBOARD_GRID_SIZE_SOURCE_SELECTOR).forEach(observeDashboardGridSizeSource)
+
+  if (typeof MutationObserver === 'undefined') return
+
+  dashboardGridContentMutationObserver = new MutationObserver(mutations => {
+    mutations.forEach(mutation => {
+      mutation.removedNodes.forEach(node => {
+        findDashboardGridSizeSources(node).forEach(unobserveDashboardGridSizeSource)
+      })
+      mutation.addedNodes.forEach(node => {
+        findDashboardGridSizeSources(node).forEach(observeDashboardGridSizeSource)
+      })
+    })
+  })
+  dashboardGridContentMutationObserver.observe(gridElement, { childList: true, subtree: true })
+}
+
+// 返回节点自身及后代声明的真实尺寸源，普通子节点变化不进入测高路径。
+function findDashboardGridSizeSources(node: Node) {
+  if (!(node instanceof Element)) return []
+
+  const sources = Array.from(node.querySelectorAll<Element>(DASHBOARD_GRID_SIZE_SOURCE_SELECTOR))
+  if (node.matches(DASHBOARD_GRID_SIZE_SOURCE_SELECTOR)) sources.unshift(node)
+
+  return sources
+}
+
+// 注册异步挂载的尺寸源；ResizeObserver 的首次回调负责触发实际测高。
+function observeDashboardGridSizeSource(element: Element) {
+  if (!dashboardGridContentObserver || dashboardGridObservedSizeSources.has(element)) return
+
+  dashboardGridObservedSizeSources.add(element)
+  dashboardGridContentObserver.observe(element)
+}
+
+// 节点卸载后同步解除观察，避免 KeepAlive 与布局重建保留失效引用。
+function unobserveDashboardGridSizeSource(element: Element) {
+  if (!dashboardGridContentObserver || !dashboardGridObservedSizeSources.delete(element)) return
+
+  dashboardGridContentObserver.unobserve(element)
 }
 
 // 判断内容高度变化是否足够触发 GridStack 行高重算，避免 hover 级微小波动造成布局抖动。
@@ -1183,7 +1426,15 @@ function scheduleDashboardItemContentResize(element: GridItemHTMLElement) {
 function resizeDashboardItemToContent(element: GridItemHTMLElement) {
   const grid = dashboardGrid.value
   const id = element.getAttribute('gs-id') ?? ''
-  if (!grid || !id || isLayoutEditing.value || isDashboardGridResizing.value || hasManualDashboardGridHeight(id)) return
+  if (
+    !grid ||
+    !id ||
+    isSwitchingDashboardLayoutProfile ||
+    isLayoutEditing.value ||
+    isDashboardGridResizing.value ||
+    hasManualDashboardGridHeight(id)
+  )
+    return
 
   syncDashboardFillContentState(element)
   const shouldMeasureFillContent = element.classList.contains('has-fill-content')
@@ -1193,6 +1444,18 @@ function resizeDashboardItemToContent(element: GridItemHTMLElement) {
 
   try {
     grid.resizeToContent(element)
+    const measuredHeight = element.gridstackNode?.h
+    if (
+      measuredHeight !== undefined &&
+      measuredHeight !== dashboardGridAutoHeights.value[id] &&
+      Number.isFinite(measuredHeight)
+    ) {
+      dashboardGridAutoHeights.value[id] = clampGridNumber(measuredHeight, 1, 96, getDefaultDashboardGridRows())
+      saveLocalDashboardConfig(
+        getDashboardGridAutoHeightStorageKey(dashboardLayoutProfile.value),
+        dashboardGridAutoHeights.value,
+      )
+    }
   } finally {
     if (shouldMeasureFillContent) {
       element.classList.remove('is-measuring-content')
@@ -1226,12 +1489,12 @@ function handleDashboardGridResize() {
   notifyDashboardContentResize()
 }
 
-// 保存用户拖动后的位置，并保持未手动调高组件继续按内容自适应。
+// 缓存用户拖动后的位置，并保持未手动调高组件继续按内容自适应。
 function handleDashboardGridDragStop() {
-  void persistCurrentDashboardGridLayout(false)
+  void cacheCurrentDashboardGridLayout(false)
 }
 
-// 保存用户缩放后的布局，只有高度发生变化时才把高度标记为手动固定。
+// 缓存用户缩放后的布局，只有高度发生变化时才把高度标记为手动固定。
 function handleDashboardGridResizeStop(_event: Event, element: GridItemHTMLElement) {
   const id = element.getAttribute('gs-id') ?? ''
   const previousHeight = dashboardGridResizeStartHeights.get(id)
@@ -1241,7 +1504,7 @@ function handleDashboardGridResizeStop(_event: Event, element: GridItemHTMLEleme
   dashboardGridResizeStartHeights.delete(id)
   isDashboardGridResizing.value = false
   notifyDashboardContentResize()
-  void persistCurrentDashboardGridLayout(heightChanged ? id : false)
+  void cacheCurrentDashboardGridLayout(heightChanged ? id : false)
 }
 
 // 合并连续 resize 通知，模拟浏览器窗口变化让组件内部内容自适配新尺寸。
@@ -1254,9 +1517,9 @@ function notifyDashboardContentResize() {
   })
 }
 
-// 将 GridStack 保存结果归一化为本地布局覆盖表。
-function persistDashboardGridLayout(manualHeightId: string | false = false) {
-  if (!dashboardGrid.value || isSyncingDashboardGrid.value) return
+// 将 GridStack 保存结果归一化为临时布局草稿。
+function cacheDashboardGridLayoutDraft(manualHeightId: string | false = false) {
+  if (!dashboardGrid.value || isSyncingDashboardGrid.value) return undefined
 
   const gridColumns = getCurrentDashboardGridColumns()
   const savedWidgets = dashboardGrid.value.save(false, false, undefined, gridColumns)
@@ -1284,11 +1547,13 @@ function persistDashboardGridLayout(manualHeightId: string | false = false) {
 
   isPersistingDashboardGridLayoutFromGrid.value = true
   dashboardGridLayout.value = nextLayout
-  saveDashboardGridLayout(nextLayout)
+  isDashboardGridLayoutResetDraft.value = false
   nextTick(() => {
     isPersistingDashboardGridLayoutFromGrid.value = false
     resizeAutoDashboardItemsToContent()
   })
+
+  return nextLayout
 }
 
 // 根据组件 ID 查找默认宽度，保存布局时用于兜底。
@@ -1298,13 +1563,20 @@ function getDefaultDashboardGridWidthById(id: string, maxColumns = DASHBOARD_GRI
   return item ? Math.min(getDefaultDashboardGridWidth(item), maxColumns) : maxColumns
 }
 
-// 等待 GridStack 当前拖拽/缩放事件收尾后，保存用户当前看到的布局。
-async function persistCurrentDashboardGridLayout(manualHeightId: string | false = false) {
+// 等待 GridStack 当前拖拽/缩放事件收尾后，把用户当前看到的布局写入临时草稿。
+async function cacheCurrentDashboardGridLayout(manualHeightId: string | false = false) {
   if (!dashboardGrid.value || isSyncingDashboardGrid.value) return
 
-  isDashboardGridLayoutResetPending.value = false
   await nextTick()
-  persistDashboardGridLayout(manualHeightId)
+  return cacheDashboardGridLayoutDraft(manualHeightId)
+}
+
+// 等待 GridStack 当前拖拽/缩放事件收尾后，持久化用户确认的临时布局草稿。
+async function persistCurrentDashboardGridLayout(manualHeightId: string | false = false) {
+  const nextLayout = await cacheCurrentDashboardGridLayout(manualHeightId)
+  if (!nextLayout) return
+
+  await saveDashboardGridLayout(nextLayout)
 }
 
 // 清理 GridStack 内部响应式布局缓存，并用当前 Vue 布局状态重新注册已有 DOM 节点。
@@ -1320,10 +1592,15 @@ watch(isLayoutEditing, value => {
 })
 
 watch(
+  () => vuetifyTheme.global.name.value,
+  () => updateDashboardGridEditableState(isLayoutEditing.value),
+)
+
+watch(
   dashboardGridItems,
   () => {
     syncDashboardLoadedItemIds()
-    if (!isPersistingDashboardGridLayoutFromGrid.value) {
+    if (!isSwitchingDashboardLayoutProfile && !isPersistingDashboardGridLayoutFromGrid.value) {
       syncDashboardGrid()
     }
     scheduleDashboardReveal()
@@ -1339,28 +1616,64 @@ watch(
 
     // GridStack 可能已先完成列数压缩；档位切换只读取目标配置，不能保存当前自动重排结果。
     const profileSwitchId = ++dashboardLayoutProfileSwitchId
+    isSwitchingDashboardLayoutProfile = true
     dashboardLayoutProfile.value = nextProfile
-    const profileConfig = await loadDashboardProfileConfig(nextProfile)
-    if (profileSwitchId !== dashboardLayoutProfileSwitchId || dashboardLayoutProfile.value !== nextProfile) return
+    try {
+      const localProfileConfig = readLocalDashboardConfig(
+        getDashboardGridLayoutStorageKey(nextProfile),
+        normalizeDashboardProfileConfig,
+      )
+      const localLegacyEnable =
+        localProfileConfig?.enabled === undefined
+          ? readLocalDashboardConfig(DASHBOARD_ENABLE_STORAGE_KEY, normalizeDashboardEnableConfig)
+          : undefined
+      const nextAutoHeights =
+        readLocalDashboardConfig(
+          getDashboardGridAutoHeightStorageKey(nextProfile),
+          normalizeDashboardGridAutoHeightConfig,
+        ) ?? {}
+      dashboardGridAutoHeights.value = nextAutoHeights
+      applyDashboardConfig(localProfileConfig, localLegacyEnable, undefined)
+      updateDashboardSettingsDialog()
+      pauseDashboardGridAnimation()
+      dashboardGrid.value?.column(
+        getDashboardGridColumnsForProfile(nextProfile),
+        getDashboardGridColumnLayout(nextProfile),
+      )
+      dashboardGrid.value?.removeAll(false, false)
+      await syncDashboardGrid(false)
+      scheduleDashboardGridAnimationResume()
+      if (profileSwitchId === dashboardLayoutProfileSwitchId) {
+        isSwitchingDashboardLayoutProfile = false
+      }
 
-    const legacyEnable = profileConfig?.enabled === undefined ? await loadLegacyDashboardEnableConfig() : undefined
-    if (profileSwitchId !== dashboardLayoutProfileSwitchId || dashboardLayoutProfile.value !== nextProfile) return
+      const profileConfig = await loadDashboardProfileConfig(nextProfile)
+      if (profileSwitchId !== dashboardLayoutProfileSwitchId || dashboardLayoutProfile.value !== nextProfile) return
 
-    dashboardGridLayout.value = profileConfig?.items ?? {}
-    enableConfig.value = mergeDashboardEnableConfig(profileConfig?.enabled ?? legacyEnable)
-    if (profileConfig?.enabled === undefined && legacyEnable !== undefined) {
-      saveDashboardProfileConfig()
+      const legacyEnable = profileConfig?.enabled === undefined ? await loadLegacyDashboardEnableConfig() : undefined
+      if (profileSwitchId !== dashboardLayoutProfileSwitchId || dashboardLayoutProfile.value !== nextProfile) return
+
+      isSwitchingDashboardLayoutProfile = true
+      applyDashboardConfig(profileConfig, legacyEnable, undefined)
+      if (profileConfig?.enabled === undefined && legacyEnable !== undefined) {
+        // 兼容配置的远端回填不得阻塞当前档位重建，否则慢请求会让 Vue 状态和 GridStack 节点暂时分离。
+        void saveDashboardProfileConfig()
+      }
+      updateDashboardSettingsDialog()
+      pauseDashboardGridAnimation()
+      dashboardGrid.value?.removeAll(false, false)
+      await syncDashboardGrid(false)
+      scheduleDashboardGridAnimationResume()
+      notifyDashboardContentResize()
+    } finally {
+      if (profileSwitchId === dashboardLayoutProfileSwitchId) {
+        isSwitchingDashboardLayoutProfile = false
+      }
     }
-    updateDashboardSettingsDialog()
-    dashboardGrid.value?.column(
-      getDashboardGridColumnsForProfile(nextProfile),
-      getDashboardGridColumnLayout(nextProfile),
-    )
-    dashboardGrid.value?.removeAll(false, false)
-    await syncDashboardGrid()
-    notifyDashboardContentResize()
   },
 )
+
+hydrateDashboardConfigFromLocal()
 
 onBeforeMount(async () => {
   await loadDashboardConfig()
@@ -1386,6 +1699,8 @@ onDeactivated(() => {
 
 onBeforeUnmount(() => {
   Object.keys(refreshTimers.value).forEach(clearPluginDashboardTimer)
+  dashboardGridContentMutationObserver?.disconnect()
+  dashboardGridContentMutationObserver = null
   dashboardGridContentObserver?.disconnect()
   dashboardGridContentObserver = null
   if (dashboardGridContentResizeFrame !== null) {
@@ -1396,12 +1711,17 @@ onBeforeUnmount(() => {
     cancelAnimationFrame(dashboardGridResizeRefreshFrame)
     dashboardGridResizeRefreshFrame = null
   }
+  if (dashboardGridAnimationFrame !== null) {
+    cancelAnimationFrame(dashboardGridAnimationFrame)
+    dashboardGridAnimationFrame = null
+  }
   if (dashboardRevealFrame !== null) {
     cancelAnimationFrame(dashboardRevealFrame)
     dashboardRevealFrame = null
   }
   dashboardGridPendingContentResize.clear()
   dashboardGridObservedContentHeights.clear()
+  dashboardGridObservedSizeSources.clear()
   dashboardGridResizeStartHeights.clear()
   dashboardGrid.value?.destroy(false)
   dashboardGrid.value = null
@@ -1478,10 +1798,6 @@ onBeforeUnmount(() => {
 
 .dashboard-grid {
   pointer-events: auto;
-  transition:
-    opacity 0.45s cubic-bezier(0.25, 1, 0.5, 1),
-    transform 0.45s cubic-bezier(0.25, 1, 0.5, 1);
-  will-change: opacity, transform;
 }
 
 .dashboard-grid :deep(.v-card) {
@@ -1502,6 +1818,13 @@ onBeforeUnmount(() => {
 
 .dashboard-grid-item.is-manual-height :deep(.v-card) {
   block-size: 100%;
+}
+
+/* 需要默认尺寸约束的组件可挂载此类，用户编辑后统一解除比例和最小高度。 */
+.dashboard-grid-item.is-manual-height :deep(.dashboard-grid-adaptive-size),
+.dashboard-grid.is-editing :deep(.dashboard-grid-adaptive-size) {
+  aspect-ratio: auto;
+  min-block-size: 0;
 }
 
 .dashboard-grid-item.is-manual-height :deep(.dashboard-work-card),
@@ -1555,6 +1878,11 @@ onBeforeUnmount(() => {
 
 .dashboard-grid.is-editing :deep(.v-card) {
   block-size: 100%;
+  min-block-size: 0;
+}
+
+.dashboard-grid-item.is-manual-height :deep(.v-card) {
+  min-block-size: 0;
 }
 
 .dashboard-grid.is-editing :deep(.v-card-text),
@@ -1597,12 +1925,5 @@ onBeforeUnmount(() => {
   inline-size: 24px;
   inset-block-end: -4px;
   inset-inline-end: -4px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .dashboard-grid {
-    transform: none;
-    transition: none;
-  }
 }
 </style>

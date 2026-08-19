@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  getDefaultGlassCustomizerSettings,
   themeCustomizerPrimaryColors,
   themeCustomizerShadowLevels,
   useThemeCustomizer,
@@ -22,6 +23,8 @@ const customColorInput = ref<HTMLInputElement | null>(null)
 const {
   isCustomized,
   resetSettings,
+  setGlassAppearance,
+  setGlassQuality,
   setLayout,
   setPrimaryColor,
   setRadius,
@@ -35,6 +38,7 @@ const { appMode } = usePWA()
 const { t } = useI18n()
 const { global: globalTheme } = useTheme()
 const defaultPrimaryColor = themeCustomizerPrimaryColors[0].value
+const defaultAppModeGlassSettings = getDefaultGlassCustomizerSettings('css')
 
 // 将主题定制器打开状态同步到根节点，供全局悬浮按钮避让右侧面板。
 function syncThemeCustomizerOpenState(isOpen: boolean) {
@@ -81,6 +85,7 @@ const themeOptions = computed<Array<{ icon: string; title: string; value: ThemeC
   { title: t('theme.auto'), value: 'auto', icon: 'mdi-monitor' },
   { title: t('theme.purple'), value: 'purple', icon: 'mdi-theme-light-dark' },
   { title: t('theme.transparent'), value: 'transparent', icon: 'mdi-blur' },
+  { title: t('theme.glass'), value: 'glass', icon: 'mdi-blur-radial' },
 ])
 
 const skinOptions = computed<Array<{ title: string; value: ThemeCustomizerSkin }>>(() => [
@@ -127,9 +132,24 @@ const layoutOptions = computed<Array<{ icon: string; title: string; value: Theme
 
 const showLayoutSection = computed(() => !appMode.value)
 
+// 玻璃表面依赖固定的高光描边维持轮廓，不提供与材质冲突的通用皮肤切换。
+const showSkinSection = computed(() => globalTheme.name.value !== 'glass')
+
+// 玻璃主题使用成套的外阴影与内高光，不提供不完整的 Vuetify elevation 调整。
+const showShadowSection = computed(() => globalTheme.name.value !== 'glass')
+
 const hasAppModeCustomization = computed(() => {
   return (
     settings.value.primaryColor !== defaultPrimaryColor ||
+    settings.value.glassAppearance !== defaultAppModeGlassSettings.glassAppearance ||
+    settings.value.glassDeformationStrength !== defaultAppModeGlassSettings.glassDeformationStrength ||
+    settings.value.glassDynamicsMode !== defaultAppModeGlassSettings.glassDynamicsMode ||
+    settings.value.glassFlowStrength !== defaultAppModeGlassSettings.glassFlowStrength ||
+    settings.value.glassQuality !== defaultAppModeGlassSettings.glassQuality ||
+    settings.value.glassReflectionStrength !== defaultAppModeGlassSettings.glassReflectionStrength ||
+    settings.value.glassTransmissionStrength !== defaultAppModeGlassSettings.glassTransmissionStrength ||
+    settings.value.glassTranslationStrength !== defaultAppModeGlassSettings.glassTranslationStrength ||
+    settings.value.glassTransparencyStrength !== defaultAppModeGlassSettings.glassTransparencyStrength ||
     settings.value.radius !== 'default' ||
     settings.value.shadow !== '0' ||
     settings.value.skin !== 'default' ||
@@ -190,6 +210,8 @@ async function handleResetSettings() {
 
   // App 模式共享定制器，但保留桌面导航相关偏好，只重置 App 侧可调整的外观设置。
   await setPrimaryColor(defaultPrimaryColor)
+  await setGlassAppearance('clear')
+  await setGlassQuality('css')
   await setRadius('default')
   await setShadow('0')
   await setSkin('default')
@@ -198,11 +220,7 @@ async function handleResetSettings() {
 </script>
 
 <template>
-  <aside
-    class="theme-customizer-panel-host"
-    role="dialog"
-    :aria-label="t('theme.customizer.title')"
-  >
+  <aside class="theme-customizer-panel-host" role="dialog" :aria-label="t('theme.customizer.title')">
     <div class="theme-customizer-panel" :class="{ 'theme-customizer-panel--dialog': appMode, 'app-surface': appMode }">
       <div class="theme-customizer-header py-5 px-4">
         <div>
@@ -271,34 +289,36 @@ async function handleResetSettings() {
             </div>
           </div>
 
-          <VDivider class="mt-7" />
+          <template v-if="showSkinSection">
+            <VDivider class="mt-7" />
 
-          <h3 class="theme-customizer-section-title">{{ t('theme.customizer.skins') }}</h3>
-          <div class="theme-customizer-preview-grid theme-customizer-preview-grid--skins">
-            <div
-              v-for="skin in skinOptions"
-              :key="skin.value"
-              class="theme-customizer-preview-option"
-              :class="{ 'is-active': settings.skin === skin.value }"
-              @click="setSkin(skin.value)"
-            >
-              <span class="theme-customizer-border-scene" :class="`theme-customizer-border-scene--${skin.value}`">
-                <span class="theme-customizer-border-scene__card">
-                  <i />
-                  <i />
+            <h3 class="theme-customizer-section-title">{{ t('theme.customizer.skins') }}</h3>
+            <div class="theme-customizer-preview-grid theme-customizer-preview-grid--skins">
+              <div
+                v-for="skin in skinOptions"
+                :key="skin.value"
+                class="theme-customizer-preview-option"
+                :class="{ 'is-active': settings.skin === skin.value }"
+                @click="setSkin(skin.value)"
+              >
+                <span class="theme-customizer-border-scene" :class="`theme-customizer-border-scene--${skin.value}`">
+                  <span class="theme-customizer-border-scene__card">
+                    <i />
+                    <i />
+                  </span>
+                  <span class="theme-customizer-border-scene__dialog">
+                    <i />
+                  </span>
+                  <span class="theme-customizer-border-scene__menu">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
                 </span>
-                <span class="theme-customizer-border-scene__dialog">
-                  <i />
-                </span>
-                <span class="theme-customizer-border-scene__menu">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-              </span>
-              <span>{{ skin.title }}</span>
+                <span>{{ skin.title }}</span>
+              </div>
             </div>
-          </div>
+          </template>
 
           <VDivider class="mt-7" />
 
@@ -311,10 +331,7 @@ async function handleResetSettings() {
               :class="{ 'is-active': settings.radius === radius.value }"
               @click="setRadius(radius.value)"
             >
-              <span
-                class="theme-customizer-radius-scene"
-                :class="`theme-customizer-radius-scene--${radius.value}`"
-              >
+              <span class="theme-customizer-radius-scene" :class="`theme-customizer-radius-scene--${radius.value}`">
                 <span class="theme-customizer-radius-scene__card">
                   <span class="theme-customizer-radius-scene__badge" />
                   <span class="theme-customizer-radius-scene__line" />
@@ -325,46 +342,47 @@ async function handleResetSettings() {
             </div>
           </div>
 
-          <VDivider class="mt-7" />
+          <template v-if="showShadowSection">
+            <VDivider class="mt-7" />
 
-          <h3 class="theme-customizer-section-title">{{ t('theme.customizer.shadow') }}</h3>
-          <div class="theme-customizer-shadow-slider">
-            <div class="theme-customizer-shadow-slider__header">
-              <span>{{ t('theme.customizer.shadowLevel', { level: settings.shadow }) }}</span>
-              <span>0 - 24</span>
+            <h3 class="theme-customizer-section-title">{{ t('theme.customizer.shadow') }}</h3>
+            <div class="theme-customizer-shadow-slider">
+              <div class="theme-customizer-shadow-slider__header">
+                <span>{{ t('theme.customizer.shadowLevel', { level: settings.shadow }) }}</span>
+                <span>0 - 24</span>
+              </div>
+              <div class="theme-customizer-shadow-slider__control">
+                <span
+                  class="theme-customizer-shadow-slider__sample"
+                  :style="{ boxShadow: `var(--app-elevation-${settings.shadow})` }"
+                >
+                  <span class="theme-customizer-shadow-slider__sample-accent" />
+                  <span class="theme-customizer-shadow-slider__sample-line" />
+                  <span
+                    class="theme-customizer-shadow-slider__sample-line theme-customizer-shadow-slider__sample-line--short"
+                  />
+                </span>
+                <VSlider
+                  :model-value="shadowSliderValue"
+                  :aria-label="t('theme.customizer.shadow')"
+                  :max="24"
+                  :min="0"
+                  :step="1"
+                  color="primary"
+                  density="comfortable"
+                  hide-details
+                  show-ticks="always"
+                  thumb-label
+                  tick-size="2"
+                  @update:model-value="handleShadowSliderChange"
+                />
+              </div>
+              <div class="theme-customizer-shadow-slider__scale" aria-hidden="true">
+                <span>0</span>
+                <span>24</span>
+              </div>
             </div>
-            <div class="theme-customizer-shadow-slider__control">
-              <span
-                class="theme-customizer-shadow-slider__sample"
-                :style="{ boxShadow: `var(--app-elevation-${settings.shadow})` }"
-              >
-                <span class="theme-customizer-shadow-slider__sample-accent" />
-                <span class="theme-customizer-shadow-slider__sample-line" />
-                <span class="theme-customizer-shadow-slider__sample-line theme-customizer-shadow-slider__sample-line--short" />
-              </span>
-              <VSlider
-                :model-value="shadowSliderValue"
-                :aria-label="t('theme.customizer.shadow')"
-                :max="24"
-                :min="0"
-                :step="1"
-                color="primary"
-                density="comfortable"
-                hide-details
-                show-ticks="always"
-                thumb-label
-                tick-size="2"
-                @update:model-value="handleShadowSliderChange"
-              />
-            </div>
-            <div
-              class="theme-customizer-shadow-slider__scale"
-              aria-hidden="true"
-            >
-              <span>0</span>
-              <span>24</span>
-            </div>
-          </div>
+          </template>
 
           <div v-if="showSemiDarkMenuOption" class="theme-customizer-semi-dark">
             <span>{{ t('theme.customizer.semiDarkMenu') }}</span>

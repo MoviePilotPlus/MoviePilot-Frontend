@@ -2,7 +2,7 @@
 import api from '@/api'
 import type { Site, TorrentInfo, SiteCategory } from '@/api/types'
 import { formatFileSize } from '@core/utils/formatters'
-import { useDisplay } from 'vuetify'
+import { useDisplay, useTheme } from 'vuetify'
 import AddDownloadDialog from '../dialog/AddDownloadDialog.vue'
 import ProgressiveCardGrid from '@/components/misc/ProgressiveCardGrid.vue'
 import { useI18n } from 'vue-i18n'
@@ -12,6 +12,9 @@ const { t, locale } = useI18n()
 
 // 响应式断点
 const display = useDisplay()
+
+// 当前主题
+const theme = useTheme()
 
 // 输入参数
 const props = defineProps({
@@ -41,6 +44,11 @@ const resourcePage = ref(1)
 
 // 加载状态
 const resourceLoading = ref(false)
+
+const resourceError = ref(false)
+
+// 只有最后发起的搜索可以更新资源数据、请求状态和移动端搜索面板。
+let resourceRequestId = 0
 
 // 移动端搜索栏是否展开
 const mobileSearchExpanded = ref(false)
@@ -92,9 +100,13 @@ const resultSummaryText = computed(() => {
 // 是否小屏幕
 const isMobileLayout = computed(() => display.smAndDown.value)
 
+// 是否透明主题
+const isTransparentTheme = computed(() => theme.name.value === 'transparent')
+
 // 移动端分页数据
 const mobileResourceList = computed(() => resourceDataList.value)
 
+// 获取资源项唯一标识
 function getResourceItemKey(item: TorrentInfo, index: number) {
   return item.page_url || item.enclosure || `${item.title}-${item.pubdate || ''}-${index}`
 }
@@ -127,35 +139,46 @@ async function addDownload(_torrent: TorrentInfo) {
 }
 
 // 添加下载成功
-function addDownloadSuccess(_url: string) {
+function addDownloadSuccess() {
   addDownloadDialog.value = false
 }
 
 // 添加下载失败
-function addDownloadError(_error: string) {
+function addDownloadError() {
   addDownloadDialog.value = false
 }
 
 // 调用API，查询站点资源
 async function getResourceList() {
+  const requestId = ++resourceRequestId
   resourceLoading.value = true
+  resourceError.value = false
   resourcePage.value = 1
 
   try {
-    resourceDataList.value = await api.get(`site/resource/${props.site?.id}`, {
+    const resources: TorrentInfo[] = await api.get(`site/resource/${props.site?.id}`, {
       params: {
         keyword: keyword.value,
         cat: selectCategory.value?.join(','),
       },
     })
+
+    if (requestId === resourceRequestId) {
+      resourceDataList.value = resources
+    }
   } catch (error) {
-    console.error(error)
-  }
+    if (requestId === resourceRequestId) {
+      console.error(error)
+      resourceError.value = true
+    }
+  } finally {
+    if (requestId === resourceRequestId) {
+      resourceLoading.value = false
 
-  resourceLoading.value = false
-
-  if (isMobileLayout.value) {
-    mobileSearchExpanded.value = false
+      if (isMobileLayout.value) {
+        mobileSearchExpanded.value = false
+      }
+    }
   }
 }
 
@@ -188,10 +211,12 @@ watch(
   },
 )
 
+// 切换移动端搜索栏
 function toggleMobileSearch() {
   mobileSearchExpanded.value = !mobileSearchExpanded.value
 }
 
+// 关闭移动端搜索栏
 function closeMobileSearch() {
   mobileSearchExpanded.value = false
 }
@@ -271,10 +296,7 @@ onMounted(() => {
                 </VCol>
               </VRow>
 
-              <div
-                v-if="resourceTotalItems > 0"
-                class="d-flex justify-space-between align-center flex-wrap gap-2 mt-3"
-              >
+              <div v-if="resourceTotalItems > 0" class="d-flex justify-space-between align-center flex-wrap gap-2 mt-3">
                 <div class="text-body-2 text-medium-emphasis">
                   {{ resultSummaryText }}
                 </div>
@@ -341,7 +363,14 @@ onMounted(() => {
                       />
                     </VCol>
                     <VCol cols="12" class="d-flex gap-2">
-                      <VBtn color="primary" variant="flat" block rounded="lg" class="site-resource-search-btn" @click="getResourceList">
+                      <VBtn
+                        color="primary"
+                        variant="flat"
+                        block
+                        rounded="lg"
+                        class="site-resource-search-btn"
+                        @click="getResourceList"
+                      >
                         {{ t('dialog.siteResource.search') }}
                       </VBtn>
                       <VBtn variant="text" rounded="lg" @click="closeMobileSearch">
@@ -357,8 +386,22 @@ onMounted(() => {
       </div>
 
       <VCardText class="site-resource-content px-0 py-0 my-0">
+        <VAlert
+          v-if="resourceError && !resourceLoading"
+          type="error"
+          variant="tonal"
+          class="mx-3 mb-3"
+          :text="t('dialog.siteResource.loadFailed')"
+        >
+          <template #append>
+            <VBtn variant="text" color="error" @click="getResourceList">
+              {{ t('common.retry') }}
+            </VBtn>
+          </template>
+        </VAlert>
+
         <VDataTable
-          v-if="display.mdAndUp.value"
+          v-if="display.mdAndUp.value && (!resourceError || resourceDataList.length > 0)"
           v-model:page="resourcePage"
           v-model:items-per-page="resourceItemsPerPage"
           :headers="resourceHeaders"
@@ -480,7 +523,11 @@ onMounted(() => {
               :get-item-key="getResourceItemKey"
             >
               <template #default="{ item }">
-                <VCard class="site-resource-card" variant="flat">
+                <VCard
+                  class="site-resource-card"
+                  :class="{ 'site-resource-card--transparent': isTransparentTheme }"
+                  variant="flat"
+                >
                   <VCardText class="pa-3">
                     <button type="button" class="site-resource-title-btn text-start" @click="addDownload(item)">
                       <div class="site-resource-card__title text-body-1 font-weight-medium text-high-emphasis">
@@ -616,7 +663,7 @@ onMounted(() => {
             </ProgressiveCardGrid>
           </div>
 
-          <div v-else class="px-4 py-10 text-center text-medium-emphasis">
+          <div v-else-if="!resourceError" class="px-4 py-10 text-center text-medium-emphasis">
             {{ t('dialog.siteResource.noData') }}
           </div>
         </div>
@@ -746,7 +793,7 @@ onMounted(() => {
   background: var(--site-resource-card-bg);
 }
 
-:global(html[data-theme="transparent"]) .site-resource-card {
+.site-resource-card--transparent {
   --site-resource-card-bg: rgba(var(--v-theme-surface), var(--transparent-opacity));
 
   backdrop-filter: blur(var(--transparent-blur));

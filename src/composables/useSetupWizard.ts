@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import api from '@/api'
 import { copyToClipboard } from '@/@core/utils/navigator'
-import { User } from '@/api/types'
+import type { ApiResponse, User } from '@/api/types'
 
 export interface WizardData {
   basic: {
@@ -56,6 +56,8 @@ export interface WizardData {
     authConnected: boolean
     model: string
     thinkingLevel: string
+    apiProtocol: string
+    webSearchMode: string
     supportImageInput: boolean
     supportAudioInput: boolean
     supportAudioOutput: boolean
@@ -65,6 +67,7 @@ export interface WizardData {
     baseUrlPreset: string
     maxContextTokens: number
     userAgent: string
+    temperature: number
     audioInputProvider: string
     audioInputApiKey: string
     audioInputBaseUrl: string
@@ -141,7 +144,9 @@ export interface ValidationErrorState {
 }
 
 function normalizeThinkingLevelValue(value?: unknown) {
-  const normalized = String(value ?? '').trim().toLowerCase()
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
   if (!normalized) return ''
 
   const aliasMap: Record<string, string> = {
@@ -244,6 +249,8 @@ const wizardData = ref<WizardData>({
     authConnected: false,
     model: 'deepseek-chat',
     thinkingLevel: 'off',
+    apiProtocol: 'auto',
+    webSearchMode: 'local',
     supportImageInput: true,
     supportAudioInput: false,
     supportAudioOutput: false,
@@ -253,6 +260,7 @@ const wizardData = ref<WizardData>({
     baseUrlPreset: '',
     maxContextTokens: 64,
     userAgent: '',
+    temperature: 0.3,
     audioInputProvider: 'openai',
     audioInputApiKey: '',
     audioInputBaseUrl: '',
@@ -590,10 +598,7 @@ export function useSetupWizard() {
         errors.push(t('downloader.passwordRequired'))
         validationErrors.value.downloader.password = true
       }
-    } else if (
-      wizardData.value.downloader.type === 'transmission'
-      || wizardData.value.downloader.type === 'rtorrent'
-    ) {
+    } else if (wizardData.value.downloader.type === 'transmission' || wizardData.value.downloader.type === 'rtorrent') {
       if (!wizardData.value.downloader.config?.username?.trim()) {
         errors.push(t('downloader.usernameRequired'))
         validationErrors.value.downloader.username = true
@@ -796,7 +801,10 @@ export function useSetupWizard() {
       validationErrors.value.agent.maxContextTokens = true
     }
 
-    if (wizardData.value.agent.recommendEnabled && (!wizardData.value.agent.recommendMaxItems || wizardData.value.agent.recommendMaxItems < 1)) {
+    if (
+      wizardData.value.agent.recommendEnabled &&
+      (!wizardData.value.agent.recommendMaxItems || wizardData.value.agent.recommendMaxItems < 1)
+    ) {
       errors.push(t('setupWizard.agent.recommendMaxItemsRequired'))
       validationErrors.value.agent.recommendMaxItems = true
     }
@@ -1435,6 +1443,7 @@ export function useSetupWizard() {
   // 保存智能助手设置
   async function saveAgentSettings() {
     try {
+      const agentTemperature = Number(wizardData.value.agent.temperature ?? 0.3)
       const agentSettings = {
         AI_AGENT_ENABLE: wizardData.value.agent.enabled,
         AI_AGENT_GLOBAL: wizardData.value.agent.enabled ? wizardData.value.agent.global : false,
@@ -1442,6 +1451,8 @@ export function useSetupWizard() {
         LLM_PROVIDER: wizardData.value.agent.provider,
         LLM_MODEL: wizardData.value.agent.model,
         LLM_THINKING_LEVEL: wizardData.value.agent.thinkingLevel,
+        LLM_API_PROTOCOL: wizardData.value.agent.apiProtocol || 'auto',
+        LLM_WEB_SEARCH_MODE: wizardData.value.agent.webSearchMode || 'local',
         LLM_SUPPORT_IMAGE_INPUT: wizardData.value.agent.supportImageInput,
         LLM_SUPPORT_AUDIO_INPUT: wizardData.value.agent.supportAudioInput,
         LLM_SUPPORT_AUDIO_OUTPUT: wizardData.value.agent.supportAudioOutput,
@@ -1451,6 +1462,7 @@ export function useSetupWizard() {
         LLM_BASE_URL_PRESET: wizardData.value.agent.baseUrlPreset || null,
         LLM_MAX_CONTEXT_TOKENS: wizardData.value.agent.maxContextTokens,
         LLM_USER_AGENT: wizardData.value.agent.userAgent || null,
+        LLM_TEMPERATURE: Number.isFinite(agentTemperature) ? agentTemperature : 0.3,
         AUDIO_INPUT_PROVIDER: wizardData.value.agent.audioInputProvider || 'openai',
         AUDIO_INPUT_API_KEY: wizardData.value.agent.audioInputApiKey || null,
         AUDIO_INPUT_BASE_URL: wizardData.value.agent.audioInputBaseUrl || null,
@@ -1464,13 +1476,16 @@ export function useSetupWizard() {
         AUDIO_OUTPUT_INCLUDE_TEXT: wizardData.value.agent.audioOutputIncludeText,
         AI_AGENT_JOB_INTERVAL: wizardData.value.agent.enabled ? wizardData.value.agent.jobInterval : 0,
         AI_AGENT_RETRY_TRANSFER: wizardData.value.agent.enabled ? wizardData.value.agent.retryTransfer : false,
-        AI_RECOMMEND_ENABLED:
-          wizardData.value.agent.enabled && wizardData.value.agent.recommendEnabled,
+        AI_RECOMMEND_ENABLED: wizardData.value.agent.enabled && wizardData.value.agent.recommendEnabled,
         AI_RECOMMEND_USER_PREFERENCE: wizardData.value.agent.recommendUserPreference,
         AI_RECOMMEND_MAX_ITEMS: wizardData.value.agent.recommendMaxItems,
       }
 
-      await api.post('system/env', agentSettings)
+      const response: Pick<ApiResponse<unknown>, 'success' | 'message'> = await api.post('system/env', agentSettings)
+      if (!response.success) {
+        $toast.error(response.message || t('setupWizard.saveAgentSettingsFailed'))
+        return false
+      }
       return true
     } catch (error) {
       console.error('Save agent settings failed:', error)
@@ -1557,6 +1572,8 @@ export function useSetupWizard() {
         wizardData.value.agent.authConnected = false
         wizardData.value.agent.model = result.data.LLM_MODEL || ''
         wizardData.value.agent.thinkingLevel = resolveThinkingLevelValue(result.data)
+        wizardData.value.agent.apiProtocol = result.data.LLM_API_PROTOCOL || 'auto'
+        wizardData.value.agent.webSearchMode = result.data.LLM_WEB_SEARCH_MODE || 'local'
         wizardData.value.agent.supportImageInput = result.data.LLM_SUPPORT_IMAGE_INPUT ?? true
         wizardData.value.agent.supportAudioInput = Boolean(result.data.LLM_SUPPORT_AUDIO_INPUT)
         wizardData.value.agent.supportAudioOutput = Boolean(result.data.LLM_SUPPORT_AUDIO_OUTPUT)
@@ -1566,6 +1583,8 @@ export function useSetupWizard() {
         wizardData.value.agent.baseUrlPreset = result.data.LLM_BASE_URL_PRESET || ''
         wizardData.value.agent.maxContextTokens = result.data.LLM_MAX_CONTEXT_TOKENS || 64
         wizardData.value.agent.userAgent = result.data.LLM_USER_AGENT || ''
+        const agentTemperature = Number(result.data.LLM_TEMPERATURE ?? 0.3)
+        wizardData.value.agent.temperature = Number.isFinite(agentTemperature) ? agentTemperature : 0.3
         wizardData.value.agent.audioInputProvider = result.data.AUDIO_INPUT_PROVIDER || 'openai'
         wizardData.value.agent.audioInputApiKey = result.data.AUDIO_INPUT_API_KEY || ''
         wizardData.value.agent.audioInputBaseUrl = result.data.AUDIO_INPUT_BASE_URL || ''

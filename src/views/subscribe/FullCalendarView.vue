@@ -145,6 +145,28 @@ const mobileSelectedFilterValue = ref(ALL_MOBILE_FILTER_VALUE)
 // 移动端默认隐藏已经过期的日历项。
 const mobileHideExpired = ref(true)
 
+// 媒体类型筛选取值。
+type MediaTypeFilterValue = 'all' | 'movie' | 'tv'
+
+// 当前媒体类型筛选值，桌面端和移动端共用。
+const mediaTypeFilter = ref<MediaTypeFilterValue>('all')
+
+// 判断日历事件是否命中当前媒体类型筛选。
+function matchesMediaTypeFilter(event: CalendarEventInfo) {
+  if (mediaTypeFilter.value === 'all') return true
+
+  const isMovie = event.mediaType === '电影'
+
+  return mediaTypeFilter.value === 'movie' ? isMovie : !isMovie
+}
+
+// 媒体类型筛选选项，桌面端和移动端共用。
+const mediaTypeFilterOptions = computed<{ label: string; value: MediaTypeFilterValue }[]>(() => [
+  { label: t('calendar.filterAll'), value: 'all' },
+  { label: t('calendar.filterMovie'), value: 'movie' },
+  { label: t('calendar.filterTv'), value: 'tv' },
+])
+
 // 移动端剧集筛选项。
 const mobileSeriesFilterOptions = computed<MobileCalendarFilterOption[]>(() => {
   const optionMap = new Map<string, MobileCalendarFilterOption>()
@@ -178,10 +200,18 @@ const mobileSeriesFilterOptions = computed<MobileCalendarFilterOption[]>(() => {
 // 移动端筛选后的日历事件。
 const mobileFilteredCalendarEvents = computed(() => {
   return rawCalendarEvents.value.filter(event => {
+<<<<<<< HEAD
     if (
       mobileSelectedFilterValue.value !== ALL_MOBILE_FILTER_VALUE &&
       event.title !== mobileSelectedFilterValue.value
     ) {
+=======
+    if (!matchesMediaTypeFilter(event)) {
+      return false
+    }
+
+    if (mobileSelectedFilterValue.value !== ALL_MOBILE_FILTER_VALUE && event.title !== mobileSelectedFilterValue.value) {
+>>>>>>> v2
       return false
     }
 
@@ -220,6 +250,13 @@ const mobileCalendarDayGroups = computed<MobileCalendarDayGroup[]>(() => {
       events,
     }
   })
+})
+
+watch(mediaTypeFilter, () => {
+  // 切换筛选前先收起所有已展开日期，避免 expandCalendarDay 直接写入 FullCalendar
+  // 内部事件的 visibleEvents 残留旧筛选条件下的展开内容。
+  expandedDateKeys.value = new Set()
+  renderVisibleCalendarEvents()
 })
 
 watch(mobileSeriesFilterOptions, options => {
@@ -285,7 +322,7 @@ function normalizeCalendarEventOrder(events: CalendarEventInfo[]) {
 function renderVisibleCalendarEvents() {
   const groupedEvents = new Map<string, CalendarEventInfo[]>()
 
-  rawCalendarEvents.value.forEach(event => {
+  rawCalendarEvents.value.filter(matchesMediaTypeFilter).forEach(event => {
     const dateKey = getDateKey(event.start)
     if (!dateKey) return
 
@@ -300,7 +337,9 @@ function renderVisibleCalendarEvents() {
 // 展开指定日期在桌面日历中的折叠事件。
 function expandCalendarDay(dateKey: string) {
   const currentScrollY = window.scrollY
-  const events = rawCalendarEvents.value.filter(event => getDateKey(event.start) === dateKey)
+  const events = rawCalendarEvents.value
+    .filter(matchesMediaTypeFilter)
+    .filter(event => getDateKey(event.start) === dateKey)
   const calendarApi = calendarRef.value?.getApi()
 
   expandedDateKeys.value = new Set(expandedDateKeys.value).add(dateKey)
@@ -526,7 +565,6 @@ function getMobileDateSubtitle(date: Date) {
 // 获取移动端单条事件主标题。
 function getMobileEventMainTitle(event: CalendarEventInfo) {
   if (event.episodeTitle) return event.episodeTitle
-  if (event.subtitle) return t('calendar.mobileEpisodeTitle', { number: event.subtitle })
 
   return event.title
 }
@@ -534,8 +572,10 @@ function getMobileEventMainTitle(event: CalendarEventInfo) {
 // 获取移动端单条事件副标题。
 function getMobileEventSubtitle(event: CalendarEventInfo) {
   if (event.mediaType === '电影') return event.year || event.mediaType
+  // 主标题已是订阅名时，副标题不再重复订阅名。
+  if (event.episodeTitle) return event.title
 
-  return event.title
+  return ''
 }
 
 // 获取移动端集季标识。
@@ -546,13 +586,6 @@ function getMobileEventEpisodeTag(event: CalendarEventInfo) {
   return formatSeasonEpisode(event.season, event.episodeNumbers)
 }
 
-// 获取移动端海报角标集号。
-function getMobilePosterEpisodeTag(event: CalendarEventInfo) {
-  if (event.mediaType === '电影' || !event.episodeNumbers.length) return ''
-
-  return formatSeasonEpisode(undefined, event.episodeNumbers)
-}
-
 // 获取移动端时长标识。
 function getMobileEventRuntimeTag(event: CalendarEventInfo) {
   if (!event.runtime) return ''
@@ -560,11 +593,11 @@ function getMobileEventRuntimeTag(event: CalendarEventInfo) {
   return t('calendar.runtimeMinutes', { minutes: event.runtime })
 }
 
-// 获取移动端卡片右侧日期标识。
-function getMobileEventDateBadge(event: CalendarEventInfo) {
-  if (isDateToday(event.start)) return t('calendar.today')
-  if (isDateAfterToday(event.start)) return t('calendar.upcoming')
-  if (isDateBeforeToday(event.start)) return t('calendar.expired')
+// 获取移动端单日状态标识（今天已在日期标题中体现，不再重复展示）。
+function getMobileDayStatus(date: Date) {
+  if (isDateToday(date)) return ''
+  if (isDateAfterToday(date)) return t('calendar.upcoming')
+  if (isDateBeforeToday(date)) return t('calendar.expired')
 
   return ''
 }
@@ -646,11 +679,10 @@ async function eventsHander(subscribe: Subscribe) {
 // 调用API查询所有订阅
 async function getSubscribes() {
   if (!isLoaded.value && display.mdAndUp.value) openProgressDialog()
+  loading.value = true
   try {
     // 订阅
-    loading.value = true
     const subscribes: Subscribe[] = await api.get('subscribe/')
-    loading.value = false
     const subEvents = await Promise.allSettled(subscribes.map(async sub => eventsHander(sub)))
     const succEvents = subEvents.filter(result => result.status === 'fulfilled').map(result => result.value)
     rawCalendarEvents.value = normalizeCalendarEventOrder(succEvents.flat().filter(event => event.start))
@@ -659,6 +691,7 @@ async function getSubscribes() {
   } catch (error) {
     console.error(error)
   } finally {
+    loading.value = false
     closeProgressDialog()
   }
 }
@@ -676,6 +709,20 @@ onActivated(() => {
 </script>
 
 <template>
+  <div v-if="display.mdAndUp.value" class="calendar-media-type-filter" role="group" :aria-label="t('calendar.mediaTypeFilterTitle')">
+    <button
+      v-for="option in mediaTypeFilterOptions"
+      :key="option.value"
+      type="button"
+      class="calendar-media-type-chip"
+      :class="{ 'calendar-media-type-chip--active': mediaTypeFilter === option.value }"
+      :aria-pressed="mediaTypeFilter === option.value"
+      @click="mediaTypeFilter = option.value"
+    >
+      {{ option.label }}
+    </button>
+  </div>
+
   <FullCalendar v-if="display.mdAndUp.value" ref="calendarRef" :options="calendarOptions">
     <template #eventContent="arg">
       <div v-if="arg.event.extendedProps.isDayGroup" class="calendar-day-events">
@@ -788,6 +835,7 @@ onActivated(() => {
           </button>
         </div>
 
+<<<<<<< HEAD
         <div class="mobile-calendar-filter-list" role="listbox" :aria-label="t('calendar.mobileFilterTitle')">
           <button
             v-for="option in mobileSeriesFilterOptions"
@@ -811,6 +859,126 @@ onActivated(() => {
               class="mobile-calendar-day-dot"
               :class="{ 'mobile-calendar-day-dot--today': isDateToday(group.date) }"
             />
+=======
+        <button
+          type="button"
+          class="mobile-calendar-expired-toggle"
+          :class="{ 'mobile-calendar-expired-toggle--active': mobileHideExpired }"
+          @click="mobileHideExpired = !mobileHideExpired"
+        >
+          <VIcon :icon="mobileHideExpired ? 'mdi-eye-off-outline' : 'mdi-eye-outline'" size="18" />
+          <span>{{ mobileHideExpired ? t('calendar.hideExpired') : t('calendar.showExpired') }}</span>
+        </button>
+      </div>
+
+      <div class="mobile-calendar-mediatype-list" role="group" :aria-label="t('calendar.mediaTypeFilterTitle')">
+        <button
+          v-for="option in mediaTypeFilterOptions"
+          :key="option.value"
+          type="button"
+          class="mobile-calendar-filter-chip mobile-calendar-mediatype-chip"
+          :class="{ 'mobile-calendar-filter-chip--active': mediaTypeFilter === option.value }"
+          :aria-pressed="mediaTypeFilter === option.value"
+          @click="mediaTypeFilter = option.value"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+
+      <div class="mobile-calendar-filter-list" role="listbox" :aria-label="t('calendar.mobileFilterTitle')">
+        <button
+          v-for="option in mobileSeriesFilterOptions"
+          :key="option.value"
+          type="button"
+          class="mobile-calendar-filter-chip"
+          :class="{ 'mobile-calendar-filter-chip--active': mobileSelectedFilterValue === option.value }"
+          role="option"
+          :aria-selected="mobileSelectedFilterValue === option.value"
+          @click="mobileSelectedFilterValue = option.value"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+      </section>
+
+      <div v-if="mobileCalendarDayGroups.length" class="mobile-calendar-timeline">
+      <section v-for="group in mobileCalendarDayGroups" :key="group.dateKey" class="mobile-calendar-day">
+        <div class="mobile-calendar-day-marker">
+          <span class="mobile-calendar-day-dot" :class="{ 'mobile-calendar-day-dot--today': isDateToday(group.date) }" />
+        </div>
+
+        <div class="mobile-calendar-day-body">
+          <header class="mobile-calendar-day-head">
+            <div class="mobile-calendar-day-title-wrap">
+              <h2>{{ group.title }}</h2>
+              <span>{{ group.subtitle }}</span>
+            </div>
+
+            <div class="mobile-calendar-day-meta">
+              <span
+                v-if="getMobileDayStatus(group.date)"
+                class="mobile-calendar-day-status"
+                :class="{
+                  'mobile-calendar-day-status--upcoming': isDateAfterToday(group.date),
+                  'mobile-calendar-day-status--expired': isDateBeforeToday(group.date),
+                }"
+              >
+                {{ getMobileDayStatus(group.date) }}
+              </span>
+              <span class="mobile-calendar-day-count">{{ t('calendar.episodeCount', { count: group.count }) }}</span>
+            </div>
+          </header>
+
+          <div class="mobile-calendar-event-list">
+            <article
+              v-for="calendarEvent in group.events"
+              :key="`${group.dateKey}-${calendarEvent.title}-${calendarEvent.subtitle}-${calendarEvent.calendarSortIndex}`"
+              class="mobile-calendar-event-card"
+              :class="`mobile-calendar-event-card--${calendarEvent.libraryState}`"
+              :title="getCalendarEventInfoTooltip(calendarEvent)"
+            >
+              <div class="mobile-calendar-event-poster-wrap">
+                <VImg
+                  :src="calendarEvent.posterPath"
+                  aspect-ratio="2/3"
+                  class="mobile-calendar-event-poster object-cover"
+                  cover
+                >
+                  <template #placeholder>
+                    <div class="mobile-calendar-event-poster-placeholder">
+                      <VSkeletonLoader class="object-cover aspect-w-2 aspect-h-3" />
+                    </div>
+                  </template>
+                  <template #error>
+                    <div class="mobile-calendar-event-poster-error">
+                      <VIcon icon="mdi-image-off-outline" size="32" />
+                      <span>{{ t('calendar.imageLoadFailed') }}</span>
+                    </div>
+                  </template>
+                </VImg>
+              </div>
+
+              <div class="mobile-calendar-event-content">
+                <h3>{{ getMobileEventMainTitle(calendarEvent) }}</h3>
+                <p v-if="getMobileEventSubtitle(calendarEvent)">{{ getMobileEventSubtitle(calendarEvent) }}</p>
+
+                <div class="mobile-calendar-event-tags">
+                  <span v-if="getMobileEventEpisodeTag(calendarEvent)" class="mobile-calendar-event-tag mobile-calendar-event-tag--primary">
+                    {{ getMobileEventEpisodeTag(calendarEvent) }}
+                  </span>
+                  <span v-if="getMobileEventRuntimeTag(calendarEvent)" class="mobile-calendar-event-tag">
+                    {{ getMobileEventRuntimeTag(calendarEvent) }}
+                  </span>
+                  <span
+                    class="mobile-calendar-event-tag"
+                    :class="`mobile-calendar-event-tag--library-${calendarEvent.libraryState}`"
+                  >
+                    {{ getLibraryStateText(calendarEvent.libraryState) }}
+                  </span>
+                </div>
+              </div>
+            </article>
+>>>>>>> v2
           </div>
 
           <div class="mobile-calendar-day-body">
@@ -909,7 +1077,11 @@ onActivated(() => {
 
 <style lang="scss">
 .v-application .fc {
+<<<<<<< HEAD
   --fc-today-bg-color: rgba(var(--v-theme-primary), 0.06);
+=======
+  --fc-today-bg-color: rgba(var(--v-theme-primary), 0.12);
+>>>>>>> v2
   --fc-border-color: rgba(var(--v-border-color), var(--v-border-opacity));
   --fc-neutral-bg-color: rgb(var(--v-theme-background), 0.3);
   --fc-list-event-hover-bg-color: rgba(var(--v-theme-on-surface), 0.02);
@@ -1181,6 +1353,33 @@ onActivated(() => {
 .v-application .fc-v-event {
   border: 0 !important;
   background-color: transparent !important;
+}
+
+.calendar-media-type-filter {
+  display: flex;
+  gap: 0.5rem;
+  margin-block-end: 0.75rem;
+}
+
+.calendar-media-type-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-block: 0.4rem;
+  padding-inline: 1rem;
+  border: 0;
+  border-radius: var(--app-control-radius);
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  color: rgba(var(--v-theme-on-surface), 0.72);
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.calendar-media-type-chip--active {
+  background: rgba(var(--v-theme-primary), 0.14);
+  color: rgb(var(--v-theme-primary));
 }
 
 .calendar-event-card {
@@ -1470,6 +1669,16 @@ onActivated(() => {
   color: rgb(var(--v-theme-primary));
 }
 
+.mobile-calendar-mediatype-list {
+  display: flex;
+  gap: 0.5rem;
+  margin-block-end: 0.75rem;
+}
+
+.mobile-calendar-mediatype-chip {
+  flex: 1 1 0;
+}
+
 .mobile-calendar-filter-list {
   display: flex;
   gap: 0.6rem;
@@ -1613,6 +1822,36 @@ onActivated(() => {
   line-height: 1.25;
 }
 
+.mobile-calendar-day-meta {
+  display: flex;
+  align-items: center;
+  column-gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.mobile-calendar-day-status {
+  border-radius: var(--app-control-radius);
+  background: rgba(var(--v-theme-primary), 0.14);
+  color: rgb(var(--v-theme-primary));
+  font-size: 0.74rem;
+  font-weight: 800;
+  line-height: 1;
+  padding-block: 0.32rem;
+  padding-inline: 0.5rem;
+  white-space: nowrap;
+}
+
+.mobile-calendar-day-status--upcoming {
+  background: rgba(var(--v-theme-warning), 0.16);
+  color: rgb(var(--v-theme-warning));
+}
+
+.mobile-calendar-day-status--expired {
+  background: rgba(var(--v-theme-error), 0.16);
+  color: rgb(var(--v-theme-error));
+}
+
 .mobile-calendar-day-count {
   flex: 0 0 auto;
   padding-block-end: 0.12rem;
@@ -1670,6 +1909,7 @@ onActivated(() => {
   gap: 0.3rem;
 }
 
+<<<<<<< HEAD
 .mobile-calendar-poster-episode {
   position: absolute;
   overflow: hidden;
@@ -1689,6 +1929,8 @@ onActivated(() => {
   white-space: nowrap;
 }
 
+=======
+>>>>>>> v2
 .mobile-calendar-event-content {
   display: flex;
   flex-direction: column;
@@ -1697,18 +1939,14 @@ onActivated(() => {
   min-inline-size: 0;
 }
 
-.mobile-calendar-event-title-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.55rem;
-  min-inline-size: 0;
-}
-
-.mobile-calendar-event-title-row h3 {
+.mobile-calendar-event-content h3 {
   display: -webkit-box;
   overflow: hidden;
+<<<<<<< HEAD
   flex: 1 1 auto;
   margin: 0;
+=======
+>>>>>>> v2
   -webkit-box-orient: vertical;
   color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-size: 1.05rem;
@@ -1717,34 +1955,6 @@ onActivated(() => {
   line-clamp: 2;
   line-height: 1.28;
   overflow-wrap: anywhere;
-}
-
-.mobile-calendar-date-badge {
-  flex: 0 0 auto;
-  border-radius: var(--app-control-radius);
-  background: rgba(var(--v-theme-primary), 0.14);
-  color: rgb(var(--v-theme-primary));
-  font-size: 0.78rem;
-  font-weight: 900;
-  line-height: 1;
-  padding-block: 0.38rem;
-  padding-inline: 0.58rem;
-  white-space: nowrap;
-}
-
-.mobile-calendar-date-badge--today {
-  background: rgba(var(--v-theme-success), 0.16);
-  color: rgb(var(--v-theme-success));
-}
-
-.mobile-calendar-date-badge--upcoming {
-  background: rgba(var(--v-theme-warning), 0.16);
-  color: rgb(var(--v-theme-warning));
-}
-
-.mobile-calendar-date-badge--expired {
-  background: rgba(var(--v-theme-error), 0.16);
-  color: rgb(var(--v-theme-error));
 }
 
 .mobile-calendar-event-content p {
@@ -1851,7 +2061,7 @@ html[data-theme='transparent'] .mobile-subscribe-calendar,
     min-block-size: 8.6rem;
   }
 
-  .mobile-calendar-event-title-row h3 {
+  .mobile-calendar-event-content h3 {
     font-size: 1rem;
   }
 

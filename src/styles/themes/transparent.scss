@@ -11,6 +11,14 @@ html[data-theme="transparent"] {
   --transparent-blur: 10px;
   --transparent-blur-light: 6px;
   --transparent-blur-heavy: 16px;
+  --app-grouped-list-background: rgba(var(--v-theme-surface), var(--transparent-opacity-light));
+  --app-grouped-list-backdrop-filter: blur(var(--transparent-blur));
+  --app-grouped-list-separator-color: rgba(var(--v-theme-on-surface), 0.18);
+  --app-grouped-list-header-color: rgba(var(--v-theme-on-surface), 0.64);
+  --app-grouped-list-chevron-color: rgba(var(--v-theme-on-surface), 0.5);
+  --app-grouped-list-hover-background: rgba(var(--v-theme-primary), 0.08);
+  --app-grouped-list-active-background: rgba(var(--v-theme-primary), 0.14);
+  --app-grouped-list-icon-opacity: 0.88;
 
   // 应用、布局、主内容区域
   .v-application, .v-layout, .v-main, .layout-page-content {
@@ -39,6 +47,24 @@ html[data-theme="transparent"] {
       backdrop-filter: none;
       background-color: transparent;
     }
+  }
+
+  // 工作流标题栏只叠加半透明状态染色，底层模糊仍由卡片统一承担。
+  .workflow-task-card {
+    --workflow-card-header-content-rgb: var(--v-theme-on-surface);
+    --workflow-card-header-background:
+      linear-gradient(145deg, rgba(var(--v-theme-on-surface), 0.12), transparent 36%),
+      linear-gradient(
+        118deg,
+        rgba(var(--workflow-status-rgb), var(--transparent-opacity-heavy)) 0%,
+        rgba(var(--workflow-status-rgb), var(--transparent-opacity)) 56%,
+        rgba(var(--workflow-status-rgb), var(--transparent-opacity-light)) 100%
+      ),
+      linear-gradient(
+        rgba(var(--v-theme-surface), var(--transparent-opacity-light)),
+        rgba(var(--v-theme-surface), var(--transparent-opacity-light))
+      );
+    --workflow-card-header-shadow: inset 0 1px 0 rgba(var(--v-theme-on-surface), 0.14);
   }
 
   // 订阅文件弹窗使用独立的玻璃表面参数，避免组件内通过全局选择器穿透主题。
@@ -221,6 +247,18 @@ html[data-theme="transparent"] {
     backdrop-filter: blur(var(--transparent-blur));
     background-color: rgba(var(--v-theme-surface), var(--transparent-opacity-heavy));
   }
+
+  .Vue-Toastification__toast {
+    backdrop-filter: blur(var(--transparent-blur));
+    background:
+      linear-gradient(
+        135deg,
+        rgba(var(--mp-toast-accent-rgb), 0.16),
+        rgba(var(--mp-toast-accent-rgb), 0.06) 44%,
+        rgba(var(--v-theme-surface), var(--transparent-opacity-heavy))
+      ),
+      rgba(var(--v-theme-surface), var(--transparent-opacity-heavy)) !important;
+  }
 } 
 
 html[data-theme="transparent"].transparent-background-blur-disabled {
@@ -233,6 +271,8 @@ html[data-theme="transparent"].transparent-background-blur-disabled {
 }
 
 html[data-theme="transparent"].transparent-glass-lightweight {
+  --app-grouped-list-backdrop-filter: none;
+
   .global-blur-layer {
     display: none !important;
     backdrop-filter: none !important;
@@ -295,6 +335,8 @@ html[data-theme="transparent"].transparent-glass-lightweight {
 }
 
 html[data-theme="transparent"].transparent-glass-realtime {
+  --app-grouped-list-backdrop-filter: none;
+
   .background-image.active {
     filter: none;
     transform: none;
@@ -338,6 +380,8 @@ html[data-theme="transparent"].transparent-glass-realtime {
 }
 
 html[data-theme="transparent"].transparent-blur-disabled {
+  --app-grouped-list-backdrop-filter: none;
+
   .layout-vertical-nav,
   .v-list,
   .v-card:not(.no-blur),

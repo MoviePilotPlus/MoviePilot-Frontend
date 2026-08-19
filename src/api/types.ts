@@ -1,3 +1,15 @@
+export type MediaDataSource = 'themoviedb' | 'douban' | 'bangumi' | 'anilist' | (string & {})
+
+// 手动刮削选项
+export interface ManualScrapeOptions {
+  // 媒体数据源
+  media_source: MediaDataSource
+  // 数据源原生ID
+  media_id?: string
+  // 媒体类型
+  type_name?: string
+}
+
 // 订阅
 export interface Subscribe {
   // 订阅ID
@@ -15,7 +27,13 @@ export interface Subscribe {
   // 豆瓣ID
   doubanid?: string
   // Bangumi ID
-  bangumiid?: string
+  bangumiid?: number
+  // AniList ID
+  anilistid?: number
+  // 主媒体数据源
+  media_source?: MediaDataSource
+  // 数据源原生ID
+  media_id?: string
   // 其它媒体ID
   mediaid?: string
   // 季号
@@ -114,6 +132,14 @@ export interface SubscribeShare {
   tmdbid?: number
   // 豆瓣ID
   doubanid?: string
+  // Bangumi ID
+  bangumiid?: number
+  // AniList ID
+  anilistid?: number
+  // 主媒体数据源
+  media_source?: MediaDataSource
+  // 数据源原生ID
+  media_id?: string
   // 季号
   season?: number
   // 海报
@@ -216,6 +242,14 @@ export interface TransferHistory {
   tvdbid?: number
   // 豆瓣ID
   doubanid?: string
+  // Bangumi ID
+  bangumiid?: number
+  // AniList ID
+  anilistid?: number
+  // 媒体数据源
+  media_source?: MediaDataSource
+  // 数据源原生ID
+  media_id?: string
   // 季Sxx
   seasons?: string
   // 集Exx
@@ -234,9 +268,69 @@ export interface TransferHistory {
   src_fileitem?: FileItem
 }
 
+// 下载历史记录
+export interface DownloadHistory {
+  // ID
+  id: number
+  // 保存路径
+  path?: string
+  // 类型：电影、电视剧
+  type?: string
+  // 标题
+  title?: string
+  // 年份
+  year?: string
+  // TMDB ID
+  tmdbid?: number
+  // IMDB ID
+  imdbid?: string
+  // TVDB ID
+  tvdbid?: number
+  // 豆瓣 ID
+  doubanid?: string
+  // Bangumi ID
+  bangumiid?: number
+  // AniList ID
+  anilistid?: number
+  // 媒体数据源
+  media_source?: MediaDataSource
+  // 数据源原生 ID
+  media_id?: string
+  // 季 Sxx
+  seasons?: string
+  // 集 Exx
+  episodes?: string
+  // 背景图
+  image?: string
+  // 海报
+  poster?: string
+  // 下载器 Hash
+  download_hash?: string
+  // 种子名称
+  torrent_name?: string
+  // 种子描述
+  torrent_description?: string
+  // 站点
+  torrent_site?: string
+  // 下载用户 ID
+  userid?: string
+  // 下载用户名或插件名
+  username?: string
+  // 下载渠道
+  channel?: string
+  // 创建时间
+  date?: string
+  // 附加信息
+  note?: unknown
+  // 自定义媒体类别
+  media_category?: string
+  // 自定义剧集组
+  episode_group?: string
+}
+
 // 媒体信息
 export interface MediaInfo {
-  // 来源：themoviedb、douban、bangumi
+  // 来源：themoviedb、douban、bangumi、anilist
   source?: string
   // 类型 电影、电视剧、合集
   type?: string
@@ -257,7 +351,11 @@ export interface MediaInfo {
   // 豆瓣ID
   douban_id?: string
   // Bangumi ID
-  bangumi_id?: string
+  bangumi_id?: string | number
+  // AniList ID
+  anilist_id?: number
+  // AniDB ID
+  anidb_id?: number
   // 合集ID
   collection_id?: number
   // 其它媒体ID前缀
@@ -444,7 +542,7 @@ export interface TmdbEpisode {
 
 // TMDB人物信息
 export interface Person {
-  // 来源：themoviedb、douban、bangumi
+  // 来源：themoviedb、douban、bangumi、anilist
   source?: string
   // ID
   id?: number
@@ -698,6 +796,20 @@ export interface Plugin {
   add_time?: number
   // 页面打开状态
   page_open?: boolean
+  // 平均评分
+  average_rating?: number
+  // 评分人数
+  rating_count?: number
+  // 当前安装实例评分
+  user_rating?: number | null
+}
+
+// 插件评分结果
+export interface PluginRating {
+  plugin_id: string
+  average_rating: number
+  rating_count: number
+  user_rating?: number | null
 }
 
 // 插件 Release 可安装版本
@@ -992,7 +1104,7 @@ export interface User {
   is_superuser: boolean
   // 头像
   avatar: string
-  // 是否开启双重验证
+  // 是否开启二次验证
   is_otp: boolean
   // 用户权限 json
   permissions: { [key: string]: any }
@@ -1000,6 +1112,11 @@ export interface User {
   settings: { [key: string]: string | null }
   // 昵称
   nickname?: string
+}
+
+// 头像上传响应数据
+export interface AvatarUploadData {
+  filename: string
 }
 
 // 通行密钥
@@ -1102,14 +1219,20 @@ export interface ScheduleProgress {
   id?: string
   // 名称
   name?: string
+  // 多语言名称
+  name_i18n?: string
   // 提供者
   provider?: string
+  // 多语言提供者
+  provider_i18n?: string
   // 是否正在执行
   enable?: boolean
   // 当前完成百分比
   value?: number
   // 当前进度文本
   text?: string
+  // 多语言进度文本
+  text_i18n?: string
   // 执行状态
   status?: string
   // 最近一次执行是否成功
@@ -1120,6 +1243,8 @@ export interface ScheduleProgress {
   finished_at?: string
   // 最近一次错误信息
   error?: string
+  // 多语言错误信息
+  error_i18n?: string
   // 扩展数据
   data?: Record<string, unknown>
 }
@@ -1130,16 +1255,26 @@ export interface ScheduleInfo {
   id: string
   // 名称
   name: string
+  // 多语言名称
+  name_i18n?: string
   // 提供者
   provider: string
+  // 多语言提供者
+  provider_i18n?: string
   // 状态
   status: string
+  // 多语言状态
+  status_i18n?: string
   // 下次运行时间
   next_run: string
+  // 多语言下次运行时间
+  next_run_i18n?: string
   // 当前完成百分比
   progress?: number
   // 进度文本
   progress_text?: string
+  // 多语言进度文本
+  progress_text_i18n?: string
   // 是否正在更新进度
   progress_enable?: boolean
   // 进度详情
@@ -1363,6 +1498,8 @@ export interface MediaServerConf {
   enabled: boolean
   // 同步媒体体库列表
   sync_libraries?: string[]
+  // 自动同步间隔（小时），为空时使用旧全局配置
+  sync_interval?: number | null
 }
 
 // 文件整理目录配置
@@ -1437,6 +1574,28 @@ export interface FilterRuleGroup {
   category?: string
 }
 
+// 规则测试结果
+export interface RuleTestData {
+  // 原始标题
+  title?: string
+  // 原始副标题
+  subtitle?: string
+  // 规则组名称
+  rulegroup_name?: string
+  // 规则组详情
+  rulegroup?: FilterRuleGroup | null
+  // 识别元数据
+  meta_info?: MetaInfo | null
+  // 媒体信息
+  media_info?: MediaInfo | null
+  // 种子信息
+  torrent_info?: TorrentInfo | null
+  // 优先级
+  priority?: number | null
+  // 是否命中过滤规则
+  matched?: boolean
+}
+
 // 订阅下载文件详情
 export interface SubscribeDownloadFileInfo {
   // 种子名称
@@ -1457,6 +1616,12 @@ export interface SubscribeLibraryFileInfo {
   storage?: string
   // 文件路径
   file_path?: string
+  // 媒体服务器名称
+  server?: string
+  // 媒体服务器类型：emby、jellyfin、plex 等
+  server_type?: string
+  // 媒体服务器条目 ID
+  itemid?: string
 }
 
 // 订阅集详情
@@ -1495,6 +1660,14 @@ export interface TransferForm {
   tmdbid?: number
   // 豆瓣 ID
   doubanid?: string
+  // Bangumi ID
+  bangumiid?: number
+  // AniList ID
+  anilistid?: number
+  // 媒体数据源
+  media_source?: MediaDataSource
+  // 数据源原生ID
+  media_id?: string | null
   // 季号
   season?: number
   // 类型
@@ -1523,6 +1696,8 @@ export interface TransferForm {
   episode_group?: string | null
   // 预览模式
   preview?: boolean
+  // 清理已有成功记录后重新整理
+  reorganize: boolean
 }
 
 // 手动整理请求
@@ -1547,6 +1722,14 @@ export interface ManualTransferTargetPathData {
   library_type_folder?: boolean | null
   // 媒体库类别子目录
   library_category_folder?: boolean | null
+}
+
+// 手动整理命中的成功历史摘要
+export interface ManualTransferHistoryInfo {
+  // 是否应执行重新整理
+  reorganize: boolean
+  // 命中的成功历史数量
+  history_count: number
 }
 
 // 手动整理预览统计
@@ -1735,6 +1918,42 @@ export interface TorrentCacheData {
   data: TorrentCacheItem[]
 }
 
+// 媒体识别缓存项
+export interface RecognitionCacheItem {
+  // 缓存键
+  key: string
+  // TMDB ID，0 表示未识别
+  tmdb_id?: number
+  // 识别缓存对应的字符串 ID
+  recognition_id?: string
+  // 识别后的标题
+  title: string
+  // 识别后的年份
+  year: string
+  // 媒体类型
+  media_type: string
+  // TMDB 海报相对路径
+  poster_path?: string
+  // TMDB 背景图相对路径
+  backdrop_path?: string
+}
+
+// 媒体识别缓存数据
+export interface RecognitionCacheData {
+  // 缓存总数
+  count: number
+  // 已识别数量
+  recognized: number
+  // 未识别数量
+  unrecognized: number
+  // 共享识别成功命中数量
+  shared_recognized: number
+  // 是否开启共享识别
+  shared_recognize_enabled: boolean
+  // 缓存数据
+  data: RecognitionCacheItem[]
+}
+
 // 订阅分享统计
 export interface SubscribeShareStatistics {
   // 分享人
@@ -1749,6 +1968,7 @@ export interface SubscribeShareStatistics {
 export interface ApiResponse<T = any> {
   success: boolean
   message?: string
+  message_i18n?: string
   data: T
 }
 

@@ -11,11 +11,15 @@ import { useToast } from 'vue-toastification'
 import { useConfirm } from '@/composables/useConfirm'
 import { useKeepAliveRefresh, type KeepAliveRefreshContext } from '@/composables/useKeepAliveRefresh'
 import { openSharedDialog } from '@/composables/useSharedDialog'
+import { useDisplay } from 'vuetify'
 
 const SubscribeHistoryDialog = defineAsyncComponent(() => import('@/components/dialog/SubscribeHistoryDialog.vue'))
 
 // 国际化
 const { t } = useI18n()
+
+// 响应式断点用于切换订阅卡片网格密度。
+const display = useDisplay()
 
 // 用户 Store
 const userStore = useUserStore()
@@ -72,6 +76,9 @@ let isRefreshed = ref(false)
 // 刷新状态
 const loading = ref(false)
 
+// 最近一次列表请求是否失败，用于保留旧数据时持续展示错误状态。
+const loadError = ref(false)
+
 // 数据列表
 const dataList = ref<Subscribe[]>([])
 
@@ -89,7 +96,7 @@ const normalizedKeyword = computed(() => props.keyword?.trim().toLowerCase() || 
 const selectedSubscribesSet = computed(() => new Set(selectedSubscribes.value))
 const hasCustomOrder = computed(() => orderConfig.value.length > 0)
 const isAllSubscribesSelected = computed(
-  () => displayList.value.length > 0 && selectedSubscribes.value.length === displayList.value.length,
+  () => displayList.value.length > 0 && displayList.value.every(item => selectedSubscribesSet.value.has(item.id)),
 )
 
 // 归一化订阅排序方式，电影订阅不使用缺失集数排序。
@@ -117,6 +124,9 @@ const sortMode = computed({
 })
 const canDragSort = computed(() => sortMode.value && canSortContext.value)
 const shouldVirtualizeList = computed(() => !sortMode.value)
+const subscribeGridMinItemWidth = computed(() => (display.xs.value ? 144 : 240))
+const subscribeGridEstimatedItemHeight = computed(() => (display.xs.value ? 190 : 300))
+const subscribeGridGap = computed(() => (display.xs.value ? 12 : 16))
 const scrollToIndex = computed(() => {
   if (!props.subid || sortMode.value) {
     return undefined
@@ -246,6 +256,8 @@ watch(
     sortSubscribeList(nextDisplayList)
 
     displayList.value = nextDisplayList
+    const visibleIds = new Set(nextDisplayList.map(item => item.id))
+    selectedSubscribes.value = selectedSubscribes.value.filter(id => visibleIds.has(id))
   },
   { immediate: true },
 )
@@ -283,31 +295,44 @@ async function loadSubscribeOrderConfig() {
 
 // 保存顺序设置
 async function saveSubscribeOrder() {
-  // 顺序配置
+  const confirmedOrder = orderConfig.value.map(item => ({ ...item }))
   const orderObj = displayList.value.map(item => ({ id: item.id }))
   orderConfig.value = orderObj
   emit('update:sortBy', 'custom')
 
-  // 保存到服务端
   try {
     await api.post(`/user/config/${orderRequestKey.value}`, orderObj)
   } catch (error) {
     console.error(error)
+    orderConfig.value = confirmedOrder
+    const restoredDisplayList = [...displayList.value]
+    sortSubscribeList(restoredDisplayList)
+    displayList.value = restoredDisplayList
+    $toast.error(t('subscribe.requestFailed'))
   }
 }
 
 // 获取订阅列表数据
 async function fetchData(context: KeepAliveRefreshContext = {}) {
   const showLoading = !context.silent || !isRefreshed.value
+  const isInitialLoad = !isRefreshed.value
 
   try {
     if (showLoading) {
       loading.value = true
     }
     dataList.value = await api.get('subscribe/')
+    loadError.value = false
     isRefreshed.value = true
   } catch (error) {
     console.error(error)
+    loadError.value = true
+    if (isInitialLoad) {
+      isRefreshed.value = true
+    }
+    if (!context.silent || isInitialLoad) {
+      $toast.error(t('subscribe.requestFailed'))
+    }
   } finally {
     if (showLoading) {
       loading.value = false
@@ -436,10 +461,14 @@ async function batchEnableSubscribes() {
 
   try {
     loading.value = true
-    const promises = selectedSubscribes.value.map(id => api.put(`subscribe/status/${id}?state=R`))
+    const promises = selectedSubscribes.value.map(
+      id => api.put(`subscribe/status/${id}?state=R`) as unknown as Promise<{ success: boolean }>,
+    )
     const results = await Promise.allSettled(promises)
 
-    const successCount = results.filter(result => result.status === 'fulfilled').length
+    const successCount = results.filter(
+      result => result.status === 'fulfilled' && result.value?.success === true,
+    ).length
     const failedCount = results.length - successCount
 
     if (successCount > 0) {
@@ -475,10 +504,14 @@ async function batchPauseSubscribes() {
 
   try {
     loading.value = true
-    const promises = selectedSubscribes.value.map(id => api.put(`subscribe/status/${id}?state=S`))
+    const promises = selectedSubscribes.value.map(
+      id => api.put(`subscribe/status/${id}?state=S`) as unknown as Promise<{ success: boolean }>,
+    )
     const results = await Promise.allSettled(promises)
 
-    const successCount = results.filter(result => result.status === 'fulfilled').length
+    const successCount = results.filter(
+      result => result.status === 'fulfilled' && result.value?.success === true,
+    ).length
     const failedCount = results.length - successCount
 
     if (successCount > 0) {
@@ -547,6 +580,10 @@ defineExpose({
 <template>
   <LoadingBanner v-if="!isRefreshed" class="mt-12" />
 
+  <VAlert v-if="loadError" type="error" variant="tonal" class="mb-4 mx-2">
+    {{ t('subscribe.requestFailed') }}
+  </VAlert>
+
   <VAlert v-if="sortMode" color="warning" variant="tonal" class="mb-4 mx-2 py-0 app-surface-static">
     <div class="d-flex flex-wrap align-center justify-space-between gap-2 py-5">
       <span>{{ t('common.sortModeHint') }}</span>
@@ -581,8 +618,9 @@ defineExpose({
     v-else-if="displayList.length > 0 && shouldVirtualizeList"
     :items="displayList"
     :get-item-key="item => item.id"
-    :min-item-width="240"
-    :estimated-item-height="300"
+    :min-item-width="subscribeGridMinItemWidth"
+    :estimated-item-height="subscribeGridEstimatedItemHeight"
+    :gap="subscribeGridGap"
     :scroll-to-index="scrollToIndex"
     class="px-2"
   >
@@ -600,7 +638,7 @@ defineExpose({
     </template>
   </ProgressiveCardGrid>
   <NoDataFound
-    v-if="displayList.length === 0 && isRefreshed"
+    v-if="displayList.length === 0 && isRefreshed && !loadError"
     error-code="404"
     :error-title="errorTitle"
     :error-description="errorDescription"

@@ -11,6 +11,11 @@ import { openSharedDialog } from '@/composables/useSharedDialog'
 import { getRecommendTabs } from '@/router/i18n-menu'
 import { useUserStore } from '@/stores'
 import { buildUserPermissionContext, hasPermission } from '@/utils/permission'
+import {
+  createBuiltInRecommendSources,
+  mergeExtraRecommendSources,
+  type RecommendViewSource,
+} from '@/utils/recommendSources'
 
 const ContentToggleSettingsDialog = defineAsyncComponent(() => import('@/components/dialog/ContentToggleSettingsDialog.vue'))
 
@@ -63,86 +68,9 @@ function openRecommendSettings() {
   )
 }
 
-const viewList = reactive<{ apipath: string; linkurl: string; title: string; type: string }[]>([
-  {
-    apipath: 'recommend/tmdb_trending',
-    linkurl: '/browse/recommend/tmdb_trending?title=' + t('recommend.trendingNow'),
-    title: t('recommend.trendingNow'),
-    type: t('recommend.categoryRankings'),
-  },
-  {
-    apipath: 'recommend/douban_showing',
-    linkurl: '/browse/recommend/douban_showing?title=' + t('recommend.nowShowing'),
-    title: t('recommend.nowShowing'),
-    type: t('recommend.categoryMovie'),
-  },
-  {
-    apipath: 'recommend/bangumi_calendar',
-    linkurl: '/browse/recommend/bangumi_calendar?title=' + t('recommend.bangumiDaily'),
-    title: t('recommend.bangumiDaily'),
-    type: t('recommend.categoryAnime'),
-  },
-  {
-    apipath: 'recommend/tmdb_movies',
-    linkurl: '/browse/recommend/tmdb_movies?title=' + t('recommend.tmdbHotMovies'),
-    title: t('recommend.tmdbHotMovies'),
-    type: t('recommend.categoryMovie'),
-  },
-  {
-    apipath: 'recommend/tmdb_tvs?with_original_language=zh|en|ja|ko',
-    linkurl: '/browse/recommend/tmdb_tvs??with_original_language=zh|en|ja|ko&title=' + t('recommend.tmdbHotTVShows'),
-    title: t('recommend.tmdbHotTVShows'),
-    type: t('recommend.categoryTV'),
-  },
-  {
-    apipath: 'recommend/douban_movie_hot',
-    linkurl: '/browse/recommend/douban_movie_hot?title=' + t('recommend.doubanHotMovies'),
-    title: t('recommend.doubanHotMovies'),
-    type: t('recommend.categoryMovie'),
-  },
-  {
-    apipath: 'recommend/douban_tv_hot',
-    linkurl: '/browse/recommend/douban_tv_hot?title=' + t('recommend.doubanHotTVShows'),
-    title: t('recommend.doubanHotTVShows'),
-    type: t('recommend.categoryTV'),
-  },
-  {
-    apipath: 'recommend/douban_tv_animation',
-    linkurl: '/browse/recommend/douban_tv_animation?title=' + t('recommend.doubanHotAnime'),
-    title: t('recommend.doubanHotAnime'),
-    type: t('recommend.categoryAnime'),
-  },
-  {
-    apipath: 'recommend/douban_movies',
-    linkurl: '/browse/recommend/douban_movies?title=' + t('recommend.doubanNewMovies'),
-    title: t('recommend.doubanNewMovies'),
-    type: t('recommend.categoryMovie'),
-  },
-  {
-    apipath: 'recommend/douban_tvs',
-    linkurl: '/browse/recommend/douban_tvs?title=' + t('recommend.doubanNewTVShows'),
-    title: t('recommend.doubanNewTVShows'),
-    type: t('recommend.categoryTV'),
-  },
-  {
-    apipath: 'recommend/douban_movie_top250',
-    linkurl: '/browse/recommend/douban_movie_top250?title=' + t('recommend.doubanTop250'),
-    title: t('recommend.doubanTop250'),
-    type: t('recommend.categoryRankings'),
-  },
-  {
-    apipath: 'recommend/douban_tv_weekly_chinese',
-    linkurl: '/browse/recommend/douban_tv_weekly_chinese?title=' + t('recommend.doubanChineseTVRankings'),
-    title: t('recommend.doubanChineseTVRankings'),
-    type: t('recommend.categoryRankings'),
-  },
-  {
-    apipath: 'recommend/douban_tv_weekly_global',
-    linkurl: '/browse/recommend/douban_tv_weekly_global?title=' + t('recommend.doubanGlobalTVRankings'),
-    title: t('recommend.doubanGlobalTVRankings'),
-    type: t('recommend.categoryRankings'),
-  },
-])
+const builtInRecommendSources = createBuiltInRecommendSources(t)
+const viewList = reactive<RecommendViewSource[]>([...builtInRecommendSources])
+const newlyAddedBuiltInPaths = new Set(['anilist/trending', 'anilist/popular-this-season'])
 
 // 计算当前分类下显示的视图
 const filteredViews = computed(() => {
@@ -170,42 +98,72 @@ function initializeColors() {
 
 // 额外的数据源
 const extraRecommendSources = ref<RecommendSource[]>([])
+let extraSourcesRequest: Promise<void> | null = null
 
-// 加载额外的发现数据源
-async function loadExtraRecommendSources() {
-  try {
-    extraRecommendSources.value = await api.get('recommend/source')
-    if (extraRecommendSources.value.length > 0) {
-      extraRecommendSources.value.map(source => {
-        if (!viewList.some(item => item.apipath === source.api_path)) {
-          const querySeparator = source.api_path.includes('?') ? '&' : '?'
-          const linkUrl = `/browse/${source.api_path}${querySeparator}title=${encodeURIComponent(source.name)}`
-          viewList.push({
-            apipath: source.api_path,
-            linkurl: linkUrl,
-            title: source.name,
-            type: source.type,
-          })
-        }
-      })
+/** 只接受以标题为键、布尔值为开关的推荐配置。 */
+function normalizeEnableConfig(value: unknown): Record<string, boolean> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+
+  const entries = Object.entries(value)
+  if (entries.some(([, enabled]) => typeof enabled !== 'boolean')) return null
+
+  return Object.fromEntries(entries)
+}
+
+/** 为旧版推荐配置补入新增内置榜单，同时保留用户已经明确保存的开关值。 */
+function enableMissingBuiltInSources() {
+  builtInRecommendSources.forEach(source => {
+    if (newlyAddedBuiltInPaths.has(source.apipath) && !(source.title in enableConfig.value)) {
+      enableConfig.value[source.title] = true
     }
-  } catch (error) {
-    console.log(error)
-  }
+  })
+}
+
+/** 刷新扩展推荐源；并发生命周期入口共享请求，成功响应按当前服务端快照替换列表。 */
+function loadExtraRecommendSources() {
+  if (extraSourcesRequest) return extraSourcesRequest
+
+  extraSourcesRequest = (async () => {
+    try {
+      extraRecommendSources.value = await api.get('recommend/source')
+      const nextViewList = [...builtInRecommendSources]
+      mergeExtraRecommendSources(nextViewList, extraRecommendSources.value)
+      viewList.splice(0, viewList.length, ...nextViewList)
+    } catch (error) {
+      console.log(error)
+    }
+  })().finally(() => {
+    extraSourcesRequest = null
+  })
+
+  return extraSourcesRequest
 }
 
 // 加载面板配置
 async function loadConfig() {
-  // 显示配置
-  const local_enable = localStorage.getItem('MP_RECOMMEND')
-  if (local_enable) {
-    enableConfig.value = JSON.parse(local_enable)
-  } else {
-    const response = await api.get('/user/config/Recommend')
-    if (response && response.data && response.data.value) {
-      enableConfig.value = response.data.value
-      localStorage.setItem('MP_RECOMMEND', JSON.stringify(response.data.value))
+  const localEnable = localStorage.getItem('MP_RECOMMEND')
+  if (localEnable) {
+    try {
+      const localConfig = normalizeEnableConfig(JSON.parse(localEnable))
+      if (localConfig) {
+        enableConfig.value = localConfig
+        return
+      }
+    } catch {
+      // 损坏的本地值按未配置处理，继续尝试服务端配置。
     }
+    localStorage.removeItem('MP_RECOMMEND')
+  }
+
+  try {
+    const response = await api.get('/user/config/Recommend')
+    const remoteConfig = normalizeEnableConfig(response?.data?.value)
+    if (remoteConfig) {
+      enableConfig.value = remoteConfig
+      localStorage.setItem('MP_RECOMMEND', JSON.stringify(remoteConfig))
+    }
+  } catch (error) {
+    console.error(error)
   }
 }
 
@@ -253,6 +211,7 @@ let timer: ReturnType<typeof setTimeout>
 
 onBeforeMount(async () => {
   await loadConfig()
+  enableMissingBuiltInSources()
   initializeColors()
 })
 
@@ -348,10 +307,7 @@ onActivated(async () => {
   transition: opacity 0.3s ease;
 }
 
-.content-group :deep(.slider-content-wrapper) {
-  content-visibility: auto;
-  contain-intrinsic-block-size: 16rem;
-}
+// 横向滚动层依靠纵向缓冲展示上浮与阴影，不可在外层启用会裁切溢出的 paint containment。
 
 .empty-category {
   display: flex;

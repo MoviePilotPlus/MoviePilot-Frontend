@@ -2,13 +2,14 @@
 import { useToast } from 'vue-toastification'
 import { useConfirm } from '@/composables/useConfirm'
 import api from '@/api'
-import type { Plugin } from '@/api/types'
+import type { ApiResponse, Plugin, PluginRating } from '@/api/types'
 import { getLogoUrl } from '@/utils/imageUtils'
-import { getDominantColor } from '@/@core/utils/image'
+import { usePluginCardAccent } from '@/composables/usePluginCardAccent'
 import { formatDownloadCount } from '@/@core/utils/formatters'
 import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { openSharedDialog } from '@/composables/useSharedDialog'
+import { usePluginSidebarNavStore } from '@/stores/pluginSidebarNav'
 
 // 插件日志面板只有点击“查看日志”时才需要，延后加载可减轻插件列表首屏。
 const PluginConfigDialog = defineAsyncComponent(() => import('../dialog/PluginConfigDialog.vue'))
@@ -16,6 +17,7 @@ const PluginDataDialog = defineAsyncComponent(() => import('../dialog/PluginData
 const ProgressDialog = defineAsyncComponent(() => import('../dialog/ProgressDialog.vue'))
 const PluginCloneDialog = defineAsyncComponent(() => import('../dialog/PluginCloneDialog.vue'))
 const PluginLogDialog = defineAsyncComponent(() => import('../dialog/PluginLogDialog.vue'))
+const PluginMarketDetailDialog = defineAsyncComponent(() => import('../dialog/PluginMarketDetailDialog.vue'))
 const PluginVersionHistoryDialog = defineAsyncComponent(() => import('../dialog/PluginVersionHistoryDialog.vue'))
 
 // 输入参数
@@ -32,22 +34,30 @@ const props = defineProps({
 })
 
 // 定义触发的自定义事件
-const emit = defineEmits(['remove', 'save', 'actionDone'])
+const emit = defineEmits(['remove', 'save', 'actionDone', 'rating'])
 
 // 多语言
 const { t } = useI18n()
 
+const hasCardRating = computed(() => (props.plugin?.rating_count || 0) > 0)
+const hasCardStatus = computed(() => Boolean(props.plugin?.has_update) || hasCardRating.value)
+const cardRatingValue = computed(() => Number(props.plugin?.average_rating || 0).toFixed(1))
+const cardRatingSummary = computed(() =>
+  t('plugin.ratingSummary', {
+    rating: cardRatingValue.value,
+    count: props.plugin?.rating_count || 0,
+  }),
+)
+
 // 显示器宽度
 const display = useDisplay()
 
-// 背景颜色
-const backgroundColor = ref('#28A9E1')
-
-// 图片对象
-const imageRef = ref<any>()
+const { accentStyle, imageRef, resetAccentColor, updateAccentColor } = usePluginCardAccent()
 
 // 提示框
 const $toast = useToast()
+
+const pluginSidebarNavStore = usePluginSidebarNavStore()
 
 // 确认框
 const createConfirm = useConfirm()
@@ -61,14 +71,12 @@ const menuVisible = ref(false)
 // 用户头像是否加载完成
 const isAvatarLoaded = ref(false)
 
-// 图片是否加载完成
-const isImageLoaded = ref(false)
-
 // 图片是否加载失败
 const imageLoadError = ref(false)
 
 let progressDialogController: ReturnType<typeof openSharedDialog> | null = null
 let cloneDialogController: ReturnType<typeof openSharedDialog> | null = null
+let marketDetailDialogController: ReturnType<typeof openSharedDialog> | null = null
 let versionHistoryDialogController: ReturnType<typeof openSharedDialog> | null = null
 
 /** 打开插件操作进度弹窗，插件卡片自身不再持有进度弹窗实例。 */
@@ -96,10 +104,12 @@ watch(
 
 // 图片加载完成
 async function imageLoaded() {
-  isImageLoaded.value = true
-  const imageElement = imageRef.value?.$el.querySelector('img') as HTMLImageElement
-  // 从图片中提取背景色
-  backgroundColor.value = await getDominantColor(imageElement)
+  await updateAccentColor()
+}
+
+function imageFailed() {
+  imageLoadError.value = true
+  resetAccentColor()
 }
 
 // 显示更新日志
@@ -122,17 +132,15 @@ async function uninstallPlugin() {
 
   if (!isConfirmed) return
 
+  showPluginProgress(t('plugin.uninstalling', { name: props.plugin?.plugin_name }))
   try {
-    // 显示等待提示框
-    showPluginProgress(t('plugin.uninstalling', { name: props.plugin?.plugin_name }))
-    const result: { [key: string]: any } = await api.delete(`plugin/${props.plugin?.id}`)
-    // 隐藏等待提示框
-    closePluginProgress()
+    const result: ApiResponse<unknown> = await api.delete(`plugin/${props.plugin?.id}`)
     if (result.success) {
       $toast.success(t('plugin.uninstallSuccess', { name: props.plugin?.plugin_name }))
 
-      // 通知父组件刷新
       emit('remove')
+      // 生命周期成功后刷新动态导航。
+      void pluginSidebarNavStore.ensureSidebarNav(true)
     } else {
       $toast.error(
         t('plugin.uninstallFailed', {
@@ -142,8 +150,15 @@ async function uninstallPlugin() {
       )
     }
   } catch (error) {
-    closePluginProgress()
+    $toast.error(
+      t('plugin.uninstallFailed', {
+        name: props.plugin?.plugin_name,
+        message: t('common.serverConnectionFailed'),
+      }),
+    )
     console.error(error)
+  } finally {
+    closePluginProgress()
   }
 }
 
@@ -202,11 +217,12 @@ async function resetPlugin() {
   if (!isConfirmed) return
 
   try {
-    const result: { [key: string]: any } = await api.get(`plugin/reset/${props.plugin?.id}`)
+    const result: ApiResponse<unknown> = await api.get(`plugin/reset/${props.plugin?.id}`)
     if (result.success) {
       $toast.success(t('plugin.resetSuccess', { name: props.plugin?.plugin_name }))
-      // 通知父组件刷新
       emit('save')
+      // 生命周期成功后刷新动态导航。
+      void pluginSidebarNavStore.ensureSidebarNav(true)
     } else {
       $toast.error(
         t('plugin.resetFailed', {
@@ -216,6 +232,12 @@ async function resetPlugin() {
       )
     }
   } catch (error) {
+    $toast.error(
+      t('plugin.resetFailed', {
+        name: props.plugin?.plugin_name,
+        message: t('common.serverConnectionFailed'),
+      }),
+    )
     console.error(error)
   }
 }
@@ -241,14 +263,13 @@ async function updatePlugin(releaseVersion?: string, repoUrl?: string) {
   }
 
   try {
-    // 显示等待提示框
     showPluginProgress(
       releaseVersion
         ? t('plugin.installing', { name: props.plugin?.plugin_name, version: releaseVersion })
         : t('plugin.updating', { name: props.plugin?.plugin_name }),
     )
 
-    const result: { [key: string]: any } = await api.get(`plugin/install/${props.plugin?.id}`, {
+    const result: ApiResponse<unknown> = await api.get(`plugin/install/${props.plugin?.id}`, {
       params: {
         repo_url: repoUrl || props.plugin?.repo_url,
         release_version: releaseVersion,
@@ -256,16 +277,14 @@ async function updatePlugin(releaseVersion?: string, repoUrl?: string) {
       },
     })
 
-    // 隐藏等待提示框
-    closePluginProgress()
-
     if (result.success) {
       $toast.success(t('plugin.updateSuccess', { name: props.plugin?.plugin_name }))
       versionHistoryDialogController?.close()
       versionHistoryDialogController = null
 
-      // 通知父组件刷新
       emit('save')
+      // 生命周期成功后刷新动态导航。
+      void pluginSidebarNavStore.ensureSidebarNav(true)
     } else {
       $toast.error(
         t('plugin.updateFailed', {
@@ -275,8 +294,15 @@ async function updatePlugin(releaseVersion?: string, repoUrl?: string) {
       )
     }
   } catch (error) {
-    closePluginProgress()
+    $toast.error(
+      t('plugin.updateFailed', {
+        name: props.plugin?.plugin_name,
+        message: t('common.serverConnectionFailed'),
+      }),
+    )
     console.error(error)
+  } finally {
+    closePluginProgress()
   }
 }
 
@@ -305,10 +331,7 @@ function hasRemoteRepoUrl(plugin?: Plugin) {
 function resolvePluginPageUrl(plugin?: Plugin) {
   if (!plugin) return ''
 
-  const repoUrl =
-    hasRemoteRepoUrl(plugin)
-      ? normalizePluginRepoUrl(plugin.repo_url)
-      : plugin.author_url
+  const repoUrl = hasRemoteRepoUrl(plugin) ? normalizePluginRepoUrl(plugin.repo_url) : plugin.author_url
 
   return repoUrl || plugin.author_url || ''
 }
@@ -332,27 +355,54 @@ async function fetchMarketPlugin(pluginId?: string) {
   }
 }
 
-// 访问插件项目主页
-async function visitPluginPage() {
-  const popup = window.open('about:blank', '_blank')
+/** 读取已安装插件的最新市场详情，并保留本地运行状态字段。 */
+async function fetchInstalledPluginDetail() {
   let pluginDetail = props.plugin
-
-  if (popup) popup.opener = null
+  if (!props.plugin?.id) return pluginDetail
 
   try {
-    if (props.plugin?.id) {
-      const historyPlugin: Plugin = await api.get(`plugin/history/${props.plugin.id}`, {
-        params: {
-          force: false,
-        },
-      })
-
-      // 历史接口可能只返回部分字段，合并原卡片数据避免丢失 author_url 兜底。
-      pluginDetail = { ...(props.plugin || {}), ...(historyPlugin || {}) } as Plugin
-    }
+    const historyPlugin: Plugin = await api.get(`plugin/history/${props.plugin.id}`, {
+      params: {
+        force: false,
+      },
+    })
+    pluginDetail = { ...(props.plugin || {}), ...(historyPlugin || {}), installed: true } as Plugin
   } catch (error) {
     console.error(error)
   }
+  return pluginDetail
+}
+
+/** 使用插件市场详情弹窗展示已安装插件信息和评分入口。 */
+async function showPluginAbout() {
+  const pluginDetail = await fetchInstalledPluginDetail()
+  if (!pluginDetail) return
+
+  marketDetailDialogController?.close()
+  marketDetailDialogController = openSharedDialog(
+    PluginMarketDetailDialog,
+    {
+      plugin: pluginDetail,
+      count: props.count,
+    },
+    {
+      install: () => {
+        emit('save')
+        // 详情弹窗的安装事件只刷新父列表，动态导航由卡片补充同步。
+        void pluginSidebarNavStore.ensureSidebarNav(true)
+      },
+      rating: (pluginRating: PluginRating) => emit('rating', pluginRating),
+    },
+    { closeOn: ['close', 'install', 'update:modelValue'] },
+  )
+}
+
+// 访问插件项目主页
+async function visitPluginPage() {
+  const popup = window.open('about:blank', '_blank')
+  let pluginDetail = await fetchInstalledPluginDetail()
+
+  if (popup) popup.opener = null
 
   if (!hasRemoteRepoUrl(pluginDetail)) {
     const marketPlugin = await fetchMarketPlugin(props.plugin?.id)
@@ -409,7 +459,13 @@ function showPluginClone() {
 }
 
 // 执行插件分身
-async function executePluginClone(cloneForm: { suffix: string; name: string; description: string; version: string; icon: string }) {
+async function executePluginClone(cloneForm: {
+  suffix: string
+  name: string
+  description: string
+  version: string
+  icon: string
+}) {
   if (!cloneForm.suffix.trim()) {
     $toast.error(t('plugin.suffixRequired'))
     return
@@ -418,7 +474,7 @@ async function executePluginClone(cloneForm: { suffix: string; name: string; des
   try {
     showPluginProgress(t('plugin.cloning', { name: props.plugin?.plugin_name }))
 
-    const result: { [key: string]: any } = await api.post(`plugin/clone/${props.plugin?.id}`, {
+    const result: ApiResponse<unknown> = await api.post(`plugin/clone/${props.plugin?.id}`, {
       suffix: cloneForm.suffix.trim(),
       name: cloneForm.name.trim(),
       description: cloneForm.description.trim(),
@@ -426,31 +482,42 @@ async function executePluginClone(cloneForm: { suffix: string; name: string; des
       icon: cloneForm.icon.trim(),
     })
 
-    closePluginProgress()
-
     if (result.success) {
       $toast.success(t('plugin.cloneSuccess', { name: cloneForm.name }))
       cloneDialogController?.close()
       cloneDialogController = null
-      // 通知父组件刷新
       emit('remove')
+      // 生命周期成功后刷新动态导航。
+      void pluginSidebarNavStore.ensureSidebarNav(true)
     } else {
       $toast.error(t('plugin.cloneFailed', { message: result.message }))
     }
   } catch (error) {
-    closePluginProgress()
     $toast.error(t('plugin.cloneFailedGeneral'))
     console.error(error)
+  } finally {
+    closePluginProgress()
   }
 }
 
 onUnmounted(() => {
   closePluginProgress()
   cloneDialogController?.close()
+  marketDetailDialogController?.close()
+  versionHistoryDialogController?.close()
 })
 
 // 弹出菜单
 const dropdownItems = ref([
+  {
+    title: t('plugin.about'),
+    value: 10,
+    show: true,
+    props: {
+      prependIcon: 'mdi-information-outline',
+      click: showPluginAbout,
+    },
+  },
   {
     title: t('plugin.viewData'),
     value: 1,
@@ -543,7 +610,7 @@ const dropdownItems = ref([
 // 监听插件状态变化
 watch(
   () => props.plugin?.has_update,
-  (newHasUpdate, _) => {
+  newHasUpdate => {
     const updateItemIndex = dropdownItems.value.findIndex(item => item.value === 3)
     if (updateItemIndex !== -1) dropdownItems.value[updateItemIndex].show = newHasUpdate
 
@@ -555,7 +622,7 @@ watch(
 // 监听插件窗口状态变化
 watch(
   () => props.plugin?.page_open,
-  (newOpenState, _) => {
+  newOpenState => {
     if (newOpenState) openPluginDetail()
   },
   { immediate: true },
@@ -573,113 +640,147 @@ watch(
             :width="props.width"
             :height="props.height"
             @click="handleCardClick"
-            class="app-hover-lift-card flex flex-col h-full"
+            class="plugin-card app-hover-lift-card flex flex-col h-full"
             :class="{
               'app-hover-lift-card--hovering': hover.isHovering && !props.sortable,
               'cursor-move': props.sortable,
             }"
+            :style="accentStyle"
             :ripple="!props.sortable"
           >
-          <div
-            class="flex-grow"
-            :style="`background: linear-gradient(rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0.5) 100%), linear-gradient(${backgroundColor} 0%, ${backgroundColor} 100%)`"
-          >
-            <VCardText class="px-2 pt-2 pb-0">
-              <VCardTitle
-                class="text-white px-2 pb-0 text-lg text-shadow whitespace-nowrap overflow-hidden text-ellipsis"
-              >
-                <VBadge dot inline :color="props.plugin?.state ? 'success' : 'secondary'" />
-                {{ props.plugin?.plugin_name }}
-                <span class="text-sm mt-1 text-gray-200"> v{{ props.plugin?.plugin_version }} </span>
-              </VCardTitle>
-            </VCardText>
-            <div class="relative flex flex-row items-start px-2 justify-between grow">
-              <div class="relative flex-1 min-w-0">
-                <div class="px-2 py-1 text-white text-sm text-shadow overflow-hidden line-clamp-3 ...">
-                  {{ props.plugin?.plugin_desc }}
+            <div class="plugin-card__banner flex-grow">
+              <VCardText class="px-2 pt-2 pb-0">
+                <VCardTitle
+                  class="text-white px-2 pb-0 text-lg text-shadow whitespace-nowrap overflow-hidden text-ellipsis"
+                  :class="{ 'plugin-card__title--with-status': hasCardStatus }"
+                >
+                  <VBadge dot inline :color="props.plugin?.state ? 'success' : 'secondary'" />
+                  {{ props.plugin?.plugin_name }}
+                  <span class="text-sm mt-1 text-gray-200"> v{{ props.plugin?.plugin_version }} </span>
+                </VCardTitle>
+              </VCardText>
+              <div class="relative flex flex-row items-start px-2 justify-between grow">
+                <div class="relative flex-1 min-w-0">
+                  <div class="px-2 py-1 text-white text-sm text-shadow overflow-hidden line-clamp-3 ...">
+                    {{ props.plugin?.plugin_desc }}
+                  </div>
+                </div>
+                <div
+                  class="relative flex-shrink-0 self-center pb-3"
+                  :class="{ 'cursor-move': props.sortable && display.mdAndUp.value }"
+                >
+                  <VAvatar size="48">
+                    <VImg
+                      ref="imageRef"
+                      :src="iconPath"
+                      aspect-ratio="4/3"
+                      cover
+                      @load="imageLoaded"
+                      @error="imageFailed"
+                    />
+                  </VAvatar>
                 </div>
               </div>
-              <div
-                class="relative flex-shrink-0 self-center pb-3"
-                :class="{ 'cursor-move': props.sortable && display.mdAndUp.value }"
-              >
-                <VAvatar size="48">
-                  <VImg
-                    ref="imageRef"
-                    :src="iconPath"
-                    aspect-ratio="4/3"
-                    cover
-                    @load="imageLoaded"
-                    @error="imageLoadError = true"
-                  />
-                </VAvatar>
-              </div>
             </div>
-          </div>
-          <VCardText
-            class="flex flex-col align-self-baseline justify-between px-2 py-2 w-full overflow-hidden max-h-10 min-h-10"
-          >
-            <div class="flex flex-nowrap items-center w-full pe-10">
-              <div class="flex flex-nowrap max-w-40 items-center align-middle">
-                <VImg :src="authorPath" class="author-avatar" @load="isAvatarLoaded = true">
-                  <template #default>
-                    <VIcon v-if="!isAvatarLoaded" size="small" icon="mdi-github" class="me-1" />
-                  </template>
-                </VImg>
-                <span v-if="props.sortable" class="overflow-hidden text-ellipsis whitespace-nowrap">
-                  {{ props.plugin?.plugin_author }}
+            <VCardText
+              class="flex flex-col align-self-baseline justify-between px-2 py-2 w-full overflow-hidden max-h-10 min-h-10"
+            >
+              <div class="flex flex-nowrap items-center w-full pe-10">
+                <div class="flex flex-nowrap max-w-40 items-center align-middle">
+                  <VImg :src="authorPath" class="author-avatar" @load="isAvatarLoaded = true">
+                    <template #default>
+                      <VIcon v-if="!isAvatarLoaded" size="small" icon="mdi-github" class="me-1" />
+                    </template>
+                  </VImg>
+                  <span v-if="props.sortable" class="overflow-hidden text-ellipsis whitespace-nowrap">
+                    {{ props.plugin?.plugin_author }}
+                  </span>
+                  <a
+                    v-else
+                    :href="props.plugin?.author_url"
+                    target="_blank"
+                    @click.stop
+                    class="overflow-hidden text-ellipsis whitespace-nowrap"
+                  >
+                    {{ props.plugin?.plugin_author }}
+                  </a>
+                </div>
+                <span v-if="props.count" class="ms-2 flex-shrink-0 download-count items-center align-middle">
+                  <VIcon size="small" icon="mdi-download" />
+                  <span class="text-sm">{{ formatDownloadCount(props.count) }}</span>
                 </span>
-                <a
-                  v-else
-                  :href="props.plugin?.author_url"
-                  target="_blank"
-                  @click.stop
-                  class="overflow-hidden text-ellipsis whitespace-nowrap"
-                >
-                  {{ props.plugin?.plugin_author }}
-                </a>
               </div>
-              <span v-if="props.count" class="ms-2 flex-shrink-0 download-count items-center align-middle">
-                <VIcon size="small" icon="mdi-download" />
-                <span class="text-sm">{{ formatDownloadCount(props.count) }}</span>
-              </span>
+              <div v-if="!props.sortable" class="absolute bottom-0 right-0">
+                <IconBtn @click.stop>
+                  <VIcon icon="mdi-dots-vertical" />
+                  <VMenu v-model="menuVisible" activator="parent" close-on-content-click>
+                    <VList>
+                      <VListItem
+                        v-for="(item, i) in dropdownItems"
+                        v-show="item.show"
+                        :key="i"
+                        :base-color="item.props.color"
+                        @click="item.props.click"
+                      >
+                        <template #prepend>
+                          <VIcon :icon="item.props.prependIcon" />
+                        </template>
+                        <VListItemTitle>{{ item.title }}</VListItemTitle>
+                      </VListItem>
+                    </VList>
+                  </VMenu>
+                </IconBtn>
+              </div>
+            </VCardText>
+            <div
+              v-if="props.plugin?.has_update"
+              class="plugin-card__status plugin-card__status--update"
+              :aria-label="t('plugin.hasUpdate')"
+              :title="t('plugin.hasUpdate')"
+            >
+              <VIcon icon="mdi-new-box" class="text-white" size="20" />
             </div>
-            <div v-if="!props.sortable" class="absolute bottom-0 right-0">
-              <IconBtn @click.stop>
-                <VIcon icon="mdi-dots-vertical" />
-                <VMenu v-model="menuVisible" activator="parent" close-on-content-click>
-                  <VList>
-                    <VListItem
-                      v-for="(item, i) in dropdownItems"
-                      v-show="item.show"
-                      :key="i"
-                      :base-color="item.props.color"
-                      @click="item.props.click"
-                    >
-                      <template #prepend>
-                        <VIcon :icon="item.props.prependIcon" />
-                      </template>
-                      <VListItemTitle v-text="item.title" />
-                    </VListItem>
-                  </VList>
-                </VMenu>
-              </IconBtn>
+            <div
+              v-else-if="hasCardRating"
+              class="plugin-card__status plugin-card__status--rating"
+              :aria-label="cardRatingSummary"
+              :title="cardRatingSummary"
+            >
+              <VIcon icon="mdi-star" color="warning" size="16" />
+              <span>{{ cardRatingValue }}</span>
             </div>
-          </VCardText>
-          <div v-if="props.plugin?.has_update" class="me-n3 absolute top-0 right-5">
-            <VIcon icon="mdi-new-box" class="text-white" />
-          </div>
           </VCard>
         </div>
       </template>
     </VHover>
-
   </div>
 </template>
 
 <style lang="scss" scoped>
 .plugin-card-hover-area {
   inline-size: 100%;
+}
+
+.plugin-card__title--with-status {
+  padding-inline-end: 4rem !important;
+}
+
+.plugin-card__status {
+  position: absolute;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  color: white;
+  inset-block-start: 0.625rem;
+  inset-inline-end: 0.625rem;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 65%);
+}
+
+.plugin-card__status--rating {
+  gap: 0.125rem;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .card-cover-blurred::before {

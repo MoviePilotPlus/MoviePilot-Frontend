@@ -4,7 +4,15 @@ import api from '@/api'
 import type { ScheduleInfo } from '@/api/types'
 import { useI18n } from 'vue-i18n'
 import { useBackground } from '@/composables/useBackground'
-import { isScheduleRunning, useScheduleProgress } from '@/composables/useScheduleProgress'
+import {
+  getScheduleName,
+  getScheduleNextRunText,
+  getScheduleProvider,
+  getScheduleStatusText,
+  isScheduleRunning,
+  isScheduleWaiting,
+  useScheduleProgress,
+} from '@/composables/useScheduleProgress'
 import { getSchedulerVisual } from '@/utils/schedulerVisual'
 
 // 国际化
@@ -33,31 +41,24 @@ async function loadSchedulerList() {
 }
 
 /** 根据任务状态返回桌面端状态标签颜色。 */
-function getSchedulerColor(status: string) {
-  switch (status) {
-    case t('setting.scheduler.running'):
-      return 'success'
-    case t('setting.scheduler.stopped'):
-      return 'error'
-    case t('setting.scheduler.waiting'):
-      return ''
-    default:
-      return ''
-  }
+function getSchedulerColor(scheduler: ScheduleInfo) {
+  if (isScheduleRunning(scheduler)) return 'success'
+  if (isScheduleWaiting(scheduler)) return ''
+  return ''
 }
 
 /** 根据任务状态返回移动端状态胶囊的语义样式。 */
-function getSchedulerStatusVariant(status: string) {
-  switch (status) {
-    case t('setting.scheduler.running'):
-      return 'running'
-    case t('setting.scheduler.stopped'):
-      return 'stopped'
-    case t('setting.scheduler.waiting'):
-      return 'waiting'
-    default:
-      return 'default'
-  }
+function getSchedulerStatusVariant(scheduler: ScheduleInfo) {
+  if (isScheduleRunning(scheduler)) return 'running'
+  if (isScheduleWaiting(scheduler)) return 'waiting'
+  return 'default'
+}
+
+/** 获取界面上应展示的任务状态文案，优先保证运行态语义正确。 */
+function getDisplayedSchedulerStatusText(scheduler: ScheduleInfo) {
+  if (isScheduleRunning(scheduler)) return t('setting.scheduler.running')
+  if (isScheduleWaiting(scheduler)) return t('setting.scheduler.waiting')
+  return getScheduleStatusText(scheduler)
 }
 
 /** 将后端返回的紧凑时间差转换为更适合移动端展示的文本。 */
@@ -67,15 +68,15 @@ function formatMobileNextRunTime(nextRun?: string) {
 
 /** 获取移动端状态胶囊文案；等待状态展示为下次运行倒计时。 */
 function getMobileSchedulerStatusText(scheduler: ScheduleInfo) {
-  if (scheduler.status === t('setting.scheduler.waiting')) {
-    const readableNextRun = formatMobileNextRunTime(scheduler.next_run)
+  if (isScheduleWaiting(scheduler)) {
+    const readableNextRun = formatMobileNextRunTime(getScheduleNextRunText(scheduler))
 
     return readableNextRun
       ? t('setting.scheduler.mobileWaitingAfter', { time: readableNextRun })
       : t('setting.scheduler.mobileNoNextRun')
   }
 
-  return scheduler.status
+  return getDisplayedSchedulerStatusText(scheduler)
 }
 
 /** 执行指定定时服务，并在短延迟后刷新列表。 */
@@ -108,7 +109,7 @@ const mobileSchedulerCards = computed(() =>
       progressValue: isRunning ? getScheduleProgressValue(scheduler) : 0,
       scheduler,
       statusText: getMobileSchedulerStatusText(scheduler),
-      statusVariant: getSchedulerStatusVariant(scheduler.status),
+      statusVariant: getSchedulerStatusVariant(scheduler),
       visual: getSchedulerVisual(scheduler),
     }
   }),
@@ -119,7 +120,7 @@ const { loading: schedulerLoading } = useDataRefresh(
   'scheduler-list',
   loadSchedulerList,
   3000, // 3秒间隔，及时发现任务启停；运行中进度由独立轮询每秒刷新
-  true // 立即执行
+  true, // 立即执行
 )
 </script>
 
@@ -138,37 +139,28 @@ const { loading: schedulerLoading } = useDataRefresh(
       <tbody>
         <tr v-for="scheduler in schedulerList" :key="scheduler.id">
           <td>
-            {{ scheduler.provider }}
+            {{ getScheduleProvider(scheduler) }}
           </td>
           <td class="scheduler-task-cell">
-            <div>{{ scheduler.name }}</div>
+            <div>{{ getScheduleName(scheduler) }}</div>
             <div v-if="isScheduleRunning(scheduler)" class="scheduler-progress">
-              <VProgressLinear
-                :model-value="getScheduleProgressValue(scheduler)"
-                color="primary"
-                height="4"
-                rounded
-              />
+              <VProgressLinear :model-value="getScheduleProgressValue(scheduler)" color="primary" height="4" rounded />
               <div class="scheduler-progress-meta">
-                <span>{{ getScheduleProgressText(scheduler) || scheduler.status }}</span>
+                <span>{{ getScheduleProgressText(scheduler) || getScheduleStatusText(scheduler) }}</span>
                 <strong>{{ Math.round(getScheduleProgressValue(scheduler)) }}%</strong>
               </div>
             </div>
           </td>
           <td>
-            <VChip :color="getSchedulerColor(scheduler.status)">
-              {{ scheduler.status }}
+            <VChip :color="getSchedulerColor(scheduler)">
+              {{ getDisplayedSchedulerStatusText(scheduler) }}
             </VChip>
           </td>
           <td>
-            {{ scheduler.next_run }}
+            {{ getScheduleNextRunText(scheduler) }}
           </td>
           <td>
-            <VBtn
-              size="small"
-              :disabled="isScheduleRunning(scheduler)"
-              @click="runCommand(scheduler.id)"
-            >
+            <VBtn size="small" :disabled="isScheduleRunning(scheduler)" @click="runCommand(scheduler.id)">
               <template #prepend>
                 <VIcon>mdi-play</VIcon>
               </template>
@@ -214,14 +206,16 @@ const { loading: schedulerLoading } = useDataRefresh(
         </div>
 
         <div class="mobile-scheduler-content">
-          <h3>{{ scheduler.name }}</h3>
-          <p>{{ scheduler.provider }}</p>
+          <h3>{{ getScheduleName(scheduler) }}</h3>
+          <div class="mobile-scheduler-meta">
+            <p>{{ getScheduleProvider(scheduler) }}</p>
+            <span class="mobile-scheduler-status" :class="`mobile-scheduler-status--${statusVariant}`">
+              {{ statusText }}
+            </span>
+          </div>
         </div>
 
         <div class="mobile-scheduler-actions">
-          <span class="mobile-scheduler-status" :class="`mobile-scheduler-status--${statusVariant}`">
-            {{ statusText }}
-          </span>
           <VBtn
             icon
             class="mobile-scheduler-run-btn"
@@ -236,7 +230,7 @@ const { loading: schedulerLoading } = useDataRefresh(
         <div v-if="isRunning" class="mobile-scheduler-progress">
           <VProgressLinear :model-value="progressValue" color="primary" height="4" rounded />
           <div class="scheduler-progress-meta">
-            <span>{{ progressText || scheduler.status }}</span>
+            <span>{{ progressText || getDisplayedSchedulerStatusText(scheduler) }}</span>
             <strong>{{ Math.round(progressValue) }}%</strong>
           </div>
         </div>
@@ -260,12 +254,12 @@ const { loading: schedulerLoading } = useDataRefresh(
 <style scoped>
 .desktop-scheduler-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-block-size: 260px;
   color: rgba(var(--v-theme-on-surface), 0.52);
-  flex-direction: column;
   gap: 12px;
+  min-block-size: 260px;
 }
 
 .desktop-scheduler-empty p {
@@ -285,10 +279,10 @@ const { loading: schedulerLoading } = useDataRefresh(
 .scheduler-progress-meta {
   display: flex;
   justify-content: space-between;
-  margin-block-start: 4px;
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 11px;
   gap: 12px;
+  margin-block-start: 4px;
 }
 
 .scheduler-progress-meta span {
@@ -303,9 +297,15 @@ const { loading: schedulerLoading } = useDataRefresh(
 }
 
 .mobile-scheduler-view {
-  min-block-size: 100%;
-  padding: 12px 18px calc(22px + env(safe-area-inset-bottom));
+  --mobile-scheduler-card-backdrop-filter: none;
+  --mobile-scheduler-card-background: rgb(var(--v-theme-surface));
+  --mobile-scheduler-card-border: 0;
+  --mobile-scheduler-card-shadow: none;
+
   background: transparent;
+  min-block-size: 100%;
+  padding-block: 12px calc(22px + env(safe-area-inset-bottom));
+  padding-inline: 18px;
 }
 
 .mobile-scheduler-list {
@@ -318,11 +318,12 @@ const { loading: schedulerLoading } = useDataRefresh(
   display: grid;
   align-items: center;
   padding: 18px;
-  border: 0;
+  border: var(--mobile-scheduler-card-border);
   border-radius: var(--app-surface-radius);
-  background: rgb(var(--v-theme-surface));
-  backdrop-filter: none;
-  box-shadow: none;
+  -webkit-backdrop-filter: var(--mobile-scheduler-card-backdrop-filter);
+  backdrop-filter: var(--mobile-scheduler-card-backdrop-filter);
+  background: var(--mobile-scheduler-card-background);
+  box-shadow: var(--mobile-scheduler-card-shadow);
   column-gap: 14px;
   grid-template-columns: 62px minmax(0, 1fr) auto;
 }
@@ -356,38 +357,49 @@ const { loading: schedulerLoading } = useDataRefresh(
 
 .mobile-scheduler-content p {
   overflow: hidden;
-  margin: 6px 0 0;
+  min-inline-size: 0;
   color: rgba(var(--v-theme-on-surface), 0.58);
   font-size: 14px;
   font-weight: 500;
-  line-height: 1.35;
+  line-height: 1;
+  margin-block: 0;
+  margin-inline: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mobile-scheduler-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-block-start: 6px;
+  min-inline-size: 0;
 }
 
 .mobile-scheduler-actions {
   display: inline-flex;
   align-items: center;
-  gap: 14px;
 }
 
 .mobile-scheduler-progress {
-  min-inline-size: 0;
-  margin-block-start: 2px;
   grid-column: 2 / -1;
+  margin-block-start: 2px;
+  min-inline-size: 0;
 }
 
 .mobile-scheduler-status {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 5px 10px;
   border-radius: 999px;
   background: rgba(var(--v-theme-on-surface), 0.06);
   color: rgba(var(--v-theme-on-surface), 0.62);
   font-size: 12px;
   font-weight: 600;
   line-height: 1;
+  padding-block: 5px;
+  padding-inline: 10px;
   white-space: nowrap;
 }
 
@@ -405,7 +417,7 @@ const { loading: schedulerLoading } = useDataRefresh(
   border-radius: 50%;
   background: linear-gradient(135deg, #ff4f87, #e91e63) !important;
   block-size: 46px;
-  box-shadow: 0 10px 22px rgba(233, 30, 99, 0.28);
+  box-shadow: 0 10px 22px rgba(233, 30, 99, 28%);
   color: #fff !important;
   inline-size: 46px;
 }
@@ -418,12 +430,12 @@ const { loading: schedulerLoading } = useDataRefresh(
 
 .mobile-scheduler-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-block-size: 42vh;
   color: rgba(var(--v-theme-on-surface), 0.52);
-  flex-direction: column;
   gap: 12px;
+  min-block-size: 42vh;
 }
 
 .mobile-scheduler-empty p {
@@ -433,13 +445,13 @@ const { loading: schedulerLoading } = useDataRefresh(
 
 .mobile-scheduler-footer {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding-block: 28px 4px;
   color: rgba(var(--v-theme-on-surface), 0.55);
-  flex-direction: column;
   font-size: 14px;
   gap: 8px;
+  padding-block: 28px 4px;
 }
 
 .mobile-scheduler-loading {
@@ -451,13 +463,13 @@ const { loading: schedulerLoading } = useDataRefresh(
   gap: 10px;
 }
 
-html[data-theme='transparent'] .mobile-scheduler-card,
-.v-theme--transparent .mobile-scheduler-card {
-  background: rgba(var(--v-theme-surface), var(--transparent-opacity-light, 0.2));
+.v-theme--transparent .mobile-scheduler-card,
+html[data-theme='transparent'] .mobile-scheduler-card {
   backdrop-filter: blur(var(--transparent-blur, 10px));
+  background: rgba(var(--v-theme-surface), var(--transparent-opacity-light, 0.2));
 }
 
-@media (max-width: 480px) {
+@media (width <= 480px) {
   .mobile-scheduler-view {
     padding-inline: 14px;
   }
@@ -481,13 +493,10 @@ html[data-theme='transparent'] .mobile-scheduler-card,
     font-size: 13px;
   }
 
-  .mobile-scheduler-actions {
-    gap: 8px;
-  }
-
   .mobile-scheduler-status {
-    padding: 5px 9px;
     font-size: 12px;
+    padding-block: 5px;
+    padding-inline: 9px;
   }
 
   .mobile-scheduler-run-btn {

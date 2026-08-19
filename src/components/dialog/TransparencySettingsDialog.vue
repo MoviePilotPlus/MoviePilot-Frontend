@@ -1,13 +1,9 @@
 <script setup lang="ts">
 import { useTransparencySettings } from '@/composables/useTransparencySettings'
 import { useI18n } from 'vue-i18n'
-import { useDisplay } from 'vuetify'
 
 // 国际化
 const { t } = useI18n()
-
-// 显示器宽度
-const display = useDisplay()
 
 // 输入参数
 const props = withDefaults(
@@ -29,6 +25,7 @@ const emit = defineEmits<{
 const visible = computed({
   get: () => props.modelValue,
   set: value => {
+    if (!value) cancelTransparencySettings()
     emit('update:modelValue', value)
     if (!value) emit('close')
   },
@@ -38,6 +35,7 @@ const {
   adjustTransparency,
   backgroundBlur,
   backgroundPosterOpacity,
+  cancelTransparencySettings,
   currentPresetLevel,
   onBackgroundBlurChange,
   onBackgroundPosterOpacityChange,
@@ -45,14 +43,32 @@ const {
   onGlassQualityChange,
   onOpacityChange,
   resetTransparencySettings,
+  saveTransparencySettings,
   transparencyBlur,
   transparencyGlassQuality,
   transparencyOpacity,
 } = useTransparencySettings()
+
+/** 父级控制弹窗生命周期时，未保存关闭仍需恢复持久化设置。 */
+watch(
+  () => props.modelValue,
+  (value, previous) => {
+    if (!value && previous) cancelTransparencySettings()
+  },
+)
+
+/** 保存当前透明度预览，随后关闭面板。 */
+function saveSettings() {
+  saveTransparencySettings()
+  visible.value = false
+}
+
+// 弹窗的任意未保存销毁路径都应恢复持久化快照。
+onScopeDispose(cancelTransparencySettings)
 </script>
 
 <template>
-  <VDialog v-if="visible" v-model="visible" max-width="30rem" scrollable :fullscreen="!display.mdAndUp.value">
+  <VDialog v-if="visible" v-model="visible" width="100%" max-width="30rem" scrollable>
     <VCard>
       <VCardItem>
         <VCardTitle>
@@ -185,14 +201,11 @@ const {
       </VCardText>
       <VDivider />
       <VCardText class="text-center">
-        <VBtn @click="resetTransparencySettings" variant="outlined" class="me-2">
-          <template #prepend>
-            <VIcon icon="mdi-refresh" />
-          </template>
-          {{ t('theme.transparencyReset') }}
+        <VBtn variant="outlined" prepend-icon="mdi-refresh" class="me-2" @click="resetTransparencySettings">
+          {{ t('common.reset') }}
         </VBtn>
-        <VBtn @click="visible = false" color="primary">
-          {{ t('common.confirm') }}
+        <VBtn color="primary" prepend-icon="mdi-content-save" @click="saveSettings">
+          {{ t('common.save') }}
         </VBtn>
       </VCardText>
     </VCard>

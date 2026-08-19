@@ -25,15 +25,24 @@ const apipath = 'subscribe/popular'
 // 当前页码
 const page = ref(1)
 
-// 是否加载中
-const loading = ref(false)
-
 // 是否加载完成
 const isRefreshed = ref(false)
 
-// 数据列表
-const dataList = ref<MediaInfo[]>([])
-const currData = ref<MediaInfo[]>([])
+// 当前列表请求是否失败；合法空数组仍使用空数据状态。
+const loadError = ref(false)
+
+// 使用 shallowRef 避免长列表中的深层代理开销
+const dataList = shallowRef<MediaInfo[]>([])
+
+// 用于保存已处理过的 key（去重）
+const seenKeys = new Set<string>()
+
+// 保存本次列表生命周期内已经处理过的原始页签名（检测分页循环）
+const seenPageSignatures = new Set<string>()
+
+// 筛选重置允许新旧请求短暂并行，只接纳当前代次的响应。
+let requestGeneration = 0
+const loadingGenerations = new Set<number>()
 
 // 筛选参数
 const filterParams = reactive({
@@ -48,9 +57,13 @@ const filterParams = reactive({
 const currentKey = ref(0)
 
 function resetData() {
+  requestGeneration++
   dataList.value = []
+  seenKeys.clear()
+  seenPageSignatures.clear()
   page.value = 1
   isRefreshed.value = false
+  loadError.value = false
   currentKey.value++
 }
 
@@ -139,68 +152,96 @@ function getParams() {
   return params
 }
 
-// 获取列表数据
-async function fetchData({ done }: { done: any }) {
-  try {
-    // 如果正在加载中，直接返回
-    if (loading.value) {
-      done('ok')
-      return
-    }
+// MediaInfo 去重的字段
+const dedupFields = [
+  'source',
+  'type',
+  'season',
+  'tmdb_id',
+  'imdb_id',
+  'tvdb_id',
+  'douban_id',
+  'bangumi_id',
+  'anilist_id',
+  'mediaid_prefix',
+  'media_id',
+] as const
 
-    // 加载到满屏或者加载出错
-    if (!hasScroll()) {
-      // 加载多次
-      while (!hasScroll()) {
-        // 设置加载中
-        loading.value = true
-        // 请求API
-        currData.value = await api.get(apipath, {
-          params: getParams(),
-        })
-        // 取消加载中
-        loading.value = false
-        // 标计为已请求完成
-        isRefreshed.value = true
-        if (currData.value.length === 0) {
-          // 如果没有数据，跳出
-          done('empty')
-          return
-        }
-        // 合并数据
-        dataList.value = [...dataList.value, ...currData.value]
-        // 页码+1
-        page.value++
-        // 返回加载成功
-        done('ok')
-        await nextTick()
-      }
-    } else {
-      // 设置加载中
-      loading.value = true
-      // 请求API
-      currData.value = await api.get(apipath, {
-        params: getParams(),
-      })
-      loading.value = false
-      // 标计为已请求完成
+// 去重、分页终止和渲染必须共用同一媒体身份，避免状态与 DOM key 分叉。
+function getMediaIdentity(item: MediaInfo) {
+  return JSON.stringify(dedupFields.map(field => item[field] ?? null))
+}
+
+function deduplicate(items: MediaInfo[]): MediaInfo[] {
+  return items.filter(item => {
+    const key = getMediaIdentity(item)
+    if (seenKeys.has(key)) {
+      return false
+    }
+    seenKeys.add(key)
+    return true
+  })
+}
+
+function appendData(items: MediaInfo[]) {
+  dataList.value = dataList.value.concat(items)
+}
+
+async function loadPageData() {
+  const rawData: MediaInfo[] = await api.get(apipath, {
+    params: getParams(),
+  })
+  const pageSignature = [...new Set(rawData.map(getMediaIdentity))].sort().join('\n')
+  const isTerminal = rawData.length === 0 || seenPageSignatures.has(pageSignature)
+
+  if (!isTerminal) seenPageSignatures.add(pageSignature)
+
+  return {
+    isTerminal,
+    uniqueData: isTerminal ? [] : deduplicate(rawData),
+  }
+}
+
+// 获取列表数据
+async function fetchData({ done }: { done: (status: 'empty' | 'error' | 'ok') => void }) {
+  const generation = requestGeneration
+
+  // 同一筛选条件只允许一个分页请求在途。
+  if (loadingGenerations.has(generation)) {
+    return
+  }
+
+  loadingGenerations.add(generation)
+  loadError.value = false
+
+  try {
+    while (generation === requestGeneration) {
+      const { isTerminal, uniqueData } = await loadPageData()
+
+      if (generation !== requestGeneration) return
+
       isRefreshed.value = true
-      if (currData.value.length === 0) {
-        // 如果没有数据，跳出
+      if (isTerminal) {
         done('empty')
-      } else {
-        // 合并数据
-        dataList.value = [...dataList.value, ...currData.value]
-        // 页码+1
-        page.value++
-        // 返回加载成功
-        done('ok')
+        return
       }
+
+      appendData(uniqueData)
+      page.value++
+      done('ok')
+      await nextTick()
+
+      if (hasScroll()) return
     }
   } catch (error) {
+    if (generation !== requestGeneration) return
+
     console.error(error)
-    // 返回加载失败
+    isRefreshed.value = true
+    loadError.value = true
     done('error')
+  } finally {
+    loadingGenerations.delete(generation)
   }
 }
 </script>
@@ -230,12 +271,7 @@ async function fetchData({ done }: { done: any }) {
         <VLabel>{{ t('tmdb.genre') }}</VLabel>
       </div>
       <VChipGroup v-model="filterParams.genre_id">
-        <VChip
-          :color="filterParams.genre_id == '' ? 'primary' : ''"
-          filter
-          tile
-          value=""
-        >
+        <VChip :color="filterParams.genre_id == '' ? 'primary' : ''" filter tile value="">
           {{ t('common.all') }}
         </VChip>
         <VChip
@@ -273,16 +309,25 @@ async function fetchData({ done }: { done: any }) {
     mode="intersect"
     side="end"
     :items="dataList"
+    :margin="dataList.length > 0 ? 480 : 0"
     class="overflow-visible px-2"
     @load="fetchData"
     :key="currentKey"
   >
     <template #loading />
+    <template #error="{ props: retryProps }">
+      <div class="d-flex flex-column align-center ga-2 py-4" role="alert">
+        <span class="text-medium-emphasis">{{ t('subscribe.requestFailed') }}</span>
+        <VBtn v-bind="retryProps" prepend-icon="mdi-refresh" size="small" variant="tonal">
+          {{ t('common.retry') }}
+        </VBtn>
+      </div>
+    </template>
     <template #empty />
     <ProgressiveCardGrid
       v-if="dataList.length > 0"
       :items="dataList"
-      :get-item-key="item => item.tmdb_id || item.douban_id || item.bangumi_id || item.media_id || item.title"
+      :get-item-key="getMediaIdentity"
       :min-item-width="144"
       :estimated-item-height="320"
       tabindex="0"
@@ -298,7 +343,7 @@ async function fetchData({ done }: { done: any }) {
       </template>
     </ProgressiveCardGrid>
     <NoDataFound
-      v-if="dataList.length === 0 && isRefreshed"
+      v-if="dataList.length === 0 && isRefreshed && !loadError"
       error-code="404"
       :error-title="t('common.noData')"
       :error-description="t('subscribe.noPopularData')"

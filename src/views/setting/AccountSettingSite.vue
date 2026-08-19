@@ -28,12 +28,15 @@ const resetSitesDisabled = ref(false)
 
 const isPasswordVisible = ref(false)
 
+const isCookieCloudAuthHeaderVisible = ref(false)
+
 // 站点设置默认值
 const siteSetting = ref<any>({
   CookieCloud: {
     COOKIECLOUD_HOST: '',
     COOKIECLOUD_KEY: '',
     COOKIECLOUD_PASSWORD: '',
+    COOKIECLOUD_AUTH_HEADER: '',
     COOKIECLOUD_INTERVAL: 0,
     COOKIECLOUD_ENABLE_LOCAL: false,
     COOKIECLOUD_BLACKLIST: '',
@@ -43,6 +46,7 @@ const siteSetting = ref<any>({
     SITE_MESSAGE: false,
     SEARCH_RESOURCE_PAGES: 1,
     BROWSER_EMULATION: 'cloakbrowser',
+    OCR_HOST: '',
     FLARESOLVERR_URL: '',
   },
 })
@@ -187,6 +191,18 @@ useSilentSettingRefresh(loadSiteSettings, {
                 />
               </VCol>
               <VCol cols="12" md="6">
+                <VTextField
+                  v-model="siteSetting.CookieCloud.COOKIECLOUD_AUTH_HEADER"
+                  :type="isCookieCloudAuthHeaderVisible ? 'text' : 'password'"
+                  :append-inner-icon="isCookieCloudAuthHeaderVisible ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
+                  @click:append-inner="isCookieCloudAuthHeaderVisible = !isCookieCloudAuthHeaderVisible"
+                  :label="t('setting.site.cookieCloudAuthHeader')"
+                  :hint="t('setting.site.cookieCloudAuthHeaderHint')"
+                  persistent-hint
+                  prepend-inner-icon="mdi-shield-key"
+                />
+              </VCol>
+              <VCol cols="12" md="6">
                 <VSelect
                   v-model="siteSetting.CookieCloud.COOKIECLOUD_INTERVAL"
                   :label="t('setting.site.autoSyncInterval')"
@@ -259,6 +275,16 @@ useSilentSettingRefresh(loadSiteSettings, {
                   :hint="t('setting.site.browserEmulationHint')"
                   persistent-hint
                   prepend-inner-icon="mdi-web"
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VTextField
+                  v-model="siteSetting.Site.OCR_HOST"
+                  :label="t('setting.site.ocrHost')"
+                  placeholder="https://movie-pilot.org"
+                  :hint="t('setting.site.ocrHostHint')"
+                  persistent-hint
+                  prepend-inner-icon="mdi-text-recognition"
                 />
               </VCol>
               <VCol cols="12" md="6" v-if="siteSetting.Site.BROWSER_EMULATION == 'flaresolverr'">

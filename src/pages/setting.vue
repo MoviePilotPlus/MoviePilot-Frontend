@@ -64,8 +64,9 @@ watch(activeTab, markTabVisited, { immediate: true })
 
 <template>
   <div>
-    <VWindow v-model="activeTab" class="disable-tab-transition" :touch="false">
+    <VWindow v-model="activeTab" class="settings-content-window disable-tab-transition" :touch="false">
       <VWindowItem v-for="item in settingTabComponents" :key="item.value" :value="item.value">
+<<<<<<< HEAD
         <transition name="fade-slide" appear>
           <div>
             <component :is="item.component" v-if="visitedTabs.has(item.value)" :active="activeTab === item.value" />
@@ -89,6 +90,11 @@ watch(activeTab, markTabVisited, { immediate: true })
             <AccountSettingAbout />
           </div>
         </transition>
+=======
+        <div>
+          <component :is="item.component" v-if="visitedTabs.has(item.value)" :active="activeTab === item.value" />
+        </div>
+>>>>>>> v2
       </VWindowItem>
     </VWindow>
   </div>

@@ -48,7 +48,8 @@ const theme = useTheme()
 const display = useDisplay()
 const { useSSE } = useBackground()
 
-const DEFAULT_LEVELS = ['TRACE', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+const DEFAULT_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
+const HIDDEN_LEVELS = ['TRACE', 'CRITICAL']
 const MAX_LOG_LINES = 600
 const FLUSH_DELAY = 80
 const GROUP_GAP_MS = 100
@@ -86,12 +87,12 @@ const isTransparentTheme = computed(() => theme.name.value === 'transparent')
 const normalizedSearchQuery = computed(() => (searchQuery.value ?? '').trim().toLowerCase())
 const { availableHeight } = useAvailableHeight(96, 320)
 
-const loggingViewStyle = computed(() => ({
-  blockSize: display.mdAndUp.value ? `${availableHeight.value}px` : '100%',
-}))
+const loggingViewStyle = computed(() => (display.mdAndUp.value ? { blockSize: `${availableHeight.value}px` } : {}))
 
 const levelOptions = computed(() => {
-  const extraLevels = parsedLogs.value.map(item => item.level).filter(level => level && !DEFAULT_LEVELS.includes(level))
+  const extraLevels = parsedLogs.value
+    .map(item => item.level)
+    .filter(level => level && !DEFAULT_LEVELS.includes(level) && !HIDDEN_LEVELS.includes(level))
 
   return ['ALL', ...DEFAULT_LEVELS, ...new Set(extraLevels)]
 })
@@ -139,6 +140,7 @@ const lastVisibleLogId = computed(() => {
   return filteredGroups.value.at(-1)?.items.at(-1)?.id ?? 0
 })
 
+/** 规范化日志级别名称。 */
 function normalizeLevel(level: string) {
   const normalizedLevel = level.trim().replace(/:$/, '').toUpperCase()
 
@@ -153,14 +155,17 @@ function normalizeLevel(level: string) {
   return normalizedLevel
 }
 
+/** 移除日志文本中的 ANSI 颜色控制符。 */
 function stripAnsi(text: string) {
   return text.replace(ANSI_PATTERN, '')
 }
 
+/** 从日志文本中提取时间戳。 */
 function extractTimestamp(text: string) {
   return text.match(TIMESTAMP_PATTERN)?.[0] ?? ''
 }
 
+/** 将日志时间戳转换为毫秒值。 */
 function getTimestampMs(timestamp: string) {
   if (!timestamp) {
     return null
@@ -172,6 +177,7 @@ function getTimestampMs(timestamp: string) {
   return Number.isNaN(parsedTimestamp) ? null : parsedTimestamp
 }
 
+/** 获取用于日志分组的秒级时间键。 */
 function getSecondKey(timestamp: string) {
   if (!timestamp) {
     return ''
@@ -180,10 +186,12 @@ function getSecondKey(timestamp: string) {
   return timestamp.replace('T', ' ').slice(0, 19)
 }
 
+/** 格式化秒级时间键用于界面展示。 */
 function getSecondDisplay(secondKey: string) {
   return secondKey ? secondKey.replaceAll('-', '/') : ''
 }
 
+/** 提取日志时间戳中的时分秒部分。 */
 function getTimeDisplay(timestamp: string) {
   if (!timestamp) {
     return ''
@@ -192,6 +200,7 @@ function getTimeDisplay(timestamp: string) {
   return timestamp.split(' ').at(-1) ?? timestamp
 }
 
+/** 从结构化日志正文中提取消息内容。 */
 function extractMessage(text: string) {
   return (
     text
@@ -201,6 +210,7 @@ function extractMessage(text: string) {
   )
 }
 
+/** 根据原始日志和解析结果创建展示条目。 */
 function createLogEntry(raw: string, parsed?: ParsedLog | null): LogEntry {
   const level = parsed?.level ?? ''
   const appName = parsed?.appName ?? ''
@@ -224,6 +234,7 @@ function createLogEntry(raw: string, parsed?: ParsedLog | null): LogEntry {
   }
 }
 
+/** 解析 Python 风格的日志行。 */
 function parsePythonStyleLog(raw: string): ParsedLog | null {
   const match = raw.match(/^([A-Za-z]+):\s+(.*)$/)
   if (!match) {
@@ -251,6 +262,7 @@ function parsePythonStyleLog(raw: string): ParsedLog | null {
   }
 }
 
+/** 解析中文方括号标记的日志行。 */
 function parseBracketStyleLog(raw: string): ParsedLog | null {
   const match = raw.match(/^【([^】]+)】\s*(.*)$/)
   if (!match) {
@@ -274,6 +286,7 @@ function parseBracketStyleLog(raw: string): ParsedLog | null {
   }
 }
 
+/** 解析以时间戳开头的日志行。 */
 function parseTimestampFirstLog(raw: string): ParsedLog | null {
   const match = raw.match(new RegExp(`^(${TIMESTAMP_PATTERN.source})\\s+\\[?([A-Za-z]+)\\]?\\s*(.*)$`))
   if (!match) {
@@ -299,6 +312,7 @@ function parseTimestampFirstLog(raw: string): ParsedLog | null {
   }
 }
 
+/** 解析以内联级别开头的日志行。 */
 function parseInlineLevelLog(raw: string): ParsedLog | null {
   const match = raw.match(/^\[?([A-Za-z]+)\]?:?\s+(.*)$/)
   if (!match) {
@@ -326,6 +340,7 @@ function parseInlineLevelLog(raw: string): ParsedLog | null {
   }
 }
 
+/** 将单行原始日志解析为展示条目。 */
 function parseLogLine(log: string): LogEntry {
   const raw = stripAnsi(log).replace(/\r/g, '').trimEnd()
   const parsed =
@@ -334,6 +349,7 @@ function parseLogLine(log: string): LogEntry {
   return createLogEntry(raw, parsed)
 }
 
+/** 判断日志条目是否符合当前级别和关键字筛选。 */
 function matchesLogFilter(item: LogEntry) {
   const matchesLevel = selectedLevel.value === 'ALL' || item.level === selectedLevel.value
   if (!matchesLevel) {
@@ -350,6 +366,7 @@ function matchesLogFilter(item: LogEntry) {
     .includes(normalizedSearchQuery.value)
 }
 
+/** 判断日志条目能否合并进当前时间分组。 */
 function canMergeIntoGroup(group: LogGroup, item: LogEntry) {
   if (!group.secondKey || !item.secondKey) {
     return false
@@ -366,6 +383,7 @@ function canMergeIntoGroup(group: LogGroup, item: LogEntry) {
   return true
 }
 
+/** 判断日志视口是否接近底部。 */
 function isNearBottom() {
   if (!logViewportRef.value) {
     return true
@@ -375,6 +393,7 @@ function isNearBottom() {
   return scrollHeight - scrollTop - clientHeight <= SCROLL_BOTTOM_THRESHOLD
 }
 
+/** 将日志视口滚动到底部。 */
 function scrollToBottom(behavior: ScrollBehavior = 'auto') {
   if (!logViewportRef.value) {
     return
@@ -386,6 +405,7 @@ function scrollToBottom(behavior: ScrollBehavior = 'auto') {
   })
 }
 
+/** 启用日志末尾跟随并清空待查看计数。 */
 function enableFollow(behavior: ScrollBehavior = 'auto') {
   followTail.value = true
   pendingLogCount.value = 0
@@ -395,6 +415,7 @@ function enableFollow(behavior: ScrollBehavior = 'auto') {
   })
 }
 
+/** 将缓冲区中的日志批量写入展示列表。 */
 function flushBuffer() {
   if (timeoutId) {
     clearTimeout(timeoutId)
@@ -430,6 +451,7 @@ function flushBuffer() {
   pendingLogCount.value += incomingLogs.length
 }
 
+/** 安排一次延迟缓冲区刷新。 */
 function scheduleFlush() {
   if (timeoutId) {
     return
@@ -440,6 +462,7 @@ function scheduleFlush() {
   }, FLUSH_DELAY)
 }
 
+/** 接收并缓存 SSE 日志消息。 */
 function handleSSEMessage(event: MessageEvent) {
   if (!event.data) {
     return
@@ -462,6 +485,7 @@ const { manager, isConnected } = useSSE(
   },
 )
 
+/** 暂停实时日志流。 */
 function pauseStream() {
   if (isStreamPaused.value) {
     return
@@ -473,6 +497,7 @@ function pauseStream() {
   manager.removeMessageListener(listenerId)
 }
 
+/** 恢复实时日志流。 */
 function resumeStream() {
   if (!isStreamPaused.value) {
     return
@@ -483,6 +508,7 @@ function resumeStream() {
   manager.addMessageListener(listenerId, handleSSEMessage)
 }
 
+/** 切换实时日志流的暂停状态。 */
 function toggleStreamState() {
   if (isStreamPaused.value) {
     resumeStream()
@@ -492,6 +518,7 @@ function toggleStreamState() {
   pauseStream()
 }
 
+/** 根据滚动位置更新日志末尾跟随状态。 */
 function handleScroll() {
   if (isNearBottom()) {
     followTail.value = true
@@ -535,7 +562,29 @@ onUnmounted(() => {
     :style="loggingViewStyle"
   >
     <div class="logging-toolbar px-3">
+      <VBtnToggle
+        v-if="display.mdAndUp.value"
+        v-model="selectedLevel"
+        mandatory
+        divided
+        density="compact"
+        variant="text"
+        selected-class="logging-level-toggle__button--active"
+        class="logging-level-toggle"
+      >
+        <VBtn
+          v-for="level in levelOptions"
+          :key="level"
+          :value="level"
+          :class="[`logging-level-toggle__button--${level.toLowerCase()}`]"
+          class="logging-level-toggle__button"
+        >
+          {{ level === 'ALL' ? t('common.all') : level }}
+        </VBtn>
+      </VBtnToggle>
+
       <VSelect
+        v-else
         v-model="selectedLevel"
         :items="levelOptions"
         density="compact"
@@ -648,10 +697,13 @@ onUnmounted(() => {
 <style scoped>
 /* stylelint-disable selector-pseudo-class-no-unknown */
 .logging-view {
+  --logging-shell-backdrop-filter: none;
+  --logging-shell-background: linear-gradient(180deg, var(--logging-shell-bg), rgba(var(--v-theme-surface), 0.9));
   --logging-shell-bg: rgba(var(--v-theme-surface), 0.96);
   --logging-record-bg-even: rgba(var(--v-theme-surface-variant), 0.01);
   --logging-record-bg-odd: rgba(var(--v-theme-surface-variant), 0.005);
   --logging-text: rgba(var(--v-theme-on-surface), 0.88);
+  --logging-toolbar-control-size: 2rem;
   --logging-muted: rgba(var(--v-theme-on-surface), 0.56);
 
   display: flex;
@@ -716,6 +768,50 @@ onUnmounted(() => {
   min-inline-size: 7rem;
 }
 
+.logging-level-toggle {
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.14);
+  border-radius: var(--app-control-radius);
+  background: transparent;
+  block-size: var(--logging-toolbar-control-size);
+  box-shadow: none !important;
+}
+
+.logging-level-toggle :deep(.logging-level-toggle__button) {
+  border-color: rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 0;
+  block-size: 100%;
+  color: var(--logging-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  min-inline-size: auto;
+  padding-inline: 1.125rem;
+  text-transform: none;
+}
+
+.logging-level-toggle :deep(.logging-level-toggle__button--debug) {
+  color: rgb(var(--v-theme-secondary));
+}
+
+.logging-level-toggle :deep(.logging-level-toggle__button--info) {
+  color: rgb(var(--v-theme-success));
+}
+
+.logging-level-toggle :deep(.logging-level-toggle__button--warning) {
+  color: rgb(var(--v-theme-warning));
+}
+
+.logging-level-toggle :deep(.logging-level-toggle__button--error) {
+  color: rgb(var(--v-theme-error));
+}
+
+.logging-level-toggle :deep(.logging-level-toggle__button--active) {
+  background: rgba(var(--v-theme-primary), 0.16);
+  color: rgb(var(--v-theme-primary));
+}
+
 .logging-level-select :deep(.v-field) {
   border-radius: var(--app-field-radius);
   background: transparent !important;
@@ -731,13 +827,55 @@ onUnmounted(() => {
   padding-inline: 0;
 }
 
+@media (width >= 960px) {
+  .logging-toolbar {
+    padding-block-start: 0.25rem;
+  }
+
+  .logging-search,
+  .logging-stream-action {
+    align-self: center;
+  }
+
+  .logging-search :deep(.v-field) {
+    display: flex;
+    align-items: center;
+    block-size: var(--logging-toolbar-control-size);
+    min-block-size: var(--logging-toolbar-control-size);
+  }
+
+  .logging-search :deep(.v-field__field),
+  .logging-search :deep(.v-field__input),
+  .logging-search :deep(.v-field__prepend-inner),
+  .logging-search :deep(.v-field__clearable) {
+    align-items: center;
+    min-block-size: var(--logging-toolbar-control-size);
+  }
+
+  .logging-search :deep(.v-field__input) {
+    padding-block: 0;
+  }
+
+  .logging-search :deep(.v-field__prepend-inner),
+  .logging-search :deep(.v-field__clearable) {
+    padding-block: 0;
+  }
+
+  .logging-stream-action {
+    block-size: var(--logging-toolbar-control-size);
+    inline-size: var(--logging-toolbar-control-size);
+  }
+}
+
 .logging-shell {
   position: relative;
   overflow: auto;
   flex: 1 1 auto;
   padding: 0.875rem;
   border: 1px solid var(--logging-border);
-  background: linear-gradient(180deg, var(--logging-shell-bg), rgba(var(--v-theme-surface), 0.9));
+  -webkit-backdrop-filter: var(--logging-shell-backdrop-filter);
+  backdrop-filter: var(--logging-shell-backdrop-filter);
+  background: var(--logging-shell-background);
   box-shadow: var(--logging-shadow);
 }
 
@@ -961,6 +1099,12 @@ onUnmounted(() => {
 }
 
 @media (width <= 960px) {
+  .logging-view {
+    flex: 1 1 auto;
+    block-size: auto;
+    min-block-size: 0;
+  }
+
   .logging-record {
     gap: 0.375rem;
     grid-template-columns: 9.5rem minmax(0, 1fr);

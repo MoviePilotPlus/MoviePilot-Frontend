@@ -2,7 +2,7 @@ import type { Composer } from 'vue-i18n'
 import type { NavMenu } from '@/@layouts/types'
 import type { PluginSidebarNavItem } from '@/api/types'
 import { pluginSidebarSectionToHeaderKey } from '@/router/i18n-menu'
-import { filterMenusByPermission } from '@/utils/permission'
+import { buildPluginPermissionFeatureKey, filterMenusByPermission } from '@/utils/permission'
 
 export type PluginNavMenuEntry = {
   navMenu: NavMenu & { permission?: string }
@@ -21,6 +21,7 @@ export function navMenuFromPluginSidebarItem(
   return {
     title: item.title,
     icon: item.icon,
+    iconColor: 'primary',
     to: {
       name: 'plugin-app',
       params: {
@@ -30,6 +31,7 @@ export function navMenuFromPluginSidebarItem(
     },
     header,
     permission: item.permission ?? undefined,
+    feature: buildPluginPermissionFeatureKey(item.plugin_id, item.nav_key),
   } as NavMenu & { permission?: string }
 }
 

@@ -54,6 +54,13 @@ const userAgentRef = computed({
   },
 })
 
+const apiProtocolRef = computed({
+  get: () => wizardData.value.agent.apiProtocol,
+  set: value => {
+    wizardData.value.agent.apiProtocol = value || 'auto'
+  },
+})
+
 const modelRef = computed({
   get: () => wizardData.value.agent.model,
   set: value => {
@@ -86,6 +93,8 @@ const {
   providerConnected,
   showBaseUrlField,
   showApiKeyField,
+  showApiProtocolField,
+  supportsBuiltinWebSearch,
   canRefreshModels,
   setBaseUrlPreset,
   authDialogVisible,
@@ -108,6 +117,7 @@ const {
   baseUrlPreset: baseUrlPresetRef,
   useProxy: useProxyRef,
   userAgent: userAgentRef,
+  apiProtocol: apiProtocolRef,
   model: modelRef,
   maxContextTokens: maxContextTokensRef,
   authConnected: authConnectedRef,
@@ -182,6 +192,29 @@ const thinkingLevelItems = computed(() => [
   { title: t('setting.system.llmThinkingLevelMax'), value: 'max' },
   { title: t('setting.system.llmThinkingLevelXhigh'), value: 'xhigh' },
 ])
+
+const apiProtocolItems = computed(() => [
+  { title: t('setting.system.llmApiProtocolAuto'), value: 'auto' },
+  { title: t('setting.system.llmApiProtocolChatCompletions'), value: 'chat_completions' },
+  { title: t('setting.system.llmApiProtocolResponses'), value: 'responses' },
+])
+
+const webSearchModeItems = computed(() => [
+  { title: t('setting.system.llmWebSearchModeLocal'), value: 'local' },
+  {
+    title: t('setting.system.llmWebSearchModeBuiltin'),
+    value: 'builtin',
+    disabled: !supportsBuiltinWebSearch.value,
+  },
+  { title: t('setting.system.llmWebSearchModeAuto'), value: 'auto' },
+  { title: t('setting.system.llmWebSearchModeDisabled'), value: 'disabled' },
+])
+
+const webSearchModeHint = computed(() =>
+  supportsBuiltinWebSearch.value
+    ? t('setting.system.llmWebSearchModeBuiltinSupportedHint')
+    : t('setting.system.llmWebSearchModeHint'),
+)
 
 const audioProviderItems = computed(() => [
   { title: t('setting.system.audioProviderOpenAiAudio'), value: 'openai' },
@@ -324,23 +357,38 @@ onMounted(async () => {
             />
           </VCol>
 
+          <VCol v-if="showApiProtocolField" cols="12" md="6">
+            <VSelect
+              v-model="wizardData.agent.apiProtocol"
+              :label="t('setting.system.llmApiProtocol')"
+              :hint="t('setting.system.llmApiProtocolHint')"
+              :items="apiProtocolItems"
+              persistent-hint
+              prepend-inner-icon="mdi-swap-horizontal"
+              color="primary"
+            />
+          </VCol>
+
           <VCol v-if="showBaseUrlField" cols="12" md="6">
             <VCombobox
-              :model-value="wizardData.agent.baseUrl"
-              @update:model-value="(value: any) => {
-                if (typeof value === 'object' && value !== null) {
-                  setBaseUrlPreset(value.id, value.value);
-                } else {
-                  setBaseUrlPreset('', value || '');
+              :model-value="wizardData.agent.baseUrl || null"
+              @update:model-value="
+                (value: any) => {
+                  if (typeof value === 'object' && value !== null) {
+                    setBaseUrlPreset(value.id, value.value)
+                  } else {
+                    setBaseUrlPreset('', value || '')
+                  }
                 }
-              }"
+              "
               :label="t('setting.system.llmBaseUrl')"
               :hint="t('setting.system.llmBaseUrlHint')"
-              :placeholder="selectedProvider?.default_base_url || 'https://api.deepseek.com'"
+              :placeholder="selectedProvider?.default_base_url || t('setting.system.llmBaseUrlPlaceholder')"
               :items="baseUrlPresetItems"
               item-title="title"
               item-value="value"
               persistent-hint
+              persistent-placeholder
               prepend-inner-icon="mdi-link-variant"
             >
               <template #item="{ props, item }">
@@ -366,10 +414,9 @@ onMounted(async () => {
               :hint="selectedProvider?.api_key_hint || t('setting.system.llmApiKeyHint')"
               :placeholder="t('setting.system.llmApiKeyPlaceholder')"
               :error="validationErrors.agent.apiKey"
-              :error-messages="
-                validationErrors.agent.apiKey ? [t('setupWizard.agent.authOrApiKeyRequired')] : []
-              "
+              :error-messages="validationErrors.agent.apiKey ? [t('setupWizard.agent.authOrApiKeyRequired')] : []"
               persistent-hint
+              persistent-placeholder
               prepend-inner-icon="mdi-key-variant"
               type="password"
             />
@@ -384,7 +431,9 @@ onMounted(async () => {
                     {{ selectedProvider?.description || t('setting.system.llmProviderAuthHint') }}
                   </div>
                   <div v-if="providerConnected" class="text-body-2 mt-2">
-                    {{ t('setting.system.llmProviderConnectedAs', { label: providerAuthLabel || selectedProvider?.name }) }}
+                    {{
+                      t('setting.system.llmProviderConnectedAs', { label: providerAuthLabel || selectedProvider?.name })
+                    }}
                   </div>
                 </div>
 
@@ -416,13 +465,16 @@ onMounted(async () => {
 
           <VCol cols="12" md="6">
             <VCombobox
-              :model-value="wizardData.agent.model"
-              @update:model-value="(val: any) => {
-                wizardData.agent.model = typeof val === 'object' && val !== null ? val.id : val;
-                handleModelChanged();
-              }"
+              :model-value="wizardData.agent.model || null"
+              @update:model-value="
+                (val: any) => {
+                  wizardData.agent.model = typeof val === 'object' && val !== null ? val.id : val
+                  handleModelChanged()
+                }
+              "
               :label="t('setting.system.llmModel')"
               :hint="t('setting.system.llmModelHint')"
+              :placeholder="t('setting.system.llmModelPlaceholder')"
               :items="llmModels"
               item-title="name"
               item-value="id"
@@ -430,6 +482,7 @@ onMounted(async () => {
               :error="validationErrors.agent.model"
               :error-messages="validationErrors.agent.model ? [t('setupWizard.agent.modelRequired')] : []"
               persistent-hint
+              persistent-placeholder
               prepend-inner-icon="mdi-brain"
             >
               <template #append-inner>
@@ -446,6 +499,18 @@ onMounted(async () => {
             <VAlert v-if="selectedModelInfo" type="info" variant="tonal" density="compact" class="mt-2">
               {{ selectedModelInfo }}
             </VAlert>
+          </VCol>
+
+          <VCol cols="12" md="6">
+            <VSelect
+              v-model="wizardData.agent.webSearchMode"
+              :label="t('setting.system.llmWebSearchMode')"
+              :hint="webSearchModeHint"
+              :items="webSearchModeItems"
+              persistent-hint
+              prepend-inner-icon="mdi-web"
+              color="primary"
+            />
           </VCol>
 
           <VCol cols="12" md="6">
@@ -469,8 +534,24 @@ onMounted(async () => {
               v-model="wizardData.agent.userAgent"
               :label="t('setting.system.llmUserAgent')"
               :hint="t('setting.system.llmUserAgentHint')"
+              :placeholder="t('setting.system.llmUserAgentPlaceholder')"
               persistent-hint
+              persistent-placeholder
               prepend-inner-icon="mdi-card-account-details-outline"
+            />
+          </VCol>
+
+          <VCol cols="12" md="6">
+            <VTextField
+              v-model.number="wizardData.agent.temperature"
+              :label="t('setting.system.llmTemperature')"
+              :hint="t('setting.system.llmTemperatureHint')"
+              persistent-hint
+              prepend-inner-icon="mdi-thermometer"
+              type="number"
+              min="0"
+              max="2"
+              step="0.1"
             />
           </VCol>
 

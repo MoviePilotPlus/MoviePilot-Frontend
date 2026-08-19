@@ -7,9 +7,12 @@ import { transferTypeOptions } from '@/api/constants'
 import {
   ApiResponse,
   FileItem,
+  ManualTransferHistoryInfo,
   ManualTransferPayload,
   ManualTransferPreviewData,
   ManualTransferPreviewItem,
+  MediaDataSource,
+  MediaInfo,
   StorageConf,
   TransferDirectoryConf,
   TransferForm,
@@ -36,13 +39,22 @@ const props = defineProps({
   target_path: String,
 })
 
-// 从 provide 中获取全局设置
 // 全局设置
 const globalSettingsStore = useGlobalSettingsStore()
 const globalSettings = globalSettingsStore.globalSettings
 
-// 当前识别类型
-const mediaSource = ref(globalSettings.RECOGNIZE_SOURCE || 'themoviedb')
+const mediaSourceItems = computed<{ title: string; value: MediaDataSource }[]>(() => [
+  { title: t('setting.cache.recognitionSource.themoviedb'), value: 'themoviedb' },
+  { title: t('setting.cache.recognitionSource.douban'), value: 'douban' },
+  { title: t('setting.cache.recognitionSource.bangumi'), value: 'bangumi' },
+  { title: t('setting.cache.recognitionSource.anilist'), value: 'anilist' },
+])
+
+// 获取后台设置中的默认识别数据源，未知值兼容回退到TheMovieDb。
+function getDefaultMediaSource(): MediaDataSource {
+  const configuredSource = globalSettings.RECOGNIZE_SOURCE as MediaDataSource
+  return mediaSourceItems.value.some(item => item.value === configuredSource) ? configuredSource : 'themoviedb'
+}
 
 // 定义事件
 const emit = defineEmits(['done', 'close'])
@@ -73,6 +85,15 @@ const progressText = ref(t('dialog.reorganize.processing'))
 // 整理进度
 const progressValue = ref(0)
 
+<<<<<<< HEAD
+=======
+// 整理请求执行期间保持单一提交，避免同一批源文件被重复处理。
+const transferSubmitting = ref(false)
+
+// 进度SSE连接
+const progressSSE = ref<any>(null)
+
+>>>>>>> v2
 // 预览加载状态
 const previewLoading = ref(false)
 
@@ -84,6 +105,10 @@ const previewLoaded = ref(false)
 
 // 预览数据
 const previewData = ref<ManualTransferPreviewData>()
+
+// 手动整理历史查询状态
+const manualHistoryLoading = ref(false)
+const manualHistoryCount = ref(0)
 
 interface EpisodeFormatRecommendData {
   rule_name?: string
@@ -119,6 +144,20 @@ interface TargetDirectoryOption {
 }
 
 const AUTO_TARGET_PATH_VALUE = '__moviepilot_auto_target_path__'
+
+// 媒体类型映射到手动整理接口接受的类型名。
+function resolveTransferMediaType(type?: string) {
+  const normalizedType = type?.trim().toLowerCase()
+  if (!normalizedType) return undefined
+
+  const movieTypes = ['电影', 'movie']
+  if (movieTypes.includes(normalizedType)) return '电影'
+
+  const tvTypes = ['电视剧', 'tv', 'series']
+  if (tvTypes.includes(normalizedType)) return '电视剧'
+
+  return undefined
+}
 
 // 生成文件项稳定键，用于去重和状态同步。
 function getFileItemKey(item?: FileItem) {
@@ -266,7 +305,7 @@ const dialogSubtitle = computed(() => {
     }
 
     return t('dialog.reorganize.singleItemTitle', { path: normalizedItems.value[0].path })
-  } else if (props.logids) {
+  } else if (props.logids?.length) {
     return t('dialog.reorganize.multipleItemsTitle', { count: props.logids.length })
   }
 })
@@ -286,6 +325,8 @@ const transferForm = reactive<TransferForm>({
   logid: 0,
   target_storage: initialTargetPath ? (props.target_storage ?? 'local') : null,
   target_path: initialTargetPath,
+  media_source: getDefaultMediaSource(),
+  media_id: null,
   transfer_type: null,
   min_filesize: 0,
   scrape: initialTargetPath ? false : null,
@@ -293,7 +334,33 @@ const transferForm = reactive<TransferForm>({
   library_type_folder: null,
   library_category_folder: null,
   episode_group: null,
+  reorganize: Boolean(props.logids?.length),
 })
+
+// 历史记录入口和文件浏览器命中的成功历史都属于重新整理。
+const isReorganize = computed(() => Boolean(props.logids?.length || transferForm.reorganize))
+
+// 当前手动识别与刮削数据源。
+const mediaSource = computed(() => transferForm.media_source ?? 'themoviedb')
+
+// 当前数据源对应的原生ID标签。
+const mediaIdLabel = computed(() => {
+  const labels: Record<MediaDataSource, string> = {
+    themoviedb: t('dialog.reorganize.tmdbId'),
+    douban: t('dialog.reorganize.doubanId'),
+    bangumi: t('dialog.reorganize.bangumiId'),
+    anilist: t('dialog.reorganize.anilistId'),
+  }
+  return labels[mediaSource.value]
+})
+
+// 处理媒体搜索结果选择，同步搜索结果中已识别的媒体类型。
+function handleMediaSelected(item: Pick<MediaInfo, 'type'>) {
+  const typeName = resolveTransferMediaType(item.type)
+  if (!typeName) return
+
+  transferForm.type_name = typeName
+}
 
 // 所有媒体库目录
 const directories = ref<TransferDirectoryConf[]>([])
@@ -377,27 +444,38 @@ watch(
   },
 )
 
-// 监听 TMDB 编号变化，自动加载可用剧集组并清空旧选择。
+// 监听媒体编号变化，仅在TMDB电视剧场景加载剧集组。
 watch(
-  () => transferForm.tmdbid,
-  tmdbid => {
+  () => transferForm.media_id,
+  mediaId => {
     transferForm.episode_group = null
     episodeGroups.value = []
     if (episodeGroupQueryTimer) clearTimeout(episodeGroupQueryTimer)
     if (transferForm.type_name !== '电视剧' || mediaSource.value !== 'themoviedb') return
-    episodeGroupQueryTimer = setTimeout(() => getEpisodeGroups(tmdbid), 400)
+    episodeGroupQueryTimer = setTimeout(() => getEpisodeGroups(mediaId ?? undefined), 400)
   },
 )
 
 // 切换媒体类型或识别源时，非 TMDB 电视剧不保留剧集组选择。
 watch([() => transferForm.type_name, () => mediaSource.value], ([typeName, source]) => {
-  if (typeName === '电视剧' && source === 'themoviedb' && transferForm.tmdbid) {
-    getEpisodeGroups(transferForm.tmdbid)
+  if (typeName === '电视剧' && source === 'themoviedb' && transferForm.media_id) {
+    getEpisodeGroups(transferForm.media_id)
     return
   }
   transferForm.episode_group = null
   episodeGroups.value = []
 })
+
+// 切换数据源时清空上一来源的原生ID，避免把同一数字误传给新来源。
+watch(
+  () => transferForm.media_source,
+  (source, previousSource) => {
+    if (previousSource && source !== previousSource) {
+      transferForm.media_id = null
+      mediaSelectorDialog.value = false
+    }
+  },
+)
 
 watch(
   () => transferForm.episode_group,
@@ -833,6 +911,8 @@ function createTransferPayload(options: { item?: FileItem; items?: FileItem[]; l
     target_storage: normalizeOptionalText(transferForm.target_storage),
     target_path: normalizeTargetPath(transferForm.target_path),
     transfer_type: normalizeOptionalText(transferForm.transfer_type),
+    media_source: mediaSource.value,
+    media_id: normalizeOptionalText(transferForm.media_id),
     episode_group: normalizeEpisodeGroup(transferForm.episode_group),
   }
 
@@ -848,11 +928,34 @@ function createTransferPayload(options: { item?: FileItem; items?: FileItem[]; l
 }
 
 // 请求整理接口
-async function requestManualTransfer<T = any>(
+async function requestManualTransfer<T = unknown>(
   payload: ManualTransferPayload,
   background: boolean = false,
 ): Promise<ApiResponse<T>> {
   return await api.post<ApiResponse<T>, ApiResponse<T>>(`transfer/manual?background=${background}`, payload)
+}
+
+// 查询当前文件或目录是否存在成功整理历史，决定是否展示重新整理语义。
+async function loadManualTransferHistory() {
+  if (props.logids?.length || !normalizedItems.value.length) return
+
+  manualHistoryLoading.value = true
+  try {
+    const payload =
+      normalizedItems.value.length === 1 ? { fileitem: normalizedItems.value[0] } : { fileitems: normalizedItems.value }
+    const result = await api.post<ApiResponse<ManualTransferHistoryInfo>, ApiResponse<ManualTransferHistoryInfo>>(
+      'transfer/manual/history',
+      payload,
+    )
+    if (!result.success) return
+
+    manualHistoryCount.value = result.data?.history_count ?? 0
+    transferForm.reorganize = Boolean(result.data?.reorganize)
+  } catch (error) {
+    console.error(error)
+  } finally {
+    manualHistoryLoading.value = false
+  }
 }
 
 // 加载剧集格式规则配置状态，用于决定是否允许自动推荐。
@@ -1016,9 +1119,22 @@ function mergePreviewData(target: ManualTransferPreviewData, incoming?: ManualTr
   }
 }
 
+// 从标准响应中提取可展示的整理预览数据，优先保留顶层本地化消息。
+function resolvePreviewResponseData(result: ApiResponse<ManualTransferPreviewData>) {
+  if (!result.data) return result.data
+
+  const message = result.message_i18n || result.message || result.data.message
+  if (!message || message === result.data.message) return result.data
+
+  return {
+    ...result.data,
+    message,
+  }
+}
+
 // 预览整理结果
 async function previewTransfer() {
-  if (!props.logids && !normalizedItems.value.length) return
+  if (!props.logids?.length && !normalizedItems.value.length) return
 
   previewLoading.value = true
   resetPreviewState()
@@ -1043,7 +1159,7 @@ async function previewTransfer() {
               }),
             )
           } else {
-            mergePreviewData(mergedPreviewData, result.data)
+            mergePreviewData(mergedPreviewData, resolvePreviewResponseData(result))
           }
         } catch (err: any) {
           console.warn(`预览请求异常: ${err?.message}`)
@@ -1075,7 +1191,7 @@ async function previewTransfer() {
                 return
               }
 
-              mergePreviewData(mergedPreviewData, result.data)
+              mergePreviewData(mergedPreviewData, resolvePreviewResponseData(result))
             } catch (err: any) {
               console.warn(`预览请求异常: ${err?.message}`)
               mergePreviewData(
@@ -1093,7 +1209,7 @@ async function previewTransfer() {
       }
     }
 
-    if (props.logids) {
+    if (props.logids?.length) {
       tasks.push(
         ...props.logids.map(async logid => {
           try {
@@ -1111,7 +1227,7 @@ async function previewTransfer() {
               return
             }
 
-            mergePreviewData(mergedPreviewData, result.data)
+            mergePreviewData(mergedPreviewData, resolvePreviewResponseData(result))
           } catch (err: any) {
             console.warn(`预览请求异常: ${err?.message}`)
             mergePreviewData(
@@ -1159,33 +1275,51 @@ async function togglePreview() {
 // 整理文件
 async function handleTransfer(item: FileItem, background: boolean = false) {
   try {
-    const result: { [key: string]: any } = await requestManualTransfer(createTransferPayload({ item }), background)
-    if (!result.success) $toast.error(result.message)
-    else if (background) $toast.success(t('dialog.reorganize.successMessage', { name: item.name }))
-  } catch (e) {
-    console.log(e)
+    const result = await requestManualTransfer(createTransferPayload({ item }), background)
+    if (!result.success) {
+      $toast.error(result.message || t('dialog.reorganize.transferRequestFailed'))
+      return false
+    }
+    if (background) $toast.success(t('dialog.reorganize.successMessage', { name: item.name }))
+    return true
+  } catch (error: unknown) {
+    console.log(error)
+    if (error instanceof Error) $toast.error(error.message)
+    return false
   }
 }
 
 // 批量整理文件并按后台模式决定是否提示入队成功。
 async function handleTransferBatch(items: FileItem[], background: boolean = false) {
   try {
-    const result: { [key: string]: any } = await requestManualTransfer(createTransferPayload({ items }), background)
-    if (!result.success) $toast.error(result.message)
-    else if (background) $toast.success(t('dialog.reorganize.successMessage', { name: getBatchItemsLabel(items) }))
-  } catch (e) {
-    console.log(e)
+    const result = await requestManualTransfer(createTransferPayload({ items }), background)
+    if (!result.success) {
+      $toast.error(result.message || t('dialog.reorganize.transferRequestFailed'))
+      return false
+    }
+    if (background) $toast.success(t('dialog.reorganize.successMessage', { name: getBatchItemsLabel(items) }))
+    return true
+  } catch (error: unknown) {
+    console.log(error)
+    if (error instanceof Error) $toast.error(error.message)
+    return false
   }
 }
 
 // 整理日志
 async function handleTransferLog(logid: number, background: boolean = false) {
   try {
-    const result: { [key: string]: any } = await requestManualTransfer(createTransferPayload({ logid }), background)
-    if (!result.success) $toast.error(result.message)
-    else if (background) $toast.success(`历史记录 ${logid} 已加入整理队列！`)
-  } catch (e) {
-    console.log(e)
+    const result = await requestManualTransfer(createTransferPayload({ logid }), background)
+    if (!result.success) {
+      $toast.error(result.message || t('dialog.reorganize.transferRequestFailed'))
+      return false
+    }
+    if (background) $toast.success(`历史记录 ${logid} 已加入整理队列！`)
+    return true
+  } catch (error: unknown) {
+    console.log(error)
+    if (error instanceof Error) $toast.error(error.message)
+    return false
   }
 }
 
@@ -1193,7 +1327,7 @@ async function handleTransferLog(logid: number, background: boolean = false) {
 function handleProgressMessage(event: MessageEvent) {
   const progress = JSON.parse(event.data)
   if (progress) {
-    progressText.value = progress.text
+    progressText.value = progress.text_i18n || progress.text
     progressValue.value = progress.value
   }
 }
@@ -1221,11 +1355,13 @@ function stopLoadingProgress() {
 
 // 整理文件
 async function transfer(background: boolean = false) {
-  if (!props.logids && !normalizedItems.value.length) return
+  if ((!props.logids?.length && !normalizedItems.value.length) || transferSubmitting.value) return
 
-  // 显示进度条
+  transferSubmitting.value = true
   progressDialog.value = true
+  let allSucceeded = true
 
+<<<<<<< HEAD
   if (!background) {
     // 开始监听进度
     startLoadingProgress()
@@ -1234,24 +1370,42 @@ async function transfer(background: boolean = false) {
   // 文件整理
   if (normalizedItems.value.length) {
     if (shouldUseBatchFileItems(normalizedItems.value)) {
-      if (!background) {
-        startLoadingProgress('filetransfer')
-      }
-      await handleTransferBatch(normalizedItems.value, background)
-    } else {
-      for (const item of normalizedItems.value) {
+=======
+  try {
+    // 文件整理
+    if (normalizedItems.value.length) {
+      if (shouldUseBatchFileItems(normalizedItems.value)) {
         if (!background) {
-          // 如果是文件，计算MD5
-          const key = item.type === 'dir' ? 'filetransfer' : CryptoJS.MD5(item.path).toString()
-
-          // 开始监听进度
-          startLoadingProgress(key)
+          startLoadingProgress('filetransfer')
         }
-        await handleTransfer(item, background)
+        allSucceeded = (await handleTransferBatch(normalizedItems.value, background)) && allSucceeded
+      } else {
+        for (const item of normalizedItems.value) {
+          if (!background) {
+            // 如果是文件，计算MD5
+            const key = item.type === 'dir' ? 'filetransfer' : CryptoJS.MD5(item.path).toString()
+
+            // 开始监听进度
+            startLoadingProgress(key)
+          }
+          allSucceeded = (await handleTransfer(item, background)) && allSucceeded
+        }
       }
     }
-  }
 
+    // 日志整理
+    if (props.logids?.length) {
+>>>>>>> v2
+      if (!background) {
+        // 为日志整理任务开启进度监听
+        startLoadingProgress('filetransfer')
+      }
+      for (const logid of props.logids) {
+        allSucceeded = (await handleTransferLog(logid, background)) && allSucceeded
+      }
+    }
+
+<<<<<<< HEAD
   // 日志整理
   if (props.logids) {
     for (const logid of props.logids) {
@@ -1268,10 +1422,18 @@ async function transfer(background: boolean = false) {
   progressDialog.value = false
   // 重新加载
   emit('done')
+=======
+    if (allSucceeded) emit('done')
+  } finally {
+    if (!background) stopLoadingProgress()
+    progressDialog.value = false
+    transferSubmitting.value = false
+  }
+>>>>>>> v2
 }
 
 onMounted(async () => {
-  await loadDirectories()
+  await Promise.all([loadDirectories(), loadManualTransferHistory()])
   loadStorages()
   loadEpisodeFormatRuleConfiguration()
 })
@@ -1304,6 +1466,16 @@ onUnmounted(() => {
           <div class="reorganize-form-pane">
             <div class="reorganize-form-pane__content pa-6">
               <VForm @submit.prevent="() => {}">
+                <VAlert
+                  v-if="manualHistoryCount > 0"
+                  type="warning"
+                  variant="tonal"
+                  density="compact"
+                  icon="mdi-history"
+                  class="mb-4"
+                >
+                  {{ t('dialog.reorganize.historyFound', { count: manualHistoryCount }) }}
+                </VAlert>
                 <VRow>
                   <VCol cols="12" md="6">
                     <VSelect
@@ -1342,7 +1514,7 @@ onUnmounted(() => {
                   </VCol>
                 </VRow>
                 <VRow>
-                  <VCol cols="12" md="6">
+                  <VCol cols="12" md="4">
                     <VSelect
                       v-model="transferForm.type_name"
                       :label="t('dialog.reorganize.mediaType')"
@@ -1356,25 +1528,21 @@ onUnmounted(() => {
                       prepend-inner-icon="mdi-movie-open"
                     />
                   </VCol>
-                  <VCol cols="12" md="6">
-                    <VTextField
-                      v-if="mediaSource === 'themoviedb'"
-                      v-model="transferForm.tmdbid"
-                      :disabled="transferForm.type_name === ''"
-                      :label="t('dialog.reorganize.tmdbId')"
-                      :placeholder="t('dialog.reorganize.mediaIdPlaceholder')"
-                      :rules="[numberValidator]"
-                      append-inner-icon="mdi-magnify"
-                      :hint="t('dialog.reorganize.mediaIdHint')"
+                  <VCol cols="12" md="4">
+                    <VSelect
+                      v-model="transferForm.media_source"
+                      :items="mediaSourceItems"
+                      :label="t('dialog.reorganize.mediaSource')"
+                      :hint="t('dialog.reorganize.mediaSourceHint')"
                       persistent-hint
-                      prepend-inner-icon="mdi-identifier"
-                      @click:append-inner="mediaSelectorDialog = true"
+                      prepend-inner-icon="mdi-database-search"
                     />
+                  </VCol>
+                  <VCol cols="12" md="4">
                     <VTextField
-                      v-else
-                      v-model="transferForm.doubanid"
+                      v-model="transferForm.media_id"
                       :disabled="transferForm.type_name === ''"
-                      :label="t('dialog.reorganize.doubanId')"
+                      :label="mediaIdLabel"
                       :placeholder="t('dialog.reorganize.mediaIdPlaceholder')"
                       :rules="[numberValidator]"
                       append-inner-icon="mdi-magnify"
@@ -1394,7 +1562,7 @@ onUnmounted(() => {
                       item-value="value"
                       :item-props="episodeGroupItemProps"
                       :loading="episodeGroupLoading"
-                      :disabled="!transferForm.tmdbid"
+                      :disabled="!transferForm.media_id"
                       clearable
                       :label="t('dialog.reorganize.episodeGroup')"
                       :placeholder="t('dialog.reorganize.episodeGroupPlaceholder')"
@@ -1515,7 +1683,7 @@ onUnmounted(() => {
                       persistent-hint
                     />
                   </VCol>
-                  <VCol cols="12" md="6" v-if="props.logids">
+                  <VCol cols="12" md="6" v-if="props.logids?.length">
                     <VSwitch
                       v-model="transferForm.from_history"
                       :label="t('dialog.reorganize.fromHistoryOption')"
@@ -1544,6 +1712,8 @@ onUnmounted(() => {
                 @click="transfer(true)"
                 prepend-icon="mdi-plus"
                 class="reorganize-action-btn reorganize-action-btn--queue"
+                :loading="transferSubmitting"
+                :disabled="transferSubmitting"
               >
                 {{ t('dialog.reorganize.addToQueue') }}
               </VBtn>
@@ -1552,10 +1722,12 @@ onUnmounted(() => {
                 color="primary"
                 variant="flat"
                 @click="transfer(false)"
-                prepend-icon="mdi-arrow-right-bold"
+                :prepend-icon="isReorganize ? 'mdi-refresh' : 'mdi-arrow-right-bold'"
                 class="reorganize-action-btn reorganize-action-btn--primary"
+                :loading="manualHistoryLoading || transferSubmitting"
+                :disabled="transferSubmitting"
               >
-                {{ t('dialog.reorganize.reorganizeNow') }}
+                {{ isReorganize ? t('dialog.reorganize.reorganizeAgain') : t('dialog.reorganize.reorganizeNow') }}
               </VBtn>
             </VCardActions>
           </div>
@@ -1701,18 +1873,12 @@ onUnmounted(() => {
     </VCard>
     <!-- 手动整理进度框 -->
     <ProgressDialog v-if="progressDialog" v-model="progressDialog" :text="progressText" :value="progressValue" />
-    <!-- TMDB ID搜索框 -->
+    <!-- 媒体数据源ID搜索框 -->
     <VDialog v-model="mediaSelectorDialog" width="40rem" scrollable max-height="85vh">
       <MediaIdSelector
-        v-if="mediaSource === 'themoviedb'"
-        v-model="transferForm.tmdbid"
+        v-model="transferForm.media_id"
         @close="mediaSelectorDialog = false"
-        :type="mediaSource"
-      />
-      <MediaIdSelector
-        v-else
-        v-model="transferForm.doubanid"
-        @close="mediaSelectorDialog = false"
+        @select="handleMediaSelected"
         :type="mediaSource"
       />
     </VDialog>

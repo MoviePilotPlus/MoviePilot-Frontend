@@ -2,10 +2,17 @@
 import api from '@/api'
 import { MediaInfo, MediaSeason, NotExistMediaInfo } from '@/api/types'
 import { PropType } from 'vue'
+import noImage from '@images/no-image.jpeg'
 import NoDataFound from '@/components/states/NoDataFound.vue'
 import { useI18n } from 'vue-i18n'
 import { useGlobalSettingsStore } from '@/stores'
-import type { SeasonSubscribeModes, SubscribeMode } from '@/composables/useMediaSubscribe'
+import {
+  getMediaSubscribeId,
+  getMediaSubscribeIdentity,
+  type SeasonSubscribeModes,
+  type SubscribeMode,
+} from '@/composables/useMediaSubscribe'
+import { getDisplayImageUrl } from '@/utils/imageUtils'
 import { useDisplay } from 'vuetify'
 
 type SubscribeModeOption = {
@@ -22,7 +29,7 @@ type EpisodeGroupOption = {
 }
 
 // 国际化
-const { t } = useI18n()
+const { locale, t } = useI18n()
 const { mdAndUp } = useDisplay()
 
 // 定义事件
@@ -32,6 +39,7 @@ const emit = defineEmits(['subscribe', 'close'])
 const props = defineProps({
   media: Object as PropType<MediaInfo>,
   selectedSeason: Number,
+  initialEpisodeGroup: String,
   subscribedSeasons: Array as PropType<number[]>,
   subscribedSeasonModes: Object as PropType<SeasonSubscribeModes>,
   defaultSubscribeMode: String as PropType<SubscribeMode>,
@@ -64,7 +72,16 @@ const isRefreshed = ref(false)
 const episodeGroups = ref<{ [key: string]: any }[]>([])
 
 // 当前选择剧集组
-const episodeGroup = ref('')
+const episodeGroup = ref(
+  getMediaSubscribeIdentity(props.media)?.source === 'themoviedb' ? (props.initialEpisodeGroup ?? '') : '',
+)
+
+// 剧集组横向轨道
+const episodeGroupRail = ref<HTMLElement | null>(null)
+
+// 剧集组轨道左右滚动状态
+const canScrollEpisodeGroupsBackward = ref(false)
+const canScrollEpisodeGroupsForward = ref(false)
 
 const subscribeModeOptions = computed<SubscribeModeOption[]>(() => [
   {
@@ -84,12 +101,14 @@ const subscribeModeOptions = computed<SubscribeModeOption[]>(() => [
   },
 ])
 
+// 获取订阅模式的主题色。
 function getSubscribeModeColor(mode: SubscribeMode) {
   if (mode === 'normal') return 'primary'
   if (mode === 'best_version') return 'warning'
   return 'success'
 }
 
+// 校验弹窗输入是否为支持的订阅模式。
 function isSubscribeMode(value: unknown): value is SubscribeMode {
   return value === 'normal' || value === 'best_version' || value === 'best_version_full'
 }
@@ -154,14 +173,12 @@ const episodeGroupOptions = computed<EpisodeGroupOption[]>(() => {
 
 // 获得mediaid
 function getMediaId() {
-  if (props.media?.tmdb_id) return `tmdb:${props.media?.tmdb_id}`
-  else if (props.media?.douban_id) return `douban:${props.media?.douban_id}`
-  else if (props.media?.bangumi_id) return `bangumi:${props.media?.bangumi_id}`
-  else return `${props.media?.mediaid_prefix}:${props.media?.media_id}`
+  return getMediaSubscribeId(props.media)
 }
 
 // 查询所有剧集组
 async function getEpisodeGroups() {
+  if (getMediaSubscribeIdentity(props.media)?.source !== 'themoviedb') return
   if (!props.media?.tmdb_id) {
     console.warn('tmdbid is not set or is empty')
     return
@@ -170,11 +187,14 @@ async function getEpisodeGroups() {
     episodeGroups.value = await api.get(`media/groups/${props.media?.tmdb_id}`)
   } catch (error) {
     console.error(error)
+  } finally {
+    nextTick(updateEpisodeGroupScrollState)
   }
 }
 
-// 查询TMDB的所有季信息
+// 查询媒体的季信息
 async function getMediaSeasons() {
+  isRefreshed.value = false
   try {
     seasonInfos.value = await api.get('media/seasons', {
       params: {
@@ -184,15 +204,16 @@ async function getMediaSeasons() {
         season: props.media?.season,
       },
     })
-    isRefreshed.value = true
   } catch (error) {
     console.error(error)
+  } finally {
+    isRefreshed.value = true
   }
 }
 
 // 查询剧集组的剧集
 async function getGroupSeasons() {
-  if (!episodeGroup.value) return
+  if (getMediaSubscribeIdentity(props.media)?.source !== 'themoviedb' || !episodeGroup.value) return
   isRefreshed.value = false
   try {
     seasonInfos.value = await api.get(`media/group/seasons/${episodeGroup.value}`)
@@ -245,34 +266,98 @@ function getExistText(season: number) {
   else return t('dialog.subscribeSeason.status.exists')
 }
 
-// 拼装季图片地址
-function getSeasonPoster(posterPath: string) {
-  if (!posterPath) return props.media?.poster_path
-  return `https://${globalSettings.TMDB_IMAGE_DOMAIN}/t/p/w500${posterPath}`
+// 获取季海报地址，数据源未提供季海报时使用主海报。
+function getSeasonPoster(posterPath?: string) {
+  const resolvedPosterPath = posterPath?.trim() || props.media?.poster_path?.trim()
+  if (!resolvedPosterPath) return noImage
+
+  const posterUrl = resolvedPosterPath.startsWith('/')
+    ? `https://${globalSettings.TMDB_IMAGE_DOMAIN}/t/p/w500${resolvedPosterPath}`
+    : resolvedPosterPath.replace('/t/p/original/', '/t/p/w500/')
+
+  return getDisplayImageUrl(posterUrl, globalSettings.GLOBAL_IMAGE_CACHE)
 }
 
-// 将yyyy-mm-dd转换为yyyy年mm月dd日
+// 按当前界面语言格式化数据源返回的首播日期。
 function formatAirDate(airDate: string) {
   if (!airDate) return ''
-  const date = new Date(airDate.replaceAll(/-/g, '/'))
-  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`
+  const dateParts = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(airDate)
+  if (!dateParts) return airDate
+
+  const date = new Date(Number(dateParts[1]), Number(dateParts[2]) - 1, Number(dateParts[3]))
+  if (Number.isNaN(date.getTime())) return airDate
+
+  return new Intl.DateTimeFormat(locale.value, {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date)
 }
 
-// 从yyyy-mm-dd中提取年份
-function getYear(airDate: string) {
-  if (!airDate) return ''
-  const date = new Date(airDate.replaceAll(/-/g, '/'))
-  return date.getFullYear()
+// 获取本地化季号标题，确保数据源未返回名称时仍有稳定文本。
+function getSeasonTitle(item: MediaSeason) {
+  return t('dialog.subscribeSeason.seasonNumber', { number: item.season_number ?? 0 })
 }
 
+// 获取数据源提供的非重复季名称，保留特别篇等来源语义。
+function getSeasonName(item: MediaSeason) {
+  const name = item.name?.trim()
+  if (!name || item.season_number === undefined) return ''
+
+  const number = item.season_number
+  const normalizedName = name.toLocaleLowerCase().replaceAll(/\s/g, '')
+  const genericNames = new Set([
+    `第${number}季`,
+    `season${number}`,
+    `season${String(number).padStart(2, '0')}`,
+    `s${number}`,
+    `s${String(number).padStart(2, '0')}`,
+  ])
+
+  return genericNames.has(normalizedName) ? '' : name
+}
+
+// 获取同时包含季号和来源季名称的海报替代文本。
+function getSeasonPosterAlt(item: MediaSeason) {
+  return [getSeasonTitle(item), getSeasonName(item)].filter(Boolean).join(' - ')
+}
+
+// 切换当前剧集组并清空上一组的派生数据。
 function setEpisodeGroup(value: string) {
   if (episodeGroup.value === value) return
 
   seasonsNotExisted.value = {}
   seasonInfos.value = []
   episodeGroup.value = value
+  nextTick(updateEpisodeGroupScrollState)
 }
 
+// 刷新剧集组横向轨道的左右滚动按钮状态。
+function updateEpisodeGroupScrollState() {
+  const rail = episodeGroupRail.value
+  if (!rail) {
+    canScrollEpisodeGroupsBackward.value = false
+    canScrollEpisodeGroupsForward.value = false
+    return
+  }
+
+  const maxScrollLeft = Math.max(rail.scrollWidth - rail.clientWidth, 0)
+  canScrollEpisodeGroupsBackward.value = rail.scrollLeft > 4
+  canScrollEpisodeGroupsForward.value = rail.scrollLeft < maxScrollLeft - 4
+}
+
+// 按一屏内可辨识的距离横向滚动剧集组轨道。
+function scrollEpisodeGroups(direction: 'backward' | 'forward') {
+  const rail = episodeGroupRail.value
+  if (!rail) return
+
+  rail.scrollBy({
+    behavior: 'smooth',
+    left: direction === 'backward' ? -Math.max(rail.clientWidth * 0.72, 240) : Math.max(rail.clientWidth * 0.72, 240),
+  })
+}
+
+// 提交当前剧集组下选中的季及其订阅模式。
 function subscribeSeasons() {
   const selectedSeasons = seasonInfos.value.filter(item => {
     const seasonNumber = item.season_number ?? null
@@ -289,6 +374,7 @@ function subscribeSeasons() {
   )
 }
 
+// 写入指定季的订阅模式。
 function setSeasonMode(season: number, mode: SubscribeMode) {
   seasonModes.value = {
     ...seasonModes.value,
@@ -296,22 +382,27 @@ function setSeasonMode(season: number, mode: SubscribeMode) {
   }
 }
 
+// 处理用户手动切换指定季的订阅模式。
 function updateSeasonMode(season: number, mode: unknown) {
   if (!isSubscribeMode(mode)) return
   manuallySelectedModeSeasons.value.add(season)
   setSeasonMode(season, mode)
 }
 
+// 根据入库状态和系统配置计算指定季的默认订阅模式。
 function getDefaultSeasonMode(season: number) {
   if (!seasonsNotExisted.value[season]) return 'best_version_full'
 
   return props.defaultSubscribeMode ?? 'normal'
 }
 
+// 确保指定季已初始化订阅模式。
 function ensureSeasonMode(season: number) {
-  if (!seasonModes.value[season]) setSeasonMode(season, props.subscribedSeasonModes?.[season] ?? getDefaultSeasonMode(season))
+  if (!seasonModes.value[season])
+    setSeasonMode(season, props.subscribedSeasonModes?.[season] ?? getDefaultSeasonMode(season))
 }
 
+// 在入库状态刷新后同步尚未手动修改的默认模式。
 function syncDefaultSeasonModes() {
   seasonsSelected.value.forEach(season => {
     if (subscribedSeasonSet.value.has(season) || manuallySelectedModeSeasons.value.has(season)) return
@@ -319,14 +410,17 @@ function syncDefaultSeasonModes() {
   })
 }
 
+// 判断指定季是否已有订阅。
 function isSeasonSubscribed(season: number) {
   return subscribedSeasonSet.value.has(season)
 }
 
+// 判断指定季是否在本次提交选择中。
 function isSeasonSelected(season: number) {
   return selectedSeasonSet.value.has(season)
 }
 
+// 设置指定季的选择状态并同步其订阅模式。
 function setSeasonSelected(season: number, selected: boolean | null) {
   const nextSeasons = new Set(seasonsSelected.value)
   if (selected) {
@@ -338,10 +432,12 @@ function setSeasonSelected(season: number, selected: boolean | null) {
   seasonsSelected.value = [...nextSeasons].sort((a, b) => a - b)
 }
 
+// 切换指定季的选择状态。
 function toggleSeasonSelected(season: number) {
   setSeasonSelected(season, !isSeasonSelected(season))
 }
 
+// 将入口预选季和已有订阅同步到当前剧集组的可见季列表。
 function syncSelectedSeason() {
   if (!seasonInfos.value.length) return
 
@@ -364,6 +460,7 @@ function syncSelectedSeason() {
   })
 }
 
+// 季信息与缺失状态共享剧集组上下文，剧集组变化时统一刷新两者。
 watchEffect(() => {
   if (episodeGroup.value) getGroupSeasons()
   else getMediaSeasons()
@@ -380,10 +477,15 @@ watch(() => props.subscribedSeasons, syncSelectedSeason)
 
 watch(() => props.subscribedSeasonModes, syncSelectedSeason)
 
+watch(episodeGroupOptions, () => nextTick(updateEpisodeGroupScrollState), { flush: 'post' })
+
 onMounted(async () => {
-  getMediaSeasons()
+  window.addEventListener('resize', updateEpisodeGroupScrollState)
   getEpisodeGroups()
-  checkSeasonsNotExists()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateEpisodeGroupScrollState)
 })
 </script>
 
@@ -408,20 +510,44 @@ onMounted(async () => {
           <div class="subscribe-season-group-label">
             {{ t('dialog.subscribeSeason.selectGroup') }}
           </div>
-          <div class="subscribe-season-group-options">
+          <div class="subscribe-season-group-rail-shell">
             <button
-              v-for="group in episodeGroupOptions"
-              :key="group.value || 'default'"
+              v-if="mdAndUp && canScrollEpisodeGroupsBackward"
               type="button"
-              class="subscribe-season-group-option"
-              :class="{ 'subscribe-season-group-option--active': episodeGroup === group.value }"
-              @click="setEpisodeGroup(group.value)"
+              class="subscribe-season-group-nav subscribe-season-group-nav--backward"
+              :aria-label="t('media.episodeGroups.previous')"
+              @click="scrollEpisodeGroups('backward')"
             >
-              <VIcon :icon="group.icon" size="small" />
-              <span class="subscribe-season-group-text">
-                <span class="subscribe-season-group-title">{{ group.title }}</span>
-                <span class="subscribe-season-group-subtitle">{{ group.subtitle }}</span>
-              </span>
+              <VIcon icon="mdi-chevron-left" />
+            </button>
+            <div
+              ref="episodeGroupRail"
+              class="subscribe-season-group-options"
+              @scroll.passive="updateEpisodeGroupScrollState"
+            >
+              <button
+                v-for="group in episodeGroupOptions"
+                :key="group.value || 'default'"
+                type="button"
+                class="subscribe-season-group-option"
+                :class="{ 'subscribe-season-group-option--active': episodeGroup === group.value }"
+                @click="setEpisodeGroup(group.value)"
+              >
+                <VIcon :icon="group.icon" size="small" />
+                <span class="subscribe-season-group-text">
+                  <span class="subscribe-season-group-title">{{ group.title }}</span>
+                  <span class="subscribe-season-group-subtitle">{{ group.subtitle }}</span>
+                </span>
+              </button>
+            </div>
+            <button
+              v-if="mdAndUp && canScrollEpisodeGroupsForward"
+              type="button"
+              class="subscribe-season-group-nav subscribe-season-group-nav--forward"
+              :aria-label="t('media.episodeGroups.next')"
+              @click="scrollEpisodeGroups('forward')"
+            >
+              <VIcon icon="mdi-chevron-right" />
             </button>
           </div>
         </div>
@@ -430,19 +556,20 @@ onMounted(async () => {
           <VList lines="three" class="subscribe-season-list">
             <VListItem
               v-for="(item, i) in seasonInfos"
-              :key="i"
-              :active="isSeasonSelected(item.season_number || 0)"
+              :key="item.season_number ?? i"
+              :active="isSeasonSelected(item.season_number ?? 0)"
               rounded="lg"
               class="subscribe-season-list-item"
-              @click="toggleSeasonSelected(item.season_number || 0)"
+              @click="toggleSeasonSelected(item.season_number ?? 0)"
             >
               <template #prepend>
                 <VImg
                   height="90"
                   width="60"
-                  :src="getSeasonPoster(item.poster_path || '')"
+                  :src="getSeasonPoster(item.poster_path)"
+                  :alt="getSeasonPosterAlt(item)"
                   aspect-ratio="2/3"
-                  class="object-cover rounded ring-gray-500 me-3"
+                  class="subscribe-season-poster object-cover rounded ring-gray-500 me-3"
                   cover
                 >
                   <template #placeholder>
@@ -453,49 +580,59 @@ onMounted(async () => {
                 </VImg>
               </template>
               <VListItemTitle>
-                {{ t('dialog.subscribeSeason.seasonNumber', { number: item.season_number }) }}
+                <span>{{ getSeasonTitle(item) }}</span>
+                <span v-if="getSeasonName(item)" class="subscribe-season-name"> · {{ getSeasonName(item) }}</span>
               </VListItemTitle>
-              <VListItemSubtitle class="mt-1 me-2">
-                <VChip v-if="item.vote_average" color="primary" size="small" class="mb-1">
-                  <VIcon icon="mdi-star" /> {{ t('dialog.subscribeSeason.voteAverage', { score: item.vote_average }) }}
-                </VChip>
-                {{ getYear(item.air_date || '') }} •
-                {{ t('dialog.subscribeSeason.episodeCount', { count: item.episode_count }) }}
-              </VListItemSubtitle>
-              <VListItemSubtitle>
-                {{ t('dialog.subscribeSeason.airDate', { date: formatAirDate(item.air_date || '') }) }}
+              <VListItemSubtitle
+                v-if="item.vote_average || item.air_date || typeof item.episode_count === 'number'"
+                class="mt-1 me-2"
+              >
+                <div class="subscribe-season-meta">
+                  <VChip v-if="item.vote_average" color="primary" size="small" class="mb-1">
+                    <VIcon icon="mdi-star" />
+                    {{ t('dialog.subscribeSeason.voteAverage', { score: item.vote_average }) }}
+                  </VChip>
+                  <span v-if="item.air_date" class="subscribe-season-meta-item">
+                    <VIcon icon="mdi-calendar-blank-outline" size="x-small" />
+                    {{ t('dialog.subscribeSeason.airDate', { date: formatAirDate(item.air_date) }) }}
+                  </span>
+                  <span v-if="typeof item.episode_count === 'number'" class="subscribe-season-meta-item">
+                    <VIcon icon="mdi-play-box-multiple-outline" size="x-small" />
+                    {{ t('dialog.subscribeSeason.episodeCount', { count: item.episode_count }) }}
+                  </span>
+                </div>
               </VListItemSubtitle>
               <VListItemSubtitle>
                 <VChip
                   v-if="seasonsNotExisted"
                   class="mt-2"
                   size="small"
-                  :color="getExistColor(item.season_number || 0)"
+                  :color="getExistColor(item.season_number ?? 0)"
                 >
-                  {{ getExistText(item.season_number || 0) }}
+                  {{ getExistText(item.season_number ?? 0) }}
                 </VChip>
-                <VChip v-if="isSeasonSubscribed(item.season_number || 0)" class="mt-2 ms-2" size="small" color="error">
+                <VChip v-if="isSeasonSubscribed(item.season_number ?? 0)" class="mt-2 ms-2" size="small" color="error">
                   {{ t('media.status.subscribed') }}
                 </VChip>
               </VListItemSubtitle>
               <template #append>
                 <VListItemAction start class="subscribe-season-actions">
                   <VSwitch
-                    :model-value="isSeasonSelected(item.season_number || 0)"
+                    :model-value="isSeasonSelected(item.season_number ?? 0)"
                     hide-details
                     @click.stop
-                    @update:model-value="setSeasonSelected(item.season_number || 0, $event)"
+                    @update:model-value="setSeasonSelected(item.season_number ?? 0, $event)"
                   />
                   <VBtnToggle
-                    v-if="isSeasonSelected(item.season_number || 0)"
-                    :model-value="seasonModes[item.season_number || 0] || 'normal'"
+                    v-if="isSeasonSelected(item.season_number ?? 0)"
+                    :model-value="seasonModes[item.season_number ?? 0] || 'normal'"
                     density="compact"
                     divided
                     mandatory
                     variant="outlined"
                     class="subscribe-season-mode-toggle"
                     @click.stop
-                    @update:model-value="updateSeasonMode(item.season_number || 0, $event)"
+                    @update:model-value="updateSeasonMode(item.season_number ?? 0, $event)"
                   >
                     <VBtn
                       v-for="mode in subscribeModeOptions"
@@ -561,27 +698,39 @@ onMounted(async () => {
   line-height: 1rem;
 }
 
+.subscribe-season-group-rail-shell {
+  position: relative;
+  min-inline-size: 0;
+}
+
 .subscribe-season-group-options {
   display: flex;
   gap: 0.5rem;
   overflow-x: auto;
   padding-block: 0.125rem 0.375rem;
-  scrollbar-width: thin;
+  scroll-behavior: smooth;
+  scroll-snap-type: inline proximity;
+  scrollbar-width: none;
+}
+
+.subscribe-season-group-options::-webkit-scrollbar {
+  display: none;
 }
 
 .subscribe-season-group-option {
   display: inline-flex;
-  flex: 0 0 auto;
+  flex: 0 0 12rem;
   align-items: center;
+  backdrop-filter: var(--app-grouped-list-backdrop-filter, blur(var(--transparent-blur-light, 6px)));
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 8px;
-  background: rgba(var(--v-theme-surface), 0.72);
+  background: rgba(var(--v-theme-surface), 0.82);
   color: rgb(var(--v-theme-on-surface));
   gap: 0.5rem;
-  max-inline-size: 16rem;
-  min-inline-size: 11rem;
+  min-inline-size: 0;
   padding-block: 0.5rem;
   padding-inline: 0.75rem;
+  scroll-snap-align: start;
   text-align: start;
   transition:
     border-color 0.16s ease,
@@ -591,13 +740,24 @@ onMounted(async () => {
 
 .subscribe-season-group-option:hover {
   border-color: rgba(var(--v-theme-primary), 0.45);
-  background: rgba(var(--v-theme-primary), 0.08);
+  background: rgba(var(--v-theme-surface), 0.9);
+  box-shadow: 0 6px 18px rgba(var(--v-theme-on-surface), 0.08);
 }
 
 .subscribe-season-group-option--active {
   border-color: rgb(var(--v-theme-primary));
-  background: rgba(var(--v-theme-primary), 0.14);
+  background: rgba(var(--v-theme-primary), 0.18);
   color: rgb(var(--v-theme-primary));
+}
+
+.subscribe-season-group-option--active:hover {
+  background: rgba(var(--v-theme-primary), 0.24);
+}
+
+.subscribe-season-group-option:focus-visible,
+.subscribe-season-group-nav:focus-visible {
+  outline: 2px solid rgba(var(--v-theme-primary), 0.45);
+  outline-offset: 2px;
 }
 
 .subscribe-season-group-text {
@@ -628,6 +788,42 @@ onMounted(async () => {
   color: rgba(var(--v-theme-primary), 0.82);
 }
 
+.subscribe-season-group-nav {
+  position: absolute;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: var(--app-grouped-list-backdrop-filter, blur(var(--transparent-blur-light, 6px)));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 9999px;
+  background: rgba(var(--v-theme-surface), 0.96);
+  block-size: 2.5rem;
+  color: rgb(var(--v-theme-on-surface));
+  inline-size: 2.5rem;
+  inset-block-start: 50%;
+  transform: translateY(-55%);
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.subscribe-season-group-nav:hover {
+  border-color: rgba(var(--v-theme-primary), 0.45);
+  background: rgba(var(--v-theme-surface), 0.96);
+  box-shadow: 0 6px 18px rgba(var(--v-theme-on-surface), 0.12);
+  color: rgb(var(--v-theme-primary));
+}
+
+.subscribe-season-group-nav--backward {
+  inset-inline-start: -0.5rem;
+}
+
+.subscribe-season-group-nav--forward {
+  inset-inline-end: -0.5rem;
+}
+
 .subscribe-season-list {
   display: grid;
   gap: 0.5rem;
@@ -635,6 +831,29 @@ onMounted(async () => {
 
 .subscribe-season-list-item {
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.subscribe-season-poster {
+  flex: 0 0 3.75rem;
+}
+
+.subscribe-season-name {
+  color: rgba(var(--v-theme-on-surface), 0.68);
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.subscribe-season-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem 0.75rem;
+  flex-wrap: wrap;
+}
+
+.subscribe-season-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .subscribe-season-list-item :deep(.v-list-item__append) {
@@ -690,8 +909,13 @@ onMounted(async () => {
   }
 
   .subscribe-season-group-option {
-    max-inline-size: 12rem;
-    min-inline-size: 9.5rem;
+    flex-basis: 10rem;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .subscribe-season-group-nav {
+    display: none;
   }
 }
 </style>

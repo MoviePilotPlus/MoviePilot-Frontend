@@ -12,6 +12,7 @@ node_modules
 dist
 dist-ssr
 dev-dist
+coverage
 *.local
 package-lock.json
 
@@ -38,3 +39,4 @@ public/plugin_icon/**
 docs-lock/
 .trae/
 output/
+.codex-qa/

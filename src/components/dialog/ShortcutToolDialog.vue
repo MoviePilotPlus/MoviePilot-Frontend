@@ -63,6 +63,10 @@ const bodyClasses = computed(() => [
   },
 ])
 
+// 允许工具视图在执行后续操作前主动关闭外层弹窗。
+function closeDialog() {
+  visible.value = false
+}
 </script>
 
 <template>
@@ -77,7 +81,7 @@ const bodyClasses = computed(() => [
       </VCardItem>
       <VDivider />
       <VCardText :class="bodyClasses">
-        <Component :is="props.view" v-bind="props.viewProps" />
+        <Component :is="props.view" v-bind="props.viewProps" @close="closeDialog" />
       </VCardText>
     </VCard>
   </VDialog>
@@ -104,6 +108,21 @@ const bodyClasses = computed(() => [
 }
 
 @media (max-width: 959.98px) {
+  .words-shortcut-dialog-card {
+    display: flex;
+    overflow: hidden !important;
+    flex-direction: column;
+  }
+
+  .words-shortcut-dialog-body {
+    display: flex;
+    overflow: hidden !important;
+    flex: 1 1 auto;
+    inline-size: 100%;
+    min-block-size: 0;
+    padding: 0 !important;
+  }
+
   .scheduler-shortcut-dialog-card--transparent {
     background: transparent !important;
     background-color: transparent !important;
@@ -114,13 +133,8 @@ const bodyClasses = computed(() => [
     display: flex;
     overflow: hidden;
     flex-direction: column;
-    background: rgb(var(--v-theme-surface));
-  }
-
-  html[data-theme='transparent'] .cache-shortcut-dialog-card,
-  .v-theme--transparent .cache-shortcut-dialog-card {
-    backdrop-filter: blur(var(--transparent-blur, 10px));
-    background: rgba(var(--v-theme-surface), var(--transparent-opacity-heavy, 0.5));
+    backdrop-filter: var(--app-grouped-list-backdrop-filter);
+    background: var(--app-grouped-list-background);
   }
 
   .cache-shortcut-dialog-body {

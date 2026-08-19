@@ -1,20 +1,56 @@
 <script setup lang="ts">
+import type { AxiosError } from 'axios'
 import type { Component } from 'vue'
+import { useTheme } from 'vuetify'
 import { useAuthStore, useUserStore } from '@/stores'
 import { authState, userState } from '@/stores/types'
 import api from '@/api'
 import router from '@/router'
-import logo from '@images/logo.png'
+import LoginMfaStep from '@/components/auth/LoginMfaStep.vue'
+import OpticalLogoLab from '@/components/misc/OpticalLogoLab.vue'
 import { bufferToBase64Url, base64UrlToUint8Array, urlBase64ToUint8Array } from '@/@core/utils/navigator'
 import { SUPPORTED_LOCALES, SupportedLocale } from '@/types/i18n'
 import { getCurrentLocale, setI18nLanguage } from '@/plugins/i18n'
 import { getNavMenus } from '@/router/i18n-menu'
 import { buildUserPermissionContext, filterMenusByPermission } from '@/utils/permission'
 import type { ApiResponse } from '@/api/types'
-import { openSharedDialog } from '@/composables/useSharedDialog'
 import { loadRemoteComponentFromModule, type RemoteModule } from '@/utils/federationLoader'
+import type { MfaMethod } from '@/types/auth'
+import { getLoginVisualProfile } from '@/utils/loginPresentation'
 
-const LoginMfaDialog = defineAsyncComponent(() => import('@/components/dialog/LoginMfaDialog.vue'))
+type LabTapTarget = 'logo' | 'title'
+
+const LAB_TAP_COUNT = 5
+const LAB_TAP_WINDOW_MS = 2000
+const labTapSequences: Record<LabTapTarget, { count: number; startedAt: number }> = {
+  logo: { count: 0, startedAt: 0 },
+  title: { count: 0, startedAt: 0 },
+}
+const { global: loginTheme } = useTheme()
+const loginVisualProfile = computed(() => getLoginVisualProfile(loginTheme.name.value))
+
+/** 在指定区域连续点击五次时进入隐藏的 Logo 实验室。 */
+function handleLabTap(target: LabTapTarget) {
+  if (router.currentRoute.value.query.lab === '1') return
+
+  const now = performance.now()
+  const sequence = labTapSequences[target]
+  if (sequence.count === 0 || now - sequence.startedAt > LAB_TAP_WINDOW_MS) {
+    sequence.count = 1
+    sequence.startedAt = now
+    return
+  }
+
+  sequence.count += 1
+  if (sequence.count < LAB_TAP_COUNT) return
+
+  labTapSequences.logo.count = 0
+  labTapSequences.title.count = 0
+  void router.push({
+    path: '/login',
+    query: { ...router.currentRoute.value.query, lab: '1' },
+  })
+}
 
 // 国际化
 const { t, te } = useI18n()
@@ -48,15 +84,11 @@ const isPasswordVisible = ref(false)
 // 错误信息
 const errorMessage = ref('')
 
-// 是否开启双重验证
-const isOTP = ref(false)
+const mfaStepActive = ref(false)
 
-// 二次验证对话框
-const mfaDialog = ref(false)
+const mfaOtpLoading = ref(false)
 
-// MFA PassKey loading
-const mfaPasskeyLoading = ref(false)
-let mfaDialogController: ReturnType<typeof openSharedDialog> | null = null
+const mfaMethods = ref<MfaMethod[]>([])
 
 // 语言选择菜单
 const langMenu = ref(false)
@@ -98,6 +130,34 @@ interface PluginAuthPayload {
   ticket?: string
 }
 
+interface ApiErrorPayload {
+  message?: unknown
+  message_i18n?: unknown
+  detail?: unknown
+  mfa_methods?: unknown
+}
+
+interface SerializedCredentialDescriptor extends Omit<PublicKeyCredentialDescriptor, 'id'> {
+  id: string
+}
+
+interface SerializedPublicKeyRequestOptions extends Omit<
+  PublicKeyCredentialRequestOptions,
+  'allowCredentials' | 'challenge'
+> {
+  allowCredentials?: SerializedCredentialDescriptor[]
+  challenge: string
+}
+
+function getErrorMessage(error: unknown): string | undefined {
+  return error instanceof Error ? error.message : undefined
+}
+
+// Axios 请求失败由响应状态和结构化响应体共同决定登录错误语义。
+function asApiError(error: unknown): AxiosError<ApiErrorPayload> {
+  return error as AxiosError<ApiErrorPayload>
+}
+
 // 登录认证提供方
 const authProviders = ref<LoginAuthProvider[]>([])
 const selectedAuthProvider = ref<LoginAuthProvider | null>(null)
@@ -137,44 +197,37 @@ function syncLoginCredentialValues() {
   }
 }
 
-// 生成 MFA 共享弹窗使用的最新 props。
-function getMfaDialogProps() {
-  return {
-    errorMessage: errorMessage.value,
-    otpPassword: form.value.otp_password,
-    passkeyLoading: mfaPasskeyLoading.value,
-  }
+// 只接受服务端明确声明的 MFA 方法，异常响应不得在客户端虚构认证能力。
+function normalizeMfaMethods(value: unknown): MfaMethod[] {
+  if (!Array.isArray(value)) return []
+
+  return [...new Set(value.filter((method): method is MfaMethod => method === 'otp'))]
 }
 
-// 打开 MFA 共享弹窗。
-function openMfaDialog() {
-  mfaDialog.value = true
-  const dialogProps = getMfaDialogProps()
-  if (mfaDialogController) {
-    mfaDialogController.updateProps(dialogProps)
+function enterMfaStep(methodsValue: unknown) {
+  conditionalAbortController?.abort()
+  conditionalAbortController = null
+  mfaMethods.value = normalizeMfaMethods(methodsValue)
+  form.value.otp_password = ''
+  if (!mfaMethods.value.length) {
+    errorMessage.value = t('login.mfa.methodsUnavailable')
+    mfaStepActive.value = false
     return
   }
 
-  mfaDialogController = openSharedDialog(
-    LoginMfaDialog,
-    dialogProps,
-    {
-      close: closeMfaDialog,
-      otp: loginWithOTP,
-      passkey: verifyWithPassKey,
-      'update:otpPassword': (value: string) => {
-        form.value.otp_password = value
-      },
-    },
-    { closeOn: ['close'] },
-  )
+  errorMessage.value = ''
+  mfaStepActive.value = true
 }
 
-// 关闭 MFA 共享弹窗。
-function closeMfaDialog() {
-  mfaDialog.value = false
-  mfaDialogController?.close()
-  mfaDialogController = null
+// 用户主动返回账号密码步骤时清理未完成的二次验证。
+function leaveMfaStep() {
+  manualAbortController?.abort()
+  manualAbortController = null
+  mfaOtpLoading.value = false
+  mfaMethods.value = []
+  form.value.otp_password = ''
+  errorMessage.value = ''
+  mfaStepActive.value = false
 }
 
 // 加载未登录可用的认证提供方。
@@ -201,9 +254,9 @@ async function openPluginAuth(provider: LoginAuthProvider) {
       provider.remote,
       provider.component || 'AuthPage',
     )) as Component
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('加载插件认证页面失败:', error)
-    pluginAuthError.value = error?.message || t('login.authFailure')
+    pluginAuthError.value = getErrorMessage(error) || t('login.authFailure')
   } finally {
     pluginAuthLoading.value = false
   }
@@ -221,12 +274,15 @@ function closePluginAuth() {
 async function exchangePluginAuthTicket(ticket: string) {
   pluginAuthLoading.value = true
   try {
-    const response: any = await api.post('auth/exchange', { ticket })
+    const response = (await api.post('auth/exchange', { ticket })) as PassKeyFinishResponse
     closePluginAuth()
     await handleLoginSuccess(response)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('插件认证票据兑换失败:', error)
-    pluginAuthError.value = error?.response?.data?.detail || error?.message || t('login.authFailure')
+    const apiError = asApiError(error)
+    const message = apiError.response?.data?.message || apiError.response?.data?.detail
+    pluginAuthError.value =
+      (typeof message === 'string' ? message : undefined) || getErrorMessage(error) || t('login.authFailure')
   } finally {
     pluginAuthLoading.value = false
   }
@@ -242,13 +298,13 @@ async function handlePluginAuthenticated(payload: PluginAuthPayload) {
 }
 
 // 处理插件认证失败事件。
-function handlePluginAuthError(error: any) {
-  pluginAuthError.value = error?.message || String(error || '') || t('login.authFailure')
+function handlePluginAuthError(error: unknown) {
+  pluginAuthError.value = getErrorMessage(error) || String(error || '') || t('login.authFailure')
 }
 
 // PassKey 认证核心函数 - 处理 WebAuthn 认证流程
 interface PassKeyAuthOptions {
-  username?: string // 可选的用户名,用于 MFA 场景
+  username?: string // 可选用户名，用于限制当前直接登录可选择的凭证
   isConditional?: boolean // 是否为 Conditional UI 模式
   signal?: AbortSignal // AbortController 信号
 }
@@ -256,7 +312,7 @@ interface PassKeyAuthOptions {
 // PassKey API 响应类型
 interface PassKeyStartResponse {
   options: string // JSON 字符串
-  challenge: string
+  transaction_token: string
 }
 
 interface PassKeyFinishResponse {
@@ -284,15 +340,15 @@ async function authenticateWithPassKey(options: PassKeyAuthOptions = {}): Promis
     throw new Error(startResponse.message || 'PassKey start failed')
   }
 
-  const { options: optionsStr, challenge } = startResponse.data
-  const publicKeyOptions = JSON.parse(optionsStr)
+  const { options: optionsStr, transaction_token: transactionToken } = startResponse.data
+  const publicKeyOptions = JSON.parse(optionsStr) as SerializedPublicKeyRequestOptions
 
   // 2. 调用WebAuthn API
   const credentialRequestOptions: CredentialRequestOptions = {
     publicKey: {
       ...publicKeyOptions,
       challenge: base64UrlToUint8Array(publicKeyOptions.challenge),
-      allowCredentials: publicKeyOptions.allowCredentials?.map((cred: any) => ({
+      allowCredentials: publicKeyOptions.allowCredentials?.map(cred => ({
         ...cred,
         id: base64UrlToUint8Array(cred.id),
       })),
@@ -336,7 +392,7 @@ async function authenticateWithPassKey(options: PassKeyAuthOptions = {}): Promis
   // 4. 完成认证
   const finishResponse = (await api.post('/mfa/passkey/authenticate/finish', {
     credential: credentialJSON,
-    challenge: challenge,
+    transaction_token: transactionToken,
   })) as PassKeyFinishResponse
 
   if (!finishResponse || !finishResponse.access_token) {
@@ -400,27 +456,30 @@ async function handlePassKeyAuth(
     })
 
     await onSuccess(finishResponse)
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorName = error instanceof Error ? error.name : ''
+    const message = getErrorMessage(error)
+
     // Conditional UI 模式下：
     // 1. 如果 loading 为 false，说明错误发生在用户选择密钥之前（如初始化失败、用户取消等），此时应静默
     // 2. 如果是 AbortError，始终静默
-    if (isConditional && (!passkeyLoading.value || error.name === 'AbortError')) {
+    if (isConditional && (!passkeyLoading.value || errorName === 'AbortError')) {
       console.warn('[PassKey] Conditional UI silenced error:', error)
       return
     }
 
     // 手动模式下的 AbortError 也应该静默（用户重复点击导致）
-    if (!isConditional && error.name === 'AbortError') {
+    if (!isConditional && errorName === 'AbortError') {
       console.warn('[PassKey] Manual request aborted (likely due to rapid clicking):', error)
       return
     }
 
     // 设置错误信息
-    if (error.name === 'NotAllowedError') {
+    if (errorName === 'NotAllowedError') {
       errorMessage.value = t('login.passkeyAuthCanceled')
-    } else if (error.name === 'NotSupportedError') {
+    } else if (errorName === 'NotSupportedError') {
       errorMessage.value = t('login.passkeyNotSupported')
-    } else if (error.message?.includes('start failed')) {
+    } else if (message?.includes('start failed')) {
       errorMessage.value = t('login.passkeyLoginStartFailed')
     } else {
       errorMessage.value = t('login.authFailure')
@@ -486,17 +545,24 @@ async function subscribeForPushNotifications() {
 }
 
 // 登录后处理
-async function afterLogin(superuser: boolean, userPayload: userState, filteredMenus: any[]) {
+async function afterLogin(
+  superuser: boolean,
+  userPayload: userState,
+  filteredMenus: ReturnType<typeof filterMenusByPermission>,
+) {
+  const originalPath = authStore.originalPath
+  authStore.setOriginalPath(null)
+
   // 如果需要显示设置向导，跳转到设置向导页面
   if (userPayload.wizard) {
-    router.push('/setup-wizard')
+    await router.push('/setup-wizard')
   } else {
-    // 如果有原始路径，优先跳转到原始路径
-    if (authStore.originalPath && authStore.originalPath !== '/') {
-      router.push(authStore.originalPath)
+    // 原始目标是一次性状态，持久化的旧登录页目标不得重新进入认证流程。
+    if (originalPath && originalPath !== '/' && router.resolve(originalPath).path !== '/login') {
+      await router.push(originalPath)
     } else {
       // 跳转到第一个有权限的菜单
-      router.push(filteredMenus[0].to)
+      await router.push(filteredMenus[0].to)
     }
   }
 
@@ -505,7 +571,7 @@ async function afterLogin(superuser: boolean, userPayload: userState, filteredMe
 }
 
 // 处理登录成功
-async function handleLoginSuccess(response: any) {
+async function handleLoginSuccess(response: PassKeyFinishResponse) {
   const userPayload: userState = {
     superUser: response.super_user,
     userID: response.user_id,
@@ -535,95 +601,93 @@ async function handleLoginSuccess(response: any) {
   await afterLogin(userPayload.superUser, userPayload, filteredMenus)
 }
 
-// 登录获取token事件
+async function requestPasswordLogin(): Promise<PassKeyFinishResponse> {
+  const formData = new FormData()
+  formData.append('username', form.value.username)
+  formData.append('password', form.value.password)
+  formData.append('otp_password', form.value.otp_password)
+
+  return (await api.post('/login/access-token', formData, {
+    headers: {
+      Accept: 'application/json',
+    },
+  })) as PassKeyFinishResponse
+}
+
+function setLoginError(error: unknown) {
+  const apiError = asApiError(error)
+  if (!apiError.response) {
+    errorMessage.value = t('login.networkError')
+    return
+  }
+
+  const message = apiError.response.data?.message
+  if (typeof message === 'string' && message) {
+    errorMessage.value = message
+    return
+  }
+
+  switch (apiError.response.status) {
+    case 401:
+      errorMessage.value = t('login.authFailure')
+      break
+    case 403:
+      errorMessage.value = t('login.permissionDenied')
+      break
+    case 500:
+      errorMessage.value = t('login.serverError')
+      break
+    default:
+      errorMessage.value = `${t('login.authFailure')} (Status: ${apiError.response.status})`
+  }
+}
+
 async function login() {
   errorMessage.value = ''
   syncLoginCredentialValues()
 
-  // 进行表单校验
-  if (!form.value.username || !form.value.password) {
-    return
-  }
+  if (!form.value.username || !form.value.password) return
 
-  // 登录按钮 loading
+  form.value.otp_password = ''
   loading.value = true
-
   try {
-    // 用户名密码
-    const formData = new FormData()
-
-    formData.append('username', form.value.username)
-    formData.append('password', form.value.password)
-    formData.append('otp_password', form.value.otp_password)
-
-    // 请求token
-    const response: any = await api.post('/login/access-token', formData, {
-      headers: {
-        Accept: 'application/json', // 设置 Accept 类型
-      },
-    })
-
+    const response = await requestPasswordLogin()
     await handleLoginSuccess(response)
-  } catch (error: any) {
-    // 登录失败，显示错误提示
-    if (!error.response) {
-      errorMessage.value = t('login.networkError')
+  } catch (error: unknown) {
+    const apiError = asApiError(error)
+    if (apiError.response?.headers?.['x-mfa-required'] === 'true') {
+      enterMfaStep(apiError.response.data?.mfa_methods)
       return
     }
-
-    switch (error.response.status) {
-      case 401:
-        // 401错误可能是需要MFA或者认证失败
-        // 检查响应头是否有MFA要求标识
-        if (error.response.headers?.['x-mfa-required'] === 'true' && !form.value.otp_password) {
-          // 需要MFA验证，弹出对话框
-          isOTP.value = true
-          openMfaDialog()
-          return
-        }
-        // 不需要MFA或已填写OTP但认证失败
-        errorMessage.value = t('login.authFailure')
-        // 认证失败后清空OTP密码，防止下次点击不弹出对话框
-        form.value.otp_password = ''
-        break
-      case 403:
-        errorMessage.value = t('login.permissionDenied')
-        break
-      case 500:
-        errorMessage.value = t('login.serverError')
-        break
-      default:
-        errorMessage.value = `${t('login.authFailure')} (Status: ${error.response.status})`
-    }
+    setLoginError(error)
   } finally {
     loading.value = false
   }
 }
 
-// 使用OTP码继续登录
-function loginWithOTP() {
-  closeMfaDialog()
-  login()
+// 在第二步提交 OTP；失败时保持当前步骤，避免登录表单闪回。
+async function loginWithOTP() {
+  if (!form.value.otp_password || mfaOtpLoading.value) return
+
+  errorMessage.value = ''
+  mfaOtpLoading.value = true
+  try {
+    const response = await requestPasswordLogin()
+    await handleLoginSuccess(response)
+  } catch (error: unknown) {
+    const apiError = asApiError(error)
+    if (!apiError.response) {
+      errorMessage.value = t('login.networkError')
+    } else if (apiError.response.status === 401) {
+      errorMessage.value = t('login.mfa.verificationFailed')
+    } else {
+      setLoginError(error)
+    }
+    form.value.otp_password = ''
+  } finally {
+    mfaOtpLoading.value = false
+  }
 }
-
-// 使用PassKey进行MFA验证
-async function verifyWithPassKey() {
-  if (!form.value.username) return
-
-  await handlePassKeyAuth(
-    { username: form.value.username },
-    val => (mfaPasskeyLoading.value = val),
-    async response => {
-      // 关闭MFA对话框
-      closeMfaDialog()
-      await handleLoginSuccess(response)
-    },
-  )
-}
-
-watch([mfaPasskeyLoading, errorMessage, () => form.value.otp_password], () => {
-  mfaDialogController?.updateProps(getMfaDialogProps())
-})
 
 // 自动登录
 onMounted(async () => {
@@ -688,12 +752,20 @@ onUnmounted(() => {
 
 <template>
   <!-- 登录页面容器 -->
-  <div class="login-root">
-    <!-- 装饰性背景光晕 -->
-    <div class="login-bg-decor" aria-hidden="true">
-      <div class="login-orb login-orb--1" />
-      <div class="login-orb login-orb--2" />
-      <div class="login-orb login-orb--3" />
+  <div class="login-root" :data-login-visual-profile="loginVisualProfile">
+    <svg class="login-glass-filter-defs" aria-hidden="true">
+      <defs>
+        <filter id="login-glass-static-refraction" x="-12%" y="-12%" width="124%" height="124%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.008 0.014" numOctaves="2" seed="8" result="noise" />
+          <feGaussianBlur in="noise" stdDeviation="0.35" result="softNoise" />
+          <feDisplacementMap in="SourceGraphic" in2="softNoise" scale="11" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+      </defs>
+    </svg>
+
+    <!-- 经典主题保留一层低频品牌环境光；透明与玻璃 profile 不挂载该装饰。 -->
+    <div v-if="loginVisualProfile === 'classic'" class="login-ambient-light" aria-hidden="true">
+      <span class="login-ambient-light__wash" />
     </div>
 
     <!-- 顶部漂浮语言切换 -->
@@ -724,23 +796,35 @@ onUnmounted(() => {
     </VMenu>
 
     <!-- 登录表单 -->
-    <div v-if="!mfaDialog" class="auth-wrapper d-flex align-center justify-center">
+    <div class="auth-wrapper d-flex align-center justify-center">
       <VCard
-        class="auth-card login-card glass-effect pa-7 pa-sm-9 w-full h-full login-card--enter"
+        class="auth-card login-card glass-effect no-blur pa-7 pa-sm-9 w-full h-full login-card--enter"
         max-width="24rem"
         flat
       >
+        <div class="login-card__surface" aria-hidden="true" />
+
         <!-- 卡片头部：Logo + 标题 + 欢迎语 -->
         <div class="login-head">
-          <div class="login-logo-wrapper">
-            <VImg :src="logo" width="72" height="72" class="login-logo" />
-          </div>
-          <h1 class="login-title">MoviePilot</h1>
-          <p class="login-subtitle">{{ t('login.welcomeBack') || 'Welcome Back' }}</p>
+          <OpticalLogoLab class="login-logo" :locale="currentLocale" @logo-click="handleLabTap('logo')">
+            <h1 class="login-title moviepilot-wordmark" @click="handleLabTap('title')">MoviePilot</h1>
+            <p class="login-subtitle">{{ t('login.welcomeBack') || 'Welcome Back' }}</p>
+          </OpticalLogoLab>
         </div>
 
         <VCardText class="login-body">
+          <LoginMfaStep
+            v-if="mfaStepActive"
+            :methods="mfaMethods"
+            :otp-password="form.otp_password"
+            :otp-loading="mfaOtpLoading"
+            :error-message="errorMessage"
+            @update:otp-password="form.otp_password = $event"
+            @back="leaveMfaStep"
+            @otp="loginWithOTP"
+          />
           <form
+            v-else
             ref="refForm"
             class="login-form"
             method="post"
@@ -797,14 +881,15 @@ onUnmounted(() => {
               <VCol cols="12" class="py-0">
                 <!-- remember me checkbox -->
                 <div class="d-flex align-center justify-space-between flex-wrap">
-                  <VCheckbox
-                    v-model="form.remember"
-                    :label="t('login.stayLoggedIn')"
-                    required
-                    hide-details
-                    density="compact"
-                    class="login-checkbox"
-                  />
+                  <label class="native-login-checkbox login-checkbox">
+                    <input
+                      v-model="form.remember"
+                      class="native-login-checkbox__input"
+                      type="checkbox"
+                      name="remember"
+                    />
+                    <span class="native-login-checkbox__label">{{ t('login.stayLoggedIn') }}</span>
+                  </label>
                 </div>
               </VCol>
               <VCol cols="12">
@@ -898,17 +983,19 @@ onUnmounted(() => {
 .login-root {
   position: relative;
   display: flex;
-  overflow: hidden;
+  box-sizing: border-box;
+  overflow-x: clip;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   isolation: isolate;
   min-block-size: 100vh;
   min-block-size: 100dvh;
+  padding-block: calc(env(safe-area-inset-top, 0px) + 24px) calc(env(safe-area-inset-bottom, 0px) + 24px);
 }
 
-/* ===================== 装饰性背景光晕 ===================== */
-.login-bg-decor {
+/* 经典 profile 只保留一层覆盖视口的低频品牌环境光。 */
+.login-ambient-light {
   position: absolute;
   z-index: 0;
   overflow: hidden;
@@ -916,69 +1003,20 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
-.login-orb {
+.login-ambient-light__wash {
   position: absolute;
-  border-radius: 50%;
-  will-change: transform;
+  animation: ambient-drift 18s ease-in-out infinite alternate;
+  background:
+    radial-gradient(ellipse at 78% 18%, rgba(var(--v-theme-primary), 0.18), transparent 48%),
+    linear-gradient(145deg, transparent 28%, rgba(var(--v-theme-primary), 0.07) 72%, transparent);
+  filter: blur(40px);
+  inset: -12%;
+  transform: translate3d(1.5%, -1%, 0) scale(1.04);
 }
 
-.login-orb--1 {
-  animation: orb-float-1 12s ease-in-out infinite alternate;
-  background: rgba(var(--v-theme-primary), 0.35);
-  block-size: 360px;
-  filter: blur(60px);
-  inline-size: 360px;
-  inset-block-start: -15%;
-  inset-inline-end: -12%;
-}
-
-.login-orb--2 {
-  animation: orb-float-2 15s ease-in-out infinite alternate;
-  background: rgba(var(--v-theme-primary), 0.25);
-  block-size: 300px;
-  filter: blur(55px);
-  inline-size: 300px;
-  inset-block-end: -10%;
-  inset-inline-start: -15%;
-}
-
-.login-orb--3 {
-  animation: orb-float-3 10s ease-in-out infinite alternate;
-  background: rgba(var(--v-theme-primary), 0.15);
-  block-size: 220px;
-  filter: blur(50px);
-  inline-size: 220px;
-  inset-block-start: 50%;
-  inset-inline-end: 15%;
-}
-
-@keyframes orb-float-1 {
-  0% {
-    transform: translate(0, 0) scale(1);
-  }
-
-  100% {
-    transform: translate(-30px, 40px) scale(1.1);
-  }
-}
-
-@keyframes orb-float-2 {
-  0% {
-    transform: translate(0, 0) scale(1);
-  }
-
-  100% {
-    transform: translate(25px, -30px) scale(1.08);
-  }
-}
-
-@keyframes orb-float-3 {
-  0% {
-    transform: translate(0, 0) scale(1);
-  }
-
-  100% {
-    transform: translate(-20px, 20px) scale(0.92);
+@keyframes ambient-drift {
+  to {
+    transform: translate3d(-1.5%, 1%, 0) scale(1);
   }
 }
 
@@ -1005,53 +1043,93 @@ onUnmounted(() => {
 .auth-wrapper {
   position: relative;
   z-index: 2;
-  overflow: hidden;
+  overflow: visible;
   block-size: auto;
   inline-size: 100%;
+  min-block-size: 0;
   padding-inline: 16px;
+}
+
+.login-glass-filter-defs {
+  position: absolute;
+  overflow: hidden;
+  block-size: 0;
+  inline-size: 0;
+  pointer-events: none;
 }
 
 /* ===================== 玻璃卡片 ===================== */
 .login-card {
   position: relative;
   z-index: 1;
+  overflow: hidden;
   border: none !important;
   border-radius: var(--app-surface-radius, 20px) !important;
-  box-shadow:
-    0 20px 50px rgba(var(--app-shadow-rgb, 0, 0, 0), 0.12),
-    0 8px 20px rgba(var(--app-shadow-rgb, 0, 0, 0), 0.06),
-    0 0 0 1px rgba(var(--v-theme-primary), 0.04) !important;
-  transition: box-shadow 300ms ease;
+  box-shadow: 0 20px 54px rgba(var(--app-shadow-rgb, 0, 0, 0), 0.12) !important;
 
-  /* 顶部高光线，营造立体感 */
+  > :not(.login-card__surface) {
+    position: relative;
+    z-index: 2;
+  }
+
+  /* 顶部迎光棱镜保持单方向，不随指针另建一套光源。 */
   &::before {
     position: absolute;
-    z-index: 1;
-    border-radius: inherit;
-    background: linear-gradient(90deg, transparent 10%, rgba(255, 255, 255, 35%) 50%, transparent 90%);
+    z-index: 4;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.42) 32%,
+      rgba(255, 255, 255, 0.7) 50%,
+      transparent
+    );
     block-size: 1px;
     content: '';
     inset-block-start: 0;
-    inset-inline: 0;
+    inset-inline: 13% 38%;
+    opacity: 0.34;
     pointer-events: none;
   }
 }
 
-/* 登录卡片自身承载固定磨砂效果，避免跟随透明主题设置变化。 */
+/* 登录卡片拥有独立光学表面，不跟随透明主题的全局模糊开关。 */
 .glass-effect {
-  backdrop-filter: blur(28px) saturate(170%) !important;
-  background: rgba(var(--v-theme-surface), 0.75) !important;
+  backdrop-filter: none !important;
+  background: transparent !important;
 }
 
-/* 深色主题上叠一条更亮的描边，区分背景 */
-:deep(.v-theme--dark) .login-card,
-:deep(.v-theme--purple) .login-card,
-:deep(.v-theme--transparent) .login-card {
-  border: 1px solid rgba(255, 255, 255, 8%) !important;
+.login-card__surface {
+  position: absolute;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  inset: 0;
+  pointer-events: none;
+  transform: translateZ(0);
 }
 
-:deep(.v-theme--light) .login-card {
-  border: 1px solid rgba(255, 255, 255, 65%) !important;
+.login-root[data-login-visual-profile='classic'] .login-card__surface {
+  backdrop-filter: blur(22px) saturate(118%);
+  background: rgba(var(--v-theme-surface), 0.76);
+}
+
+.login-root[data-login-visual-profile='transparent'] .login-card__surface {
+  backdrop-filter: blur(var(--optical-glass-blur)) saturate(var(--optical-glass-saturate))
+    contrast(var(--optical-glass-contrast));
+  background:
+    radial-gradient(
+      180px 150px at 50% 0%,
+      rgba(255, 255, 255, var(--login-card-highlight-alpha, 0.035)),
+      rgba(var(--v-theme-primary), var(--login-card-primary-alpha, 0.02)) 44%,
+      transparent 76%
+    ),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), transparent 34%), rgba(var(--v-theme-surface), 0.7);
+}
+
+.login-root[data-login-visual-profile='glass'] .login-card__surface {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), transparent 34%),
+    linear-gradient(rgba(7, 14, 25, 0.04), rgba(7, 14, 25, 0.1));
 }
 
 /* ===================== 卡片头部 ===================== */
@@ -1059,73 +1137,26 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  inline-size: 100%;
   margin-block-end: 12px;
   text-align: center;
 }
 
-.login-logo-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-block-end: 8px;
-
-  /* Logo 背后的柔光环 */
-  &::before {
-    position: absolute;
-    z-index: -1;
-    border-radius: 50%;
-    animation: logo-pulse 4s ease-in-out infinite;
-    background: radial-gradient(circle, rgba(var(--v-theme-primary), 0.2) 0%, transparent 70%);
-    block-size: 120px;
-    content: '';
-    inline-size: 120px;
-  }
-}
-
 .login-logo {
-  animation: logo-float 6s ease-in-out infinite;
-  filter: drop-shadow(0 8px 20px rgba(var(--v-theme-primary), 0.3));
-}
-
-@keyframes logo-float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-
-  50% {
-    transform: translateY(-4px);
-  }
-}
-
-@keyframes logo-pulse {
-  0%,
-  100% {
-    opacity: 0.6;
-    transform: scale(1);
-  }
-
-  50% {
-    opacity: 1;
-    transform: scale(1.05);
-  }
+  inline-size: 100%;
 }
 
 .login-title {
   margin: 0;
-  background: linear-gradient(135deg, rgb(var(--v-theme-on-surface)) 30%, rgba(var(--v-theme-primary), 1) 100%);
-  background-clip: text;
+  animation: text-enter 600ms cubic-bezier(0.16, 1, 0.3, 1) 200ms both;
   font-size: 1.85rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  line-height: 1.2;
-  -webkit-text-fill-color: transparent;
-  text-transform: uppercase;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .login-subtitle {
+  animation: text-enter 600ms cubic-bezier(0.16, 1, 0.3, 1) 300ms both;
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.875rem;
   font-weight: 400;
@@ -1144,14 +1175,17 @@ onUnmounted(() => {
 .native-login-field {
   position: relative;
   display: flex;
+  overflow: hidden;
   align-items: center;
   border: 1px solid rgba(var(--v-border-color), 0.38);
   min-block-size: 56px;
   border-radius: 12px;
-  background: transparent;
+  background: rgba(var(--v-theme-surface), 0.13);
+  backdrop-filter: blur(10px) saturate(118%);
   transition:
     border-color 150ms ease,
-    box-shadow 150ms ease;
+    box-shadow 150ms ease,
+    background 220ms ease;
 }
 
 .native-login-field:focus-within {
@@ -1169,6 +1203,8 @@ onUnmounted(() => {
 }
 
 .native-login-field__input {
+  position: relative;
+  z-index: 1;
   display: block;
   border: 0;
   appearance: none;
@@ -1228,6 +1264,66 @@ onUnmounted(() => {
   outline: none;
 }
 
+/* 原生保持登录复选框，避免使用全局 VCheckbox 小屏适配布局。 */
+.native-login-checkbox {
+  display: inline-flex;
+  align-items: center;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  cursor: pointer;
+  gap: 10px;
+  min-block-size: 40px;
+  user-select: none;
+}
+
+.native-login-checkbox__input {
+  position: relative;
+  display: inline-grid;
+  flex: 0 0 18px;
+  border: 2px solid rgba(var(--v-theme-on-surface), 0.54);
+  border-radius: 4px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  block-size: 18px;
+  cursor: pointer;
+  inline-size: 18px;
+  place-content: center;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.native-login-checkbox__input::before {
+  block-size: 5px;
+  border-block-end: 2px solid rgb(var(--v-theme-on-primary));
+  border-inline-start: 2px solid rgb(var(--v-theme-on-primary));
+  content: '';
+  inline-size: 9px;
+  transform: translateY(-1px) rotate(-45deg) scale(0);
+  transform-origin: center;
+  transition: transform 120ms ease;
+}
+
+.native-login-checkbox__input:checked {
+  border-color: rgb(var(--v-theme-primary));
+  background-color: rgb(var(--v-theme-primary));
+}
+
+.native-login-checkbox__input:checked::before {
+  transform: translateY(-1px) rotate(-45deg) scale(1);
+}
+
+.native-login-checkbox__input:focus-visible {
+  box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.18);
+  outline: none;
+}
+
+.native-login-checkbox__label {
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
 /* Remember me 复选框样式优化 */
 .login-checkbox {
   opacity: 0.85;
@@ -1238,11 +1334,9 @@ onUnmounted(() => {
   }
 }
 
-/* 登录按钮：渐变 + 悬浮抬升 + 光泽 */
+/* 登录按钮使用克制的主题色层级，避免在壁纸上形成独立霓虹光源。 */
 .login-submit {
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 8px 24px rgba(var(--v-theme-primary), 0.35);
+  box-shadow: 0 6px 18px rgba(var(--v-theme-primary), 0.2);
   font-weight: 600;
   letter-spacing: 0.03em;
   transition:
@@ -1250,38 +1344,14 @@ onUnmounted(() => {
     box-shadow 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
 
   &:hover {
-    box-shadow: 0 12px 32px rgba(var(--v-theme-primary), 0.45);
-    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(var(--v-theme-primary), 0.26);
+    transform: translateY(-1px);
   }
 
   &:active {
-    box-shadow: 0 4px 12px rgba(var(--v-theme-primary), 0.3);
-    transform: translateY(0);
+    box-shadow: 0 3px 10px rgba(var(--v-theme-primary), 0.18);
+    transform: scale(0.99);
   }
-}
-
-/* 登录按钮内部光泽扫描层 */
-.login-submit :deep(.v-btn__content)::after {
-  position: absolute;
-  z-index: 10;
-  background: linear-gradient(
-    105deg,
-    transparent 35%,
-    rgba(255, 255, 255, 30%) 43%,
-    rgba(255, 255, 255, 40%) 50%,
-    rgba(255, 255, 255, 30%) 57%,
-    transparent 65%
-  );
-  content: '';
-  inset-block: -50%;
-  inset-inline: -50%;
-  pointer-events: none;
-  transform: translateX(-120%);
-  transition: transform 700ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.login-submit:hover :deep(.v-btn__content)::after {
-  transform: translateX(120%);
 }
 
 /* Passkey 按钮 */
@@ -1358,6 +1428,7 @@ onUnmounted(() => {
   letter-spacing: 0.03em;
   margin-block-start: 14px;
   opacity: 0.75;
+  animation: text-enter 600ms cubic-bezier(0.16, 1, 0.3, 1) 520ms both;
 }
 
 .login-version {
@@ -1372,42 +1443,14 @@ onUnmounted(() => {
 
 @keyframes login-enter {
   0% {
-    filter: blur(4px);
     opacity: 0;
-    transform: translateY(20px) scale(0.97);
+    transform: translateY(12px) scale(0.985);
   }
 
   100% {
-    filter: blur(0);
     opacity: 1;
     transform: translateY(0) scale(1);
   }
-}
-
-/* Logo 入场 */
-.login-logo-wrapper {
-  animation: logo-enter 700ms cubic-bezier(0.16, 1, 0.3, 1) 100ms both;
-}
-
-@keyframes logo-enter {
-  0% {
-    opacity: 0;
-    transform: scale(0.8) translateY(10px);
-  }
-
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-/* 标题入场 */
-.login-title {
-  animation: text-enter 600ms cubic-bezier(0.16, 1, 0.3, 1) 200ms both;
-}
-
-.login-subtitle {
-  animation: text-enter 600ms cubic-bezier(0.16, 1, 0.3, 1) 300ms both;
 }
 
 @keyframes text-enter {
@@ -1425,30 +1468,44 @@ onUnmounted(() => {
 /* ===================== 无障碍：尊重减少动态偏好 ===================== */
 @media (prefers-reduced-motion: reduce) {
   .login-card--enter,
-  .login-logo-wrapper,
+  .login-foot,
   .login-title,
   .login-subtitle {
-    animation-duration: 1ms !important;
+    animation: none !important;
   }
 
   .login-submit {
     transition: none !important;
   }
 
-  .login-submit :deep(.v-btn__content)::after {
-    display: none !important;
-  }
-
-  .login-logo {
+  .login-ambient-light__wash {
     animation: none !important;
   }
+}
 
-  .login-orb {
-    animation: none !important;
+@media (prefers-reduced-transparency: reduce) {
+  .login-card__surface,
+  .native-login-field {
+    backdrop-filter: none !important;
+    background: rgb(var(--v-theme-surface)) !important;
+    filter: none !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .login-card__surface {
+    background: rgba(var(--v-theme-surface), 0.94);
   }
 
-  .login-logo-wrapper::before {
-    animation: none !important;
+  .native-login-field {
+    border-color: rgba(var(--v-theme-on-surface), 0.68);
+  }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .login-card__surface,
+  .native-login-field {
+    background: rgba(var(--v-theme-surface), 0.96) !important;
   }
 }
 
@@ -1466,19 +1523,15 @@ onUnmounted(() => {
     padding: 1.5rem !important;
     border-radius: 16px !important;
   }
+}
 
-  .login-orb--1 {
-    block-size: 220px;
-    inline-size: 220px;
+@media (width <= 480px) and (height <= 600px) {
+  .lang-switch-btn {
+    inset-block-start: calc(env(safe-area-inset-top, 0px) + 4px);
   }
 
-  .login-orb--2 {
-    block-size: 180px;
-    inline-size: 180px;
-  }
-
-  .login-orb--3 {
-    display: none;
+  .login-card {
+    padding-block: 0.75rem !important;
   }
 }
 </style>

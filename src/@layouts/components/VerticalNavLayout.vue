@@ -1,11 +1,13 @@
 <script lang="ts">
 import { useDisplay } from 'vuetify'
 import VerticalNav from '@layouts/components/VerticalNav.vue'
+import GlassFixedShellBackplate from '@/components/theme/GlassFixedShellBackplate.vue'
 import {
   readThemeCustomizerSettings,
   THEME_CUSTOMIZER_CHANGE_EVENT,
   type ThemeCustomizerSettings,
 } from '@/composables/useThemeCustomizer'
+import { useGlassFixedShellBackplate } from '@/composables/useGlassFixedShellBackplate'
 import { usePWA } from '@/composables/usePWA'
 
 export default defineComponent({
@@ -17,6 +19,7 @@ export default defineComponent({
     const route = useRoute()
     const { mdAndDown } = useDisplay()
     const { appMode } = usePWA()
+    const fixedShellBackplate = useGlassFixedShellBackplate()
     const themeLayout = ref(readThemeCustomizerSettings().layout)
     const canUseDesktopLayout = computed(() => !mdAndDown.value && !appMode.value)
     const isCollapsedLayout = computed(() => canUseDesktopLayout.value && themeLayout.value === 'collapsed')
@@ -73,6 +76,8 @@ export default defineComponent({
     })
 
     return () => {
+      const hasFixedShellBackplate = fixedShellBackplate.layers.value.length > 0
+
       // 👉 Vertical nav
       const verticalNav = h(
         VerticalNav,
@@ -84,6 +89,15 @@ export default defineComponent({
           'after-nav-items': () => slots['after-vertical-nav-items']?.(),
         },
       )
+
+      const fixedShellBackplateNode = hasFixedShellBackplate
+        ? h(GlassFixedShellBackplate, {
+            isOverlayNav: mdAndDown.value,
+            isOverlayNavActive: isOverlayNavActive.value,
+            layers: fixedShellBackplate.layers.value,
+            transitionDurationMs: fixedShellBackplate.transitionDurationMs,
+          })
+        : null
 
       // 👉 Navbar
       const navbar = h(
@@ -145,11 +159,17 @@ export default defineComponent({
             isCollapsedLayout.value && 'layout-vertical-nav-collapsed',
             isHorizontalLayout.value && 'layout-horizontal-nav-active',
             isHorizontalLayout.value && isNavbarScrolled && 'layout-horizontal-nav-scrolled',
+            hasFixedShellBackplate && 'layout-fixed-shell-backplate-active',
             route.meta.layoutWrapperClasses,
             !isHorizontalLayout.value && isNavbarScrolled && 'window-scrolled',
           ],
         },
-        [verticalNav, h('div', { class: 'layout-content-wrapper' }, [navbar, main, footer]), layoutOverlay],
+        [
+          fixedShellBackplateNode,
+          verticalNav,
+          h('div', { class: 'layout-content-wrapper' }, [navbar, main, footer]),
+          layoutOverlay,
+        ],
       )
     }
   },
@@ -193,7 +213,7 @@ export default defineComponent({
     // 单独提升顶栏图层可避免导航栏短暂上移到安全区下方。
     backface-visibility: hidden;
     block-size: var(--layout-navbar-block-size);
-    inline-size: calc(100vw - variables.$layout-vertical-nav-width - 0.5rem);
+    inline-size: calc(100% - variables.$layout-vertical-nav-width);
     inset-block-start: 0;
     transform: translate3d(0, 0, 0);
 
@@ -257,7 +277,7 @@ export default defineComponent({
   }
 
   &.layout-vertical-nav-collapsed .layout-navbar {
-    inline-size: calc(100vw - variables.$layout-vertical-nav-collapsed-width - 0.5rem);
+    inline-size: calc(100% - variables.$layout-vertical-nav-collapsed-width);
   }
 
   &.layout-vertical-nav-collapsed .layout-vertical-nav:not(.overlay-nav) {
@@ -273,16 +293,7 @@ export default defineComponent({
       transform: none !important;
     }
 
-    .app-logo > div {
-      display: flex;
-      overflow: hidden;
-      align-items: center;
-      justify-content: center;
-      block-size: 2.75rem;
-      inline-size: 2.75rem;
-    }
-
-    .app-logo svg {
+    .app-logo .theme-logo-mark {
       block-size: 2.5rem;
       inline-size: 2.5rem;
     }

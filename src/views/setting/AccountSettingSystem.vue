@@ -33,6 +33,7 @@ const props = defineProps({
 // 下载器/媒体服务器排序按需加载，降低系统设置页入口解析量。
 const Draggable = defineAsyncComponent(() => import('vuedraggable').then(module => module.default))
 const LlmProviderAuthDialog = defineAsyncComponent(() => import('@/components/dialog/LlmProviderAuthDialog.vue'))
+const AgentMcpSettingsDialog = defineAsyncComponent(() => import('@/components/dialog/AgentMcpSettingsDialog.vue'))
 
 // 系统设置项
 const SystemSettings = ref<any>({
@@ -42,10 +43,7 @@ const SystemSettings = ref<any>({
     APP_DOMAIN: null,
     API_TOKEN: null,
     WALLPAPER: 'tmdb',
-    MEDIASERVER_SYNC_INTERVAL: null,
-    RECOGNIZE_SOURCE: 'themoviedb',
     GITHUB_TOKEN: null,
-    OCR_HOST: null,
     CUSTOMIZE_WALLPAPER_API_URL: null,
     AI_AGENT_ENABLE: false,
     AI_AGENT_GLOBAL: false,
@@ -55,6 +53,8 @@ const SystemSettings = ref<any>({
     LLM_PROVIDER: 'deepseek',
     LLM_MODEL: 'deepseek-chat',
     LLM_THINKING_LEVEL: 'off',
+    LLM_API_PROTOCOL: 'auto',
+    LLM_WEB_SEARCH_MODE: 'local',
     LLM_SUPPORT_IMAGE_INPUT: false,
     LLM_SUPPORT_AUDIO_INPUT: false,
     LLM_SUPPORT_AUDIO_OUTPUT: false,
@@ -64,6 +64,7 @@ const SystemSettings = ref<any>({
     LLM_BASE_URL_PRESET: null,
     LLM_MAX_CONTEXT_TOKENS: 128,
     LLM_USER_AGENT: null,
+    LLM_TEMPERATURE: 0.3,
     AUDIO_INPUT_PROVIDER: 'openai',
     AUDIO_INPUT_API_KEY: null,
     AUDIO_INPUT_BASE_URL: null,
@@ -195,6 +196,9 @@ const isRequest = ref(true)
 // 选中的媒体服务器
 const mediaServers = ref<MediaServerConf[]>([])
 
+// 旧版全局媒体服务器同步间隔，仅用于未单独设置时的默认值提示
+const legacyMediaServerSyncInterval = ref<number | null>(null)
+
 // 下载器
 const downloaders = ref<DownloaderConf[]>([])
 
@@ -207,6 +211,9 @@ const advancedDialog = ref(false)
 const savingBasic = ref(false)
 const testingLlm = ref(false)
 const rustAccelAvailable = ref(false)
+const agentMcpDialog = ref(false)
+const agentMcpServers = ref<AgentMcpServer[]>([])
+const loadingAgentMcpServers = ref(false)
 
 // 智能助手配置项较多，默认收起以降低基础设置页的视觉占用。
 const aiAgentSettingsCollapsed = ref(true)
@@ -216,11 +223,32 @@ type LlmSettingsSnapshot = {
   LLM_PROVIDER: string
   LLM_MODEL: string
   LLM_THINKING_LEVEL: string
+  LLM_API_PROTOCOL: string
+  LLM_WEB_SEARCH_MODE: string
   LLM_API_KEY: string
   LLM_BASE_URL: string
   LLM_USE_PROXY: boolean
   LLM_BASE_URL_PRESET: string
   LLM_USER_AGENT: string
+  LLM_TEMPERATURE: number
+}
+
+type AgentMcpTransport = 'stdio' | 'sse' | 'http' | 'streamable_http'
+
+interface AgentMcpServer {
+  id: string
+  name: string
+  enabled: boolean
+  transport: AgentMcpTransport
+  description?: string | null
+  command?: string | null
+  args: string[]
+  env: Record<string, string>
+  url?: string | null
+  headers: Record<string, string>
+  timeout: number
+  tool_prefix?: string | null
+  require_admin: boolean
 }
 
 let llmTestRequestId = 0
@@ -268,6 +296,13 @@ const llmUserAgentRef = computed({
   },
 })
 
+const llmApiProtocolRef = computed({
+  get: () => String(SystemSettings.value.Basic.LLM_API_PROTOCOL ?? 'auto'),
+  set: value => {
+    SystemSettings.value.Basic.LLM_API_PROTOCOL = value || 'auto'
+  },
+})
+
 const llmModelRef = computed({
   get: () => String(SystemSettings.value.Basic.LLM_MODEL ?? ''),
   set: value => {
@@ -293,6 +328,8 @@ const {
   providerConnected,
   showBaseUrlField,
   showApiKeyField,
+  showApiProtocolField: showLlmApiProtocolField,
+  supportsBuiltinWebSearch,
   canRefreshModels,
   setBaseUrlPreset,
   authDialogVisible,
@@ -315,6 +352,7 @@ const {
   baseUrlPreset: llmBaseUrlPresetRef,
   useProxy: llmUseProxyRef,
   userAgent: llmUserAgentRef,
+  apiProtocol: llmApiProtocolRef,
   model: llmModelRef,
   maxContextTokens: llmMaxContextRef,
 })
@@ -373,11 +411,14 @@ function buildLlmSnapshot(): LlmSettingsSnapshot {
     LLM_PROVIDER: String(SystemSettings.value.Basic.LLM_PROVIDER ?? ''),
     LLM_MODEL: String(SystemSettings.value.Basic.LLM_MODEL ?? ''),
     LLM_THINKING_LEVEL: String(SystemSettings.value.Basic.LLM_THINKING_LEVEL ?? 'off'),
+    LLM_API_PROTOCOL: String(SystemSettings.value.Basic.LLM_API_PROTOCOL ?? 'auto'),
+    LLM_WEB_SEARCH_MODE: String(SystemSettings.value.Basic.LLM_WEB_SEARCH_MODE ?? 'local'),
     LLM_API_KEY: String(SystemSettings.value.Basic.LLM_API_KEY ?? ''),
     LLM_BASE_URL: String(SystemSettings.value.Basic.LLM_BASE_URL ?? ''),
     LLM_USE_PROXY: Boolean(SystemSettings.value.Basic.LLM_USE_PROXY),
     LLM_BASE_URL_PRESET: String(SystemSettings.value.Basic.LLM_BASE_URL_PRESET ?? ''),
     LLM_USER_AGENT: String(SystemSettings.value.Basic.LLM_USER_AGENT ?? ''),
+    LLM_TEMPERATURE: Number(SystemSettings.value.Basic.LLM_TEMPERATURE ?? 0.3),
   }
 }
 
@@ -391,11 +432,14 @@ function buildLlmTestPayload(snapshot: LlmSettingsSnapshot) {
     provider: snapshot.LLM_PROVIDER.trim(),
     model: snapshot.LLM_MODEL.trim(),
     thinking_level: snapshot.LLM_THINKING_LEVEL.trim(),
+    api_protocol: snapshot.LLM_API_PROTOCOL.trim() || 'auto',
+    web_search_mode: snapshot.LLM_WEB_SEARCH_MODE.trim() || 'local',
     api_key: snapshot.LLM_API_KEY.trim(),
     base_url: snapshot.LLM_BASE_URL.trim(),
     use_proxy: snapshot.LLM_USE_PROXY,
     base_url_preset: snapshot.LLM_BASE_URL_PRESET.trim(),
     user_agent: snapshot.LLM_USER_AGENT.trim(),
+    temperature: Number.isFinite(snapshot.LLM_TEMPERATURE) ? snapshot.LLM_TEMPERATURE : 0.3,
   }
 }
 
@@ -457,6 +501,8 @@ const selectedLlmModelInfo = computed(() => {
     source: selectedLlmModel.value.source || 'models.dev',
   })
 })
+const agentMcpEnabledCount = computed(() => agentMcpServers.value.filter(server => server.enabled).length)
+const agentMcpServerPreview = computed(() => agentMcpServers.value.slice(0, 3))
 
 const canTestLlm = computed(() => {
   const snapshot = currentLlmSnapshot.value
@@ -484,6 +530,29 @@ const thinkingLevelItems = computed(() => [
   { title: t('setting.system.llmThinkingLevelMax'), value: 'max' },
   { title: t('setting.system.llmThinkingLevelXhigh'), value: 'xhigh' },
 ])
+
+const apiProtocolItems = computed(() => [
+  { title: t('setting.system.llmApiProtocolAuto'), value: 'auto' },
+  { title: t('setting.system.llmApiProtocolChatCompletions'), value: 'chat_completions' },
+  { title: t('setting.system.llmApiProtocolResponses'), value: 'responses' },
+])
+
+const webSearchModeItems = computed(() => [
+  { title: t('setting.system.llmWebSearchModeLocal'), value: 'local' },
+  {
+    title: t('setting.system.llmWebSearchModeBuiltin'),
+    value: 'builtin',
+    disabled: !supportsBuiltinWebSearch.value,
+  },
+  { title: t('setting.system.llmWebSearchModeAuto'), value: 'auto' },
+  { title: t('setting.system.llmWebSearchModeDisabled'), value: 'disabled' },
+])
+
+const webSearchModeHint = computed(() =>
+  supportsBuiltinWebSearch.value
+    ? t('setting.system.llmWebSearchModeBuiltinSupportedHint')
+    : t('setting.system.llmWebSearchModeHint'),
+)
 
 const activeTab = ref('system')
 
@@ -580,9 +649,7 @@ function addSecurityDomain() {
 function addImageProxyAllowedPrivateRange() {
   if (
     newImageProxyAllowedPrivateRange.value &&
-    !SystemSettings.value.Advanced.IMAGE_PROXY_ALLOWED_PRIVATE_RANGES.includes(
-      newImageProxyAllowedPrivateRange.value,
-    )
+    !SystemSettings.value.Advanced.IMAGE_PROXY_ALLOWED_PRIVATE_RANGES.includes(newImageProxyAllowedPrivateRange.value)
   ) {
     SystemSettings.value.Advanced.IMAGE_PROXY_ALLOWED_PRIVATE_RANGES.push(newImageProxyAllowedPrivateRange.value)
     newImageProxyAllowedPrivateRange.value = ''
@@ -663,6 +730,8 @@ async function loadSystemSettings() {
   try {
     const result: { [key: string]: any } = await api.get('system/env')
     if (result.success) {
+      const defaultSyncInterval = Number(result.data.MEDIASERVER_SYNC_INTERVAL ?? Number.NaN)
+      legacyMediaServerSyncInterval.value = Number.isFinite(defaultSyncInterval) ? defaultSyncInterval : null
       // 将API返回的值赋值给SystemSettings
       for (const sectionKey of Object.keys(SystemSettings.value) as Array<keyof typeof SystemSettings.value>) {
         Object.keys(SystemSettings.value[sectionKey]).forEach((key: string) => {
@@ -678,6 +747,23 @@ async function loadSystemSettings() {
   } catch (error) {
     console.log(error)
   }
+  await loadAgentMcpServers()
+}
+
+async function loadAgentMcpServers() {
+  loadingAgentMcpServers.value = true
+  try {
+    const result: { [key: string]: any } = await api.get('message/agent/mcp/servers')
+    if (result.success) agentMcpServers.value = result.data?.servers || []
+  } catch (error) {
+    console.log(error)
+  } finally {
+    loadingAgentMcpServers.value = false
+  }
+}
+
+function handleAgentMcpSaved(servers: AgentMcpServer[]) {
+  agentMcpServers.value = servers
 }
 
 // 调用API保存设置
@@ -700,6 +786,8 @@ async function saveSystemSetting(value: { [key: string]: any }) {
 async function saveBasicSettings() {
   savingBasic.value = true
   try {
+    const llmTemperature = Number(SystemSettings.value.Basic.LLM_TEMPERATURE ?? 0.3)
+    SystemSettings.value.Basic.LLM_TEMPERATURE = Number.isFinite(llmTemperature) ? llmTemperature : 0.3
     if (await saveSystemSetting(SystemSettings.value.Basic)) {
       // 更新全局设置store，使Web Agent图标实时生效
       globalSettingsStore.setData({ ...globalSettingsStore.getData, ...SystemSettings.value.Basic })
@@ -1054,36 +1142,6 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                 </VRow>
               </VCol>
               <VCol cols="12" md="6">
-                <VSelect
-                  v-model="SystemSettings.Basic.RECOGNIZE_SOURCE"
-                  :label="t('setting.system.recognizeSource')"
-                  :hint="t('setting.system.recognizeSourceHint')"
-                  persistent-hint
-                  :items="[
-                    { title: 'TheMovieDb', value: 'themoviedb' },
-                    { title: '豆瓣', value: 'douban' },
-                  ]"
-                  prepend-inner-icon="mdi-database"
-                />
-              </VCol>
-              <VCol cols="12" md="6">
-                <VTextField
-                  v-model="SystemSettings.Basic.MEDIASERVER_SYNC_INTERVAL"
-                  :label="t('setting.system.mediaServerSyncInterval')"
-                  :hint="t('setting.system.mediaServerSyncIntervalHint')"
-                  persistent-hint
-                  :suffix="t('setting.system.hours')"
-                  type="number"
-                  min="1"
-                  :rules="[
-                    (v: any) => !!v || t('setting.system.required'),
-                    (v: any) => !isNaN(v) || t('setting.system.numbersOnly'),
-                    (v: any) => v >= 1 || t('setting.system.minInterval'),
-                  ]"
-                  prepend-inner-icon="mdi-sync"
-                />
-              </VCol>
-              <VCol cols="12" md="6">
                 <VTextField
                   v-model="SystemSettings.Basic.API_TOKEN"
                   :label="t('setting.system.apiToken')"
@@ -1111,16 +1169,6 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                   prepend-inner-icon="mdi-github"
                 >
                 </VTextField>
-              </VCol>
-              <VCol cols="12" md="6">
-                <VTextField
-                  v-model="SystemSettings.Basic.OCR_HOST"
-                  :label="t('setting.system.ocrHost')"
-                  placeholder="https://movie-pilot.org"
-                  :hint="t('setting.system.ocrHostHint')"
-                  persistent-hint
-                  prepend-inner-icon="mdi-text-recognition"
-                />
               </VCol>
             </VRow>
             <VCard
@@ -1205,9 +1253,19 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                         @update:model-value="handleLlmProviderChanged"
                       />
                     </VCol>
+                    <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE && showLlmApiProtocolField" cols="12" md="6">
+                      <VSelect
+                        v-model="SystemSettings.Basic.LLM_API_PROTOCOL"
+                        :label="t('setting.system.llmApiProtocol')"
+                        :hint="t('setting.system.llmApiProtocolHint')"
+                        persistent-hint
+                        :items="apiProtocolItems"
+                        prepend-inner-icon="mdi-swap-horizontal"
+                      />
+                    </VCol>
                     <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE && showBaseUrlField" cols="12" md="6">
                       <VCombobox
-                        :model-value="SystemSettings.Basic.LLM_BASE_URL"
+                        :model-value="SystemSettings.Basic.LLM_BASE_URL || null"
                         @update:model-value="
                           (value: any) => {
                             if (typeof value === 'object' && value !== null) {
@@ -1219,25 +1277,20 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                         "
                         :label="t('setting.system.llmBaseUrl')"
                         :hint="t('setting.system.llmBaseUrlHint')"
-                        :placeholder="selectedLlmProvider?.default_base_url || 'https://api.deepseek.com'"
+                        :placeholder="
+                          selectedLlmProvider?.default_base_url || t('setting.system.llmBaseUrlPlaceholder')
+                        "
                         :items="llmBaseUrlPresetItems"
                         item-title="title"
                         item-value="value"
                         persistent-hint
+                        persistent-placeholder
                         prepend-inner-icon="mdi-link"
                       >
                         <template #item="{ props, item }">
                           <VListItem v-bind="props" :subtitle="item.raw.subtitle" />
                         </template>
                       </VCombobox>
-                    </VCol>
-                    <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE && showBaseUrlField" cols="12">
-                      <VSwitch
-                        v-model="SystemSettings.Basic.LLM_USE_PROXY"
-                        :label="t('setting.system.llmUseProxy')"
-                        :hint="t('setting.system.llmUseProxyHint')"
-                        persistent-hint
-                      />
                     </VCol>
                     <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE && showApiKeyField" cols="12" md="6">
                       <VTextField
@@ -1246,6 +1299,7 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                         :hint="selectedLlmProvider?.api_key_hint || t('setting.system.llmApiKeyHint')"
                         :placeholder="t('setting.system.llmApiKeyPlaceholder')"
                         persistent-hint
+                        persistent-placeholder
                         type="password"
                         prepend-inner-icon="mdi-key-variant"
                       />
@@ -1295,7 +1349,7 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                     <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE" cols="12" md="6">
                       <div>
                         <VCombobox
-                          :model-value="SystemSettings.Basic.LLM_MODEL"
+                          :model-value="SystemSettings.Basic.LLM_MODEL || null"
                           @update:model-value="
                             (val: any) => {
                               SystemSettings.Basic.LLM_MODEL = typeof val === 'object' && val !== null ? val.id : val
@@ -1304,8 +1358,9 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                           "
                           :label="t('setting.system.llmModel')"
                           :hint="t('setting.system.llmModelHint')"
-                          :placeholder="t('setting.system.llmModelHint')"
+                          :placeholder="t('setting.system.llmModelPlaceholder')"
                           persistent-hint
+                          persistent-placeholder
                           :items="llmModels"
                           item-title="name"
                           item-value="id"
@@ -1344,6 +1399,16 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                       </div>
                     </VCol>
                     <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE" cols="12" md="6">
+                      <VSelect
+                        v-model="SystemSettings.Basic.LLM_WEB_SEARCH_MODE"
+                        :label="t('setting.system.llmWebSearchMode')"
+                        :hint="webSearchModeHint"
+                        persistent-hint
+                        :items="webSearchModeItems"
+                        prepend-inner-icon="mdi-web"
+                      />
+                    </VCol>
+                    <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE" cols="12" md="6">
                       <VTextField
                         v-model.number="SystemSettings.Basic.LLM_MAX_CONTEXT_TOKENS"
                         :label="t('setting.system.llmMaxContextTokens')"
@@ -1353,12 +1418,27 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                         prepend-inner-icon="mdi-counter"
                       />
                     </VCol>
+                    <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE" cols="12" md="6">
+                      <VTextField
+                        v-model.number="SystemSettings.Basic.LLM_TEMPERATURE"
+                        :label="t('setting.system.llmTemperature')"
+                        :hint="t('setting.system.llmTemperatureHint')"
+                        persistent-hint
+                        type="number"
+                        min="0"
+                        max="2"
+                        step="0.1"
+                        prepend-inner-icon="mdi-thermometer"
+                      />
+                    </VCol>
                     <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE && showBaseUrlField" cols="12" md="6">
                       <VTextField
                         v-model="SystemSettings.Basic.LLM_USER_AGENT"
                         :label="t('setting.system.llmUserAgent')"
                         :hint="t('setting.system.llmUserAgentHint')"
+                        :placeholder="t('setting.system.llmUserAgentPlaceholder')"
                         persistent-hint
+                        persistent-placeholder
                         prepend-inner-icon="mdi-card-account-details-outline"
                       />
                     </VCol>
@@ -1390,9 +1470,57 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                         prepend-inner-icon="mdi-timer-outline"
                       />
                     </VCol>
+                    <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE" cols="12">
+                      <VAlert type="info" variant="tonal" class="agent-mcp-summary">
+                        <div class="agent-mcp-summary__content">
+                          <div>
+                            <div class="text-subtitle-2">{{ t('setting.system.aiAgentMcpTitle') }}</div>
+                            <div class="text-body-2">
+                              {{
+                                t('setting.system.aiAgentMcpSummary', {
+                                  enabled: agentMcpEnabledCount,
+                                  total: agentMcpServers.length,
+                                })
+                              }}
+                            </div>
+                            <div v-if="agentMcpServers.length" class="agent-mcp-summary__chips mt-2">
+                              <VChip
+                                v-for="server in agentMcpServerPreview"
+                                :key="server.id"
+                                size="small"
+                                variant="tonal"
+                                :color="server.enabled ? 'success' : 'default'"
+                              >
+                                {{ server.name }}
+                              </VChip>
+                              <VChip v-if="agentMcpServers.length > 3" size="small" variant="tonal">
+                                +{{ agentMcpServers.length - 3 }}
+                              </VChip>
+                            </div>
+                          </div>
+                          <VBtn
+                            color="primary"
+                            variant="tonal"
+                            prepend-icon="mdi-server-network"
+                            :loading="loadingAgentMcpServers"
+                            @click="agentMcpDialog = true"
+                          >
+                            {{ t('setting.system.aiAgentMcpSettings') }}
+                          </VBtn>
+                        </div>
+                      </VAlert>
+                    </VCol>
                   </VRow>
                   <VRow>
-                    <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE" cols="12" md="4">
+                    <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE && showBaseUrlField" cols="12" md="6">
+                      <VSwitch
+                        v-model="SystemSettings.Basic.LLM_USE_PROXY"
+                        :label="t('setting.system.llmUseProxy')"
+                        :hint="t('setting.system.llmUseProxyHint')"
+                        persistent-hint
+                      />
+                    </VCol>
+                    <VCol v-if="SystemSettings.Basic.AI_AGENT_ENABLE" cols="12" md="6">
                       <VSwitch
                         v-model="SystemSettings.Basic.LLM_SUPPORT_IMAGE_INPUT"
                         :label="t('setting.system.llmSupportImageInput')"
@@ -1717,6 +1845,7 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
               <MediaServerCard
                 :mediaserver="element"
                 :mediaservers="mediaServers"
+                :default-sync-interval="legacyMediaServerSyncInterval ?? undefined"
                 @close="removeMediaServer(element)"
                 @change="onMediaServerChange"
               />
@@ -1748,6 +1877,13 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
       </VCard>
     </VCol>
   </VRow>
+
+  <AgentMcpSettingsDialog
+    v-if="agentMcpDialog"
+    v-model="agentMcpDialog"
+    :servers="agentMcpServers"
+    @saved="handleAgentMcpSaved"
+  />
 
   <!-- 高级系统设置 -->
   <VDialog
@@ -2195,9 +2331,7 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                             v-for="(range, index) in SystemSettings.Advanced.IMAGE_PROXY_ALLOWED_PRIVATE_RANGES"
                             :key="index"
                             closable
-                            @click:close="
-                              SystemSettings.Advanced.IMAGE_PROXY_ALLOWED_PRIVATE_RANGES.splice(index, 1)
-                            "
+                            @click:close="SystemSettings.Advanced.IMAGE_PROXY_ALLOWED_PRIVATE_RANGES.splice(index, 1)"
                           >
                             {{ range }}
                           </VChip>
@@ -2457,5 +2591,25 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
 
 .llm-test-trigger {
   min-inline-size: 0;
+}
+
+.agent-mcp-summary__content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.agent-mcp-summary__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media (max-width: 600px) {
+  .agent-mcp-summary__content {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 </style>

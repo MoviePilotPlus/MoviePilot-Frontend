@@ -27,6 +27,7 @@ import { buildUserPermissionContext, hasPermission } from '@/utils/permission'
 
 const AboutDialog = defineAsyncComponent(() => import('@/components/dialog/AboutDialog.vue'))
 const CustomCssDialog = defineAsyncComponent(() => import('@/components/dialog/CustomCssDialog.vue'))
+const GlassSettingsDialog = defineAsyncComponent(() => import('@/components/dialog/GlassSettingsDialog.vue'))
 const ProgressDialog = defineAsyncComponent(() => import('@/components/dialog/ProgressDialog.vue'))
 const TransparencySettingsDialog = defineAsyncComponent(
   () => import('@/components/dialog/TransparencySettingsDialog.vue'),
@@ -63,6 +64,7 @@ const showLanguageMenu = ref(false)
 const customCSS = ref('')
 
 const isTransparentTheme = computed(() => currentThemeName.value === 'transparent')
+const isGlassTheme = computed(() => currentThemeName.value === 'glass')
 
 // 重启轮询控制标识
 const restartPollingId = ref<number | null>(null)
@@ -315,6 +317,11 @@ const themes: ThemeSwitcherTheme[] = [
     title: t('theme.transparent'),
     icon: 'mdi-gradient-horizontal',
   },
+  {
+    name: 'glass',
+    title: t('theme.glass'),
+    icon: 'mdi-blur-radial',
+  },
 ]
 
 function getThemeLayoutTitle(layout: ThemeCustomizerSettings['layout']) {
@@ -438,6 +445,11 @@ watch(editorTheme, theme => {
 /** 打开透明主题设置共享弹窗。 */
 function showTransparencySettingsDialog() {
   openSharedDialog(TransparencySettingsDialog, {}, {}, { closeOn: ['close', 'update:modelValue'] })
+}
+
+/** 打开玻璃主题的外观与质量设置共享弹窗。 */
+function showGlassSettingsDialog() {
+  openSharedDialog(GlassSettingsDialog, {}, {}, { closeOn: ['close', 'update:modelValue'] })
 }
 
 /** 从用户菜单打开主题定制器，App 模式会在面板内部隐藏布局设置。 */
@@ -619,7 +631,7 @@ onUnmounted(() => {
           </VListItem>
 
           <!-- 👉 UI模式设置 - 使用嵌套菜单 -->
-          <VMenu location="end" offset-x min-width="200" v-model="showUIModeMenu" :close-on-content-click="true">
+          <VMenu location="end" offset-x width="15rem" v-model="showUIModeMenu" :close-on-content-click="true">
             <template v-slot:activator="{ props: menuProps }">
               <VListItem v-bind="menuProps" class="mb-1 rounded-lg" hover>
                 <template #prepend>
@@ -654,7 +666,7 @@ onUnmounted(() => {
           </VMenu>
 
           <!-- 👉 主题设置 - 使用嵌套菜单 -->
-          <VMenu location="end" offset-x min-width="200" v-model="showThemeMenu" :close-on-content-click="true">
+          <VMenu location="end" offset-x width="15rem" v-model="showThemeMenu" :close-on-content-click="true">
             <template v-slot:activator="{ props: menuProps }">
               <VListItem v-bind="menuProps" class="mb-1 rounded-lg" hover>
                 <template #prepend>
@@ -695,6 +707,16 @@ onUnmounted(() => {
                 </VListItem>
               </template>
 
+              <VListItem v-else-if="isGlassTheme" @click="showGlassSettingsDialog">
+                <template #prepend>
+                  <VIcon icon="mdi-blur-radial" />
+                </template>
+                <VListItemTitle>{{ t('theme.glassSettings') }}</VListItemTitle>
+                <template #append>
+                  <VIcon icon="mdi-chevron-right" size="small" />
+                </template>
+              </VListItem>
+
               <VListItem v-if="canAdmin" @click="showCustomCssDialog">
                 <template #prepend>
                   <VIcon icon="mdi-palette" />
@@ -708,7 +730,7 @@ onUnmounted(() => {
           </VMenu>
 
           <!-- 👉 语言设置 - 使用嵌套菜单 -->
-          <VMenu location="end" offset-x min-width="200" v-model="showLanguageMenu" :close-on-content-click="true">
+          <VMenu location="end" offset-x width="15rem" v-model="showLanguageMenu" :close-on-content-click="true">
             <template v-slot:activator="{ props: menuProps }">
               <VListItem v-bind="menuProps" class="mb-1 rounded-lg" hover>
                 <template #prepend>

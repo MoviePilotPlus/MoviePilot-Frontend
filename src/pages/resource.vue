@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { debounce } from 'lodash-es'
 import type { LocationQuery } from 'vue-router'
 import NoDataFound from '@/components/states/NoDataFound.vue'
 import api from '@/api'
@@ -19,6 +18,8 @@ import { useToast } from 'vue-toastification'
 import { useKeepAliveRefresh } from '@/composables/useKeepAliveRefresh'
 import { useUserStore } from '@/stores'
 import { buildUserPermissionContext, hasPermission } from '@/utils/permission'
+import { SearchReplaceBatchCollector, isSearchReplaceBatchEvent } from '@/utils/searchStream'
+import { getCurrentLocale } from '@/plugins/i18n'
 
 // 国际化
 const { t } = useI18n()
@@ -63,6 +64,9 @@ interface LastSearchContextResponse {
 }
 
 const resourceSearchParamsStorageKey = 'MP_ResourceSearchParams'
+type TorrentViewType = 'card' | 'row'
+// 只有最新搜索可以提交结果和可重放参数，避免旧请求覆盖新查询。
+let activeSearchRequestId = 0
 
 function createSearchParams(query: LocationQuery): SearchParams {
   return {
@@ -98,6 +102,10 @@ function hasSearchKeyword(params: SearchParams): boolean {
 
 function createSearchRequestToken(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function normalizeTorrentViewType(value: string | null): TorrentViewType {
+  return value === 'row' ? 'row' : 'card'
 }
 
 function loadStoredSearchParams(): SearchParams | null {
@@ -149,9 +157,12 @@ if (hasSearchKeyword(initialSearchParams)) {
 }
 
 async function fetchLastSearchContext() {
+  const requestId = activeSearchRequestId
   try {
     const result = (await api.get('search/last/context')) as LastSearchContextResponse
-    applyRememberedSearchParams(result?.data?.params, true)
+    if (requestId === activeSearchRequestId) {
+      applyRememberedSearchParams(result?.data?.params, true)
+    }
     return Array.isArray(result?.data?.results) ? result.data.results : []
   } catch (error) {
     console.warn('读取上次搜索上下文失败，回退到仅加载结果:', error)
@@ -210,7 +221,7 @@ const resultType = computed(() => (activeSearchParams.value.result_type === 'sub
 const isSubtitleSearch = computed(() => resultType.value === 'subtitle')
 
 // 视图类型，从localStorage中读取
-const viewType = ref<string>(localStorage.getItem('MPTorrentsViewType') ?? 'card')
+const viewType = ref<TorrentViewType>(normalizeTorrentViewType(localStorage.getItem('MPTorrentsViewType')))
 
 // 智能推荐相关
 // 从全局设置中获取 AI_RECOMMEND_ENABLED 状态
@@ -308,11 +319,13 @@ const errorDescription = ref(t('resource.noResourceFound'))
 
 let searchEventSource: EventSource | null = null
 let searchStreamIdleTimer: ReturnType<typeof setTimeout> | null = null
+let cancelActiveSearchStream: (() => void) | null = null
 
 const streamPreviewLimit = 24
 const streamUiFlushDelay = 1000
 const streamPreviewBufferLimit = streamPreviewLimit * 4
-const searchStreamIdleTimeout = 90_000
+// 兼容尚未提供心跳的旧后端，同时保留异常半开连接的最终兜底。
+const searchStreamIdleTimeout = 5 * 60_000
 const searchStreamDoneCloseDelay = 1500
 
 const streamTotalCount = ref(0)
@@ -341,6 +354,8 @@ const showResultHeader = computed(() => isRefreshed.value && !progressActive.val
 
 let pendingStreamItems: Array<Context> = []
 let pendingSubtitleStreamItems: Array<SubtitleInfo> = []
+const streamReplaceBatchCollector = new SearchReplaceBatchCollector<Context>()
+const subtitleReplaceBatchCollector = new SearchReplaceBatchCollector<SubtitleInfo>()
 let streamFlushTimer: ReturnType<typeof setTimeout> | null = null
 let streamFinalResultApplied = false
 let pendingProgressText: string | null = null
@@ -392,21 +407,9 @@ function handleRemoveFilter(key: string, value: string) {
   torrentFilter.removeFilter(key, value)
 }
 
-// 添加安全超时，确保进度条不会永远卡住
-const watchProgressValue = watch(
-  progressValue,
-  debounce(async () => {
-    if (progressActive.value && progressValue.value < 100) {
-      console.warn('卡进度超时 关闭进度条')
-      stopLoadingProgress()
-    }
-  }, 60_000),
-)
-
 // 使用SSE监听加载进度
 function startLoadingProgress() {
   clearProgressResetTimer()
-  watchProgressValue.resume()
   progressText.value = t('resource.searching')
   progressValue.value = 0
   progressEnabled.value = true
@@ -415,7 +418,6 @@ function startLoadingProgress() {
 
 // 停止监听加载进度
 function stopLoadingProgress() {
-  watchProgressValue.pause()
   progressActive.value = false
 
   // 确保进度显示100%，然后再渐进清零
@@ -428,6 +430,7 @@ function stopLoadingProgress() {
   }, 1500)
 }
 
+// 清除延迟归零任务，避免新搜索继承上一轮的进度重置。
 function clearProgressResetTimer() {
   if (progressResetTimer) {
     clearTimeout(progressResetTimer)
@@ -450,6 +453,7 @@ function closeSearchEventSource(source?: EventSource) {
   clearSearchStreamIdleTimer()
 }
 
+// 清除搜索流空闲计时器。
 function clearSearchStreamIdleTimer() {
   if (searchStreamIdleTimer) {
     clearTimeout(searchStreamIdleTimer)
@@ -472,6 +476,8 @@ function clearStreamPreviewState(resetFinalState: boolean = false) {
   pendingProgressText = null
   pendingProgressValue = null
   pendingStreamTotalCount = null
+  streamReplaceBatchCollector.reset()
+  subtitleReplaceBatchCollector.reset()
   streamPreviewDataList.value = []
   streamPreviewSubtitleDataList.value = []
   if (resetFinalState) {
@@ -513,6 +519,7 @@ function flushBufferedStreamState() {
   isRefreshed.value = true
 }
 
+// 合并短时间内到达的预览和进度更新。
 function scheduleStreamFlush() {
   if (streamFlushTimer) return
   streamFlushTimer = setTimeout(() => {
@@ -575,6 +582,7 @@ function buildSearchStreamUrl(params: SearchParams, requestToken?: string) {
   if (requestToken) {
     setSearchParam(url.searchParams, '_ts', requestToken)
   }
+  setSearchParam(url.searchParams, 'locale', getCurrentLocale())
 
   return url.toString()
 }
@@ -584,6 +592,7 @@ function resetSearchResults() {
   clearStreamPreviewState(true)
   // 新搜索开始时先回到未完成态，避免上一轮空态在 SSE 返回前抢先显示。
   isRefreshed.value = false
+  errorDescription.value = t('resource.noResourceFound')
   rawDataList.value = []
   rawSubtitleDataList.value = []
   originalDataList.value = []
@@ -605,8 +614,9 @@ function hasLoadedEmptySearchResult() {
 
 // 更新搜索进度
 function updateSearchProgress(eventData: { [key: string]: any }, flushNow: boolean = false) {
-  if (eventData.text) {
-    pendingProgressText = eventData.text
+  const text = eventData.text_i18n || eventData.text
+  if (text) {
+    pendingProgressText = text
   }
   if (typeof eventData.value === 'number') {
     pendingProgressValue = eventData.value
@@ -670,6 +680,7 @@ function appendSubtitleStreamResults(items: SubtitleInfo[]) {
   scheduleStreamFlush()
 }
 
+// 完整最终结果到达后原子替换资源列表。
 function applyFinalStreamResults(items: Context[]) {
   streamFinalResultApplied = true
   flushBufferedStreamState()
@@ -705,9 +716,24 @@ function getSubtitleItemKey(item: SubtitleInfo, index: number) {
 
 // 处理搜索流消息
 function handleSearchStreamMessage(eventData: { [key: string]: any }) {
+  if (eventData.type === 'heartbeat') return
+
   if (eventData.type === 'error') {
     updateSearchProgress(eventData, true)
-    errorDescription.value = eventData.message || t('resource.noResourceFound')
+    errorDescription.value = eventData.message_i18n || eventData.message || t('resource.noResourceFound')
+    return
+  }
+
+  if (isSearchReplaceBatchEvent<Context | SubtitleInfo>(eventData)) {
+    if (isSubtitleSearch.value) {
+      const completedItems = subtitleReplaceBatchCollector.append(eventData)
+      updateSearchProgress(eventData, completedItems !== null)
+      if (completedItems) applyFinalSubtitleStreamResults(completedItems)
+    } else {
+      const completedItems = streamReplaceBatchCollector.append(eventData)
+      updateSearchProgress(eventData, completedItems !== null)
+      if (completedItems) applyFinalStreamResults(completedItems)
+    }
     return
   }
 
@@ -744,14 +770,18 @@ function handleSearchStreamMessage(eventData: { [key: string]: any }) {
 }
 
 // 按请求搜索
-async function searchByRequest(params: SearchParams, requestToken?: string) {
+async function searchByRequest(params: SearchParams, requestToken: string | undefined, requestId: number) {
   const items = await requestSearchResults(params, requestToken)
+  if (requestId !== activeSearchRequestId) return false
+
+  errorDescription.value = t('resource.noResourceFound')
   streamTotalCount.value = items.length
   if (params.result_type === 'subtitle') {
     setSubtitleStreamResults(items as SubtitleInfo[])
   } else {
     setStreamResults(items as Context[])
   }
+  return true
 }
 
 // 静默刷新使用普通请求，保留当前结果直到新数据完整返回，避免返回页面时露出搜索进度态。
@@ -806,15 +836,15 @@ async function requestSearchResults(params: SearchParams, requestToken?: string)
     return (result.data || []) as Array<Context | SubtitleInfo>
   }
 
-  errorDescription.value = result?.message || t('resource.noResourceFound')
-  throw new Error(errorDescription.value)
+  throw new Error(result?.message || t('resource.noResourceFound'))
 }
 
 // 按流搜索
 function searchByStream(params: SearchParams, requestToken?: string) {
-  return new Promise<void>((resolve, reject) => {
-    closeSearchEventSource()
+  // 新搜索必须显式结束上一轮 Promise；EventSource.close() 本身不会触发 error。
+  cancelActiveSearchStream?.()
 
+  return new Promise<void>((resolve, reject) => {
     let settled = false
     let receivedDone = false
     const source = new EventSource(buildSearchStreamUrl(params, requestToken))
@@ -824,14 +854,20 @@ function searchByStream(params: SearchParams, requestToken?: string) {
       if (settled) return
 
       settled = true
+      if (cancelActiveSearchStream === cancelThisSearch) {
+        cancelActiveSearchStream = null
+      }
       closeSearchEventSource(source)
       callback()
     }
+    const cancelThisSearch = () => settleSearchStream(resolve)
+    cancelActiveSearchStream = cancelThisSearch
 
     const resetIdleTimeout = () => {
       clearSearchStreamIdleTimer()
       searchStreamIdleTimer = setTimeout(() => {
-        settleSearchStream(() => reject(new Error(t('resource.noResourceFound'))))
+        errorDescription.value = t('resource.searchStreamTimeout')
+        settleSearchStream(() => reject(new Error(errorDescription.value)))
       }, searchStreamIdleTimeout)
     }
 
@@ -871,13 +907,14 @@ function searchByStream(params: SearchParams, requestToken?: string) {
         return
       }
 
-      settleSearchStream(() => reject(new Error(t('resource.noResourceFound'))))
+      errorDescription.value = t('resource.searchStreamDisconnected')
+      settleSearchStream(() => reject(new Error(errorDescription.value)))
     }
   })
 }
 
 // 设置视图类型
-function changeViewType(newType: string) {
+function changeViewType(newType: TorrentViewType) {
   if (viewType.value !== newType) {
     // 立即更新视图类型
     viewType.value = newType
@@ -890,6 +927,7 @@ function changeViewType(newType: string) {
 
 // 获取搜索列表数据
 async function fetchData(options: { force?: boolean; params?: SearchParams; silent?: boolean } = {}) {
+  const requestId = ++activeSearchRequestId
   const currentSearchParams = { ...(options.params ?? activeSearchParams.value) }
   if (hasSearchKeyword(currentSearchParams)) {
     activeSearchParams.value = { ...currentSearchParams }
@@ -904,6 +942,7 @@ async function fetchData(options: { force?: boolean; params?: SearchParams; sile
     if (!hasSearchKeyword(currentSearchParams)) {
       // 查询上次搜索结果，并同步可重放的搜索参数
       const results = await fetchLastSearchContext()
+      if (requestId !== activeSearchRequestId) return
       if (activeSearchParams.value.result_type === 'subtitle') {
         setSubtitleStreamResults((results || []) as SubtitleInfo[])
       } else {
@@ -911,7 +950,16 @@ async function fetchData(options: { force?: boolean; params?: SearchParams; sile
       }
     } else if (silentRefresh) {
       // keep-alive 重新进入时后台刷新，旧结果继续显示，等新结果完整返回后一次性替换。
-      const results = await requestSearchResults(currentSearchParams, requestToken)
+      let results: Array<Context | SubtitleInfo>
+      try {
+        results = await requestSearchResults(currentSearchParams, requestToken)
+      } catch (error) {
+        if (requestId !== activeSearchRequestId) return
+        errorDescription.value = error instanceof Error ? error.message : t('resource.noResourceFound')
+        throw error
+      }
+      if (requestId !== activeSearchRequestId) return
+      errorDescription.value = t('resource.noResourceFound')
       streamTotalCount.value = results.length
       if (currentSearchParams.result_type === 'subtitle') {
         setSubtitleStreamResults(results as SubtitleInfo[])
@@ -924,18 +972,29 @@ async function fetchData(options: { force?: boolean; params?: SearchParams; sile
       try {
         await searchByStream(currentSearchParams, requestToken)
       } catch (error) {
+        const streamErrorMessage = error instanceof Error ? error.message : t('resource.searchStreamDisconnected')
         console.warn('渐进式搜索连接失败，回退到普通搜索:', error)
-        await searchByRequest(currentSearchParams, requestToken)
+        try {
+          const applied = await searchByRequest(currentSearchParams, requestToken, requestId)
+          if (!applied) return
+        } catch (fallbackError) {
+          if (requestId !== activeSearchRequestId) return
+          errorDescription.value = streamErrorMessage
+          throw fallbackError
+        }
       }
+      if (requestId !== activeSearchRequestId) return
       stopLoadingProgress()
       // 搜索完成后移除地址栏参数，避免分享/刷新残留搜索条件
       if (Object.keys(route.query).length > 0) {
         await router.replace({ path: route.path, query: {} })
       }
     }
+    if (requestId !== activeSearchRequestId) return
     // 标记已刷新
     isRefreshed.value = true
   } catch (error) {
+    if (requestId !== activeSearchRequestId) return
     console.error(error)
     closeSearchEventSource()
     stopLoadingProgress()
@@ -1116,7 +1175,14 @@ async function pollAiRecommend() {
       console.error('AI功能未启用')
     } else {
       // 错误情况（status === 'error' 或 success 为 false）
-      const errMsg = result.message || data?.error || data?.message || 'Unknown error'
+      const errMsg =
+        result.message_i18n ||
+        result.message ||
+        data?.error_i18n ||
+        data?.error ||
+        data?.message_i18n ||
+        data?.message ||
+        'Unknown error'
       console.error('智能推荐错误:', errMsg)
       toast.error(`${t('resource.aiRecommendError')}: ${errMsg}`)
     }
@@ -1277,8 +1343,10 @@ useKeepAliveRefresh(async () => {
   await fetchData({ force: true, params: refreshParams, silent: true })
 })
 
-// 卸载时停止轮询
+// 卸载时先让所有在途请求失效，并结束 EventSource.close() 不会主动完成的搜索 Promise。
 onUnmounted(() => {
+  activeSearchRequestId += 1
+  cancelActiveSearchStream?.()
   closeSearchEventSource()
   stopLoadingProgress()
   clearProgressResetTimer()
@@ -1288,7 +1356,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div>
+  <div data-glass-optical-mode="static-material">
     <!-- 搜索加载状态 -->
     <VFadeTransition>
       <div
@@ -1403,12 +1471,7 @@ onUnmounted(() => {
 
           <VExpandXTransition>
             <div v-if="aiRecommended || isRecommending" class="ai-action-group__more">
-              <IconBtn
-                variant="text"
-                color="gray"
-                :disabled="isRecommending || !aiStatusChecked"
-                @click="reRecommend"
-              >
+              <IconBtn variant="text" color="gray" :disabled="isRecommending || !aiStatusChecked" @click="reRecommend">
                 <VIcon :icon="isRecommending ? 'line-md:loading-twotone-loop' : 'mdi-auto-fix'" />
                 <VTooltip activator="parent" location="top">
                   {{ t('resource.reRecommend') }}
@@ -1623,8 +1686,10 @@ onUnmounted(() => {
 
 .search-progress-card {
   padding: 16px;
-  backdrop-filter: blur(10px);
-  background: linear-gradient(135deg, rgba(var(--v-theme-primary), 0.08), transparent 42%), rgb(var(--v-theme-surface));
+  border: var(--app-grouped-list-border);
+  backdrop-filter: var(--app-grouped-list-backdrop-filter);
+  background:
+    linear-gradient(135deg, rgba(var(--v-theme-primary), 0.08), transparent 42%), var(--app-grouped-list-background);
   inline-size: 100%;
 }
 

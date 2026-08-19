@@ -2,7 +2,7 @@
 <script lang="ts" setup>
 import { useToast } from 'vue-toastification'
 import api from '@/api'
-import { TransferDirectoryConf, StorageConf } from '@/api/types'
+import type { ApiResponse, StorageConf, TransferDirectoryConf } from '@/api/types'
 import DirectoryCard from '@/components/cards/DirectoryCard.vue'
 import StorageCard from '@/components/cards/StorageCard.vue'
 import { useI18n } from 'vue-i18n'
@@ -10,6 +10,7 @@ import { useTheme } from 'vuetify'
 import { storageAttributes } from '@/api/constants'
 import { useSilentSettingRefresh } from '@/composables/useSilentSettingRefresh'
 import { openSharedDialog } from '@/composables/useSharedDialog'
+import { configureAceEditorPadding } from '@/utils/aceEditor'
 
 const { t } = useI18n()
 const { global: globalTheme } = useTheme()
@@ -41,6 +42,8 @@ const $toast = useToast()
 const sourceItems = [
   { 'title': 'TheMovieDb', 'value': 'themoviedb' },
   { 'title': '豆瓣', 'value': 'douban' },
+  { 'title': 'Bangumi', 'value': 'bangumi' },
+  { 'title': 'AniList', 'value': 'anilist' },
 ]
 
 // 存储选项（排除已添加的）
@@ -62,6 +65,10 @@ const SystemSettings = ref<any>({
     TV_RENAME_FORMAT: null,
   },
 })
+
+// 挂载型本地盘删除空目录开关
+const mountedLocalDiskDeleteEmptyDirs = ref(true)
+const mountedLocalDiskDeleteEmptyDirsKey = 'MountedLocalDiskDeleteEmptyDirs'
 
 // 编辑器主题
 // Ace 跟随 Vuetify 当前生效主题，auto 模式下也按实际明暗色渲染。
@@ -112,6 +119,18 @@ async function loadSystemSettings() {
         })
       }
     }
+  } catch (error) {
+    console.log(error)
+  }
+}
+
+// 加载挂载盘空目录清理设置
+async function loadMountedLocalDiskDeleteEmptyDirs() {
+  try {
+    const result: { data?: { value?: boolean | null } } = await api.get(
+      `system/setting/${mountedLocalDiskDeleteEmptyDirsKey}`,
+    )
+    mountedLocalDiskDeleteEmptyDirs.value = result.data?.value ?? true
   } catch (error) {
     console.log(error)
   }
@@ -253,8 +272,15 @@ function removeStorage(storage: StorageConf) {
 // 保存设置
 async function saveSystemSettings(value: any) {
   try {
-    const result: { [key: string]: any } = await api.post('system/env', value)
-    if (result.success) {
+    // 响应拦截器返回业务响应体，并行组合前需收窄 Axios 的静态返回类型。
+    const [envResult, mountedDiskResult] = await Promise.all([
+      api.post('system/env', value) as unknown as Promise<ApiResponse>,
+      api.post(
+        `system/setting/${mountedLocalDiskDeleteEmptyDirsKey}`,
+        mountedLocalDiskDeleteEmptyDirs.value,
+      ) as unknown as Promise<ApiResponse>,
+    ])
+    if (envResult.success && mountedDiskResult.success) {
       $toast.success(t('setting.directory.organizeSaveSuccess'))
     } else $toast.error(t('setting.directory.organizeSaveFailed'))
   } catch (error) {
@@ -263,7 +289,13 @@ async function saveSystemSettings(value: any) {
 }
 
 async function loadPageData() {
-  await Promise.all([loadDirectories(), loadStorages(), loadMediaCategories(), loadSystemSettings()])
+  await Promise.all([
+    loadDirectories(),
+    loadStorages(),
+    loadMediaCategories(),
+    loadSystemSettings(),
+    loadMountedLocalDiskDeleteEmptyDirs(),
+  ])
 }
 
 // 加载数据
@@ -392,6 +424,16 @@ useSilentSettingRefresh(loadPageData, {
                 prepend-inner-icon="mdi-database"
               />
             </VCol>
+            <VCol cols="12" md="6">
+              <VSwitch
+                v-model="mountedLocalDiskDeleteEmptyDirs"
+                :label="t('setting.directory.mountedLocalDiskDeleteEmptyDirs')"
+                :hint="t('setting.directory.mountedLocalDiskDeleteEmptyDirsHint')"
+                color="primary"
+                persistent-hint
+                inset
+              />
+            </VCol>
             <VCol cols="12">
               <div class="rename-format-editor">
                 <div class="rename-format-editor__label">
@@ -407,7 +449,8 @@ useSilentSettingRefresh(loadPageData, {
                   :min-lines="4"
                   :max-lines="12"
                   wrap
-                  class="rename-format-editor__ace rounded"
+                  class="rename-format-editor__ace"
+                  @init="configureAceEditorPadding"
                 />
                 <div class="rename-format-editor__hint">
                   {{ t('setting.directory.movieRenameFormatHint') }}
@@ -429,7 +472,8 @@ useSilentSettingRefresh(loadPageData, {
                   :min-lines="4"
                   :max-lines="12"
                   wrap
-                  class="rename-format-editor__ace rounded"
+                  class="rename-format-editor__ace"
+                  @init="configureAceEditorPadding"
                 />
                 <div class="rename-format-editor__hint">
                   {{ t('setting.directory.tvRenameFormatHint') }}
@@ -466,6 +510,7 @@ useSilentSettingRefresh(loadPageData, {
 .rename-format-editor__ace {
   overflow: hidden;
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: var(--app-field-radius);
   min-block-size: 8rem;
 }
 

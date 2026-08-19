@@ -4,7 +4,7 @@ import type { PropType } from 'vue'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from 'vue-toastification'
 import { formatBytes } from '@core/utils/formatters'
-import type { Context, EndPoints, FileItem } from '@/api/types'
+import type { ApiResponse, Context, EndPoints, FileItem, ManualScrapeOptions } from '@/api/types'
 import api from '@/api'
 import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
@@ -18,6 +18,7 @@ const FileRenameDialog = defineAsyncComponent(() => import('../dialog/FileRename
 const MediaInfoDialog = defineAsyncComponent(() => import('../dialog/MediaInfoDialog.vue'))
 const ProgressDialog = defineAsyncComponent(() => import('../dialog/ProgressDialog.vue'))
 const ReorganizeDialog = defineAsyncComponent(() => import('../dialog/ReorganizeDialog.vue'))
+const ScrapeDialog = defineAsyncComponent(() => import('../dialog/ScrapeDialog.vue'))
 
 // 国际化
 const { t } = useI18n()
@@ -35,8 +36,9 @@ const { availableHeight: listAvailableHeight } = useAvailableHeight(100, 300)
 const inProps = defineProps({
   icons: Object,
   endpoints: Object as PropType<EndPoints>,
+  // Axios 实例是可调用函数，运行时 prop 类型需与其实际形态一致。
   axios: {
-    type: Object as PropType<AxiosInstance>,
+    type: Function as PropType<AxiosInstance>,
     required: true,
   },
   refreshpending: Boolean,
@@ -105,10 +107,12 @@ const currentItem = ref<FileItem>()
 // 选中的项目
 const selected = ref<FileItem[]>([])
 
+// 生成文件项稳定键，用于去重和状态同步。
 function getFileItemKey(item?: FileItem) {
   return [item?.storage ?? inProps.item.storage ?? '', item?.type ?? '', item?.path ?? ''].join('|')
 }
 
+// 按存储、类型和路径去重文件项。
 function dedupeFileItems(fileItems: FileItem[]) {
   const uniqueItems = new Map<string, FileItem>()
   fileItems.forEach(item => {
@@ -118,6 +122,7 @@ function dedupeFileItems(fileItems: FileItem[]) {
   return Array.from(uniqueItems.values())
 }
 
+// 列表刷新后将选中项同步为最新文件对象。
 function syncSelectedItems(nextItems: FileItem[] = items.value) {
   if (!selected.value.length) return
 
@@ -129,10 +134,12 @@ function syncSelectedItems(nextItems: FileItem[] = items.value) {
 
 const selectedKeys = computed(() => new Set(selected.value.map(item => getFileItemKey(item))))
 
+// 判断文件项当前是否已选中。
 function isSelected(item: FileItem) {
   return selectedKeys.value.has(getFileItemKey(item))
 }
 
+// 更新单个文件项的选中状态。
 function setItemSelected(item: FileItem, checked: boolean) {
   const itemKey = getFileItemKey(item)
 
@@ -219,6 +226,12 @@ const transferItems = ref<FileItem[]>([])
 // 当前图片地址
 const currentImgLink = ref('')
 
+let imageRequestSeed = 0
+// request seed 决定响应提交和内部 loading 归属；外部 loading 按非静默调用配对，重叠时也分别完成事件收口。
+let listLoadingRequestSeed = 0
+let listRequestSeed = 0
+
+// 释放当前图片预览使用的临时对象地址。
 function revokeCurrentImgLink() {
   if (!currentImgLink.value) return
 
@@ -246,11 +259,11 @@ function exitSelectMode() {
 
 // 调API加载文件夹内的内容
 async function list_files(context: KeepAliveRefreshContext = {}) {
+  const requestSeed = ++listRequestSeed
   const silentRefresh = Boolean(context.silent && items.value.length > 0)
-  const takeURISnapshot = () => [inProps.item.storage, inProps.item.path].join(':/')
-  const prevURI = takeURISnapshot()
 
   if (!silentRefresh) {
+    listLoadingRequestSeed = requestSeed
     loading.value = true
     emit('loading', true)
   }
@@ -267,10 +280,8 @@ async function list_files(context: KeepAliveRefreshContext = {}) {
 
     // 加载数据
     const data = (await inProps.axios.request<FileItem[], FileItem[]>(config)) ?? []
-    // 如果当前路径已经变化，则放弃此次加载结果
-    if (prevURI !== takeURISnapshot()) {
-      return
-    }
+    if (requestSeed !== listRequestSeed) return
+
     items.value = data
     syncSelectedItems(data)
 
@@ -281,9 +292,19 @@ async function list_files(context: KeepAliveRefreshContext = {}) {
   } finally {
     if (!silentRefresh) {
       emit('loading', false)
-      loading.value = false
+      if (requestSeed === listLoadingRequestSeed) loading.value = false
     }
   }
+}
+
+// 请求删除文件项，由单项或批量操作分别决定反馈和刷新策略。
+async function requestDeleteItem(item: FileItem) {
+  const config: AxiosRequestConfig<FileItem> = {
+    url: inProps.endpoints?.delete.url,
+    method: inProps.endpoints?.delete.method || 'post',
+    data: item,
+  }
+  return inProps.axios.request<ApiResponse<unknown>, ApiResponse<unknown>>(config)
 }
 
 // 删除项目
@@ -302,21 +323,23 @@ async function deleteItem(item: FileItem, confirm: boolean = true) {
   // 加载中
   emit('loading', true)
 
-  // 请求API
-  const url = inProps.endpoints?.delete.url
-  const config: AxiosRequestConfig<FileItem> = {
-    url,
-    method: inProps.endpoints?.delete.method || 'post',
-    data: item,
+  try {
+    const result = await requestDeleteItem(item)
+    if (!result.success) {
+      $toast.error(result.message || t('common.error'))
+      return false
+    }
+
+    emit('filedeleted')
+    await list_files()
+    return true
+  } catch (error) {
+    console.error(error)
+    $toast.error(error instanceof Error ? error.message : t('common.error'))
+    return false
+  } finally {
+    emit('loading', false)
   }
-  await inProps.axios.request(config)
-
-  // 删除完成
-  emit('loading', false)
-  emit('filedeleted')
-
-  // 重新加载
-  list_files()
 }
 
 // 批量删除
@@ -333,24 +356,42 @@ async function batchDelete() {
   // 显示进度条
   progressValue.value = 0
   openProgressDialog(progressText.value, progressValue.value)
+  emit('loading', true)
 
   try {
     const selectedItems = dedupeFileItems(selected.value)
+    const failedItems: FileItem[] = []
 
     // 删除选中的项目
-    for (const item of selectedItems) {
+    for (const [index, item] of selectedItems.entries()) {
       progressText.value = t('file.deleting', { name: item.name })
-      progressDialogController?.updateProps({ text: progressText.value })
-      await deleteItem(item, false)
+      progressValue.value = Math.round(((index + 1) / selectedItems.length) * 100)
+      progressDialogController?.updateProps({ text: progressText.value, value: progressValue.value })
+      try {
+        const result = await requestDeleteItem(item)
+        if (!result.success) failedItems.push(item)
+      } catch (error) {
+        console.error(error)
+        failedItems.push(item)
+      }
     }
 
-    exitSelectMode()
+    if (failedItems.length) {
+      selected.value = failedItems
+      $toast.error(`${t('common.error')}: ${failedItems.map(item => item.name).join(', ')}`)
+    } else {
+      exitSelectMode()
+    }
   } finally {
     // 关闭进度条
     closeProgressDialog()
 
     // 重新加载
-    list_files()
+    try {
+      await list_files({ silent: true })
+    } finally {
+      emit('loading', false)
+    }
   }
 }
 
@@ -392,7 +433,8 @@ async function download(item: FileItem) {
 
 // 获取图片地址
 async function getImgLink(item: FileItem) {
-  let url = inProps.endpoints?.image.url
+  const requestSeed = ++imageRequestSeed
+  const url = inProps.endpoints?.image.url
   // 下载文件
   const config: AxiosRequestConfig<FileItem> = {
     url,
@@ -402,7 +444,7 @@ async function getImgLink(item: FileItem) {
   }
   // 加载二进制数据
   const result: Blob = await inProps.axios.request<Blob, Blob>(config)
-  if (result) {
+  if (result && requestSeed === imageRequestSeed) {
     // 创建图片地址
     revokeCurrentImgLink()
     currentImgLink.value = URL.createObjectURL(result)
@@ -413,12 +455,11 @@ async function getImgLink(item: FileItem) {
 watch(
   () => inProps.item,
   async () => {
+    imageRequestSeed += 1
+    revokeCurrentImgLink()
     if (isImage.value && isFile.value) {
       await getImgLink(inProps.item)
-      return
     }
-
-    revokeCurrentImgLink()
   },
   { immediate: true },
 )
@@ -480,51 +521,51 @@ async function get_recommend_name() {
   renameDialogController?.updateProps({ loading: false, name: newName.value })
 }
 
-// 重命名
+// 仅在后端确认成功后关闭编辑弹窗并通知刷新；失败时保留输入以便重试。
 async function rename() {
   emit('loading', true)
+  const recursive = renameAll.value
 
   // 显示进度条
   progressValue.value = 0
-  if (renameAll.value) {
+  if (recursive) {
     progressText.value = t('file.renamingAll', { path: currentItem.value?.path })
   } else {
     progressText.value = t('file.renaming', { name: currentItem.value?.name })
   }
   openProgressDialog(progressText.value, progressValue.value)
-  if (renameAll.value) {
+  if (recursive) {
     startLoadingProgress()
   }
 
-  // 调API
-  let url = inProps.endpoints?.rename.url.replace(/{newname}/g, encodeURIComponent(newName.value))
-  if (renameAll.value) {
-    url += '&recursive=true'
-  }
+  try {
+    let url = inProps.endpoints?.rename.url.replace(/{newname}/g, encodeURIComponent(newName.value))
+    if (recursive) url += '&recursive=true'
 
-  const config: AxiosRequestConfig<FileItem> = {
-    url,
-    method: inProps.endpoints?.rename.method || 'post',
-    data: currentItem.value,
-  }
-  const result: { [key: string]: any } = await inProps.axios?.request<any, { [key: string]: any }>(config)
-  if (!result.success) {
-    $toast.error(result.message)
-  }
+    const config: AxiosRequestConfig<FileItem> = {
+      url,
+      method: inProps.endpoints?.rename.method || 'post',
+      data: currentItem.value,
+    }
+    const result: { [key: string]: any } = await inProps.axios.request<any, { [key: string]: any }>(config)
+    if (!result.success) {
+      $toast.error(result.message || t('common.error'))
+      return
+    }
 
-  // 关闭进度条
-  if (renameAll.value) {
-    stopLoadingProgress()
+    newName.value = ''
+    renameAll.value = false
+    renameDialogController?.close()
+    renameDialogController = null
+    emit('renamed')
+  } catch (error) {
+    console.error(error)
+    $toast.error(error instanceof Error ? error.message : t('common.error'))
+  } finally {
+    if (recursive) stopLoadingProgress()
+    closeProgressDialog()
+    emit('loading', false)
   }
-  closeProgressDialog()
-
-  // 通知重新加载
-  newName.value = ''
-  renameAll.value = false
-  renameDialogController?.close()
-  renameDialogController = null
-  emit('loading', false)
-  emit('renamed')
 }
 
 // 显示整理对话框
@@ -583,7 +624,7 @@ watch(
 
 // 监听item变化
 watch(
-  [() => inProps.item],
+  () => inProps.item,
   async () => {
     // 清空列表
     items.value = []
@@ -610,7 +651,7 @@ watch(
         props: {
           prependIcon: 'mdi-auto-fix',
           click: (_item: FileItem) => {
-            scrape(_item)
+            showScrape(_item)
           },
         },
       },
@@ -672,63 +713,72 @@ async function recognize(path: string) {
   }
 }
 
-// 调用API刮削
-async function scrape(item: FileItem, confirm: boolean = true) {
+// 调用 API 按请求级媒体条件刮削单个文件项。
+async function scrape(item: FileItem, options: ManualScrapeOptions) {
   try {
-    if (confirm) {
-      // 确认
-      const confirmed = await createConfirm({
-        title: t('common.confirm'),
-        content: t('file.confirmScrape', { path: item.path }),
-      })
-      if (!confirmed) return
-    }
-
-    // 显示进度条
     progressText.value = t('file.scraping', { path: item.path })
-    openProgressDialog(progressText.value)
+    progressDialogController?.updateProps({ text: progressText.value })
 
-    const result: { [key: string]: any } = await api.post(`media/scrape/${inProps.item.storage}`, item)
+    const result: { [key: string]: any } = await api.post(`media/scrape/${inProps.item.storage}`, item, {
+      params: options,
+    })
 
-    // 关闭进度条
-    closeProgressDialog()
     if (!result.success) $toast.error(result.message)
     else $toast.success(t('file.scrapeCompleted', { path: item.path }))
   } catch (error) {
-    closeProgressDialog()
     console.error(error)
   }
 }
 
-// 批量刮削
-async function batchScrape() {
-  if (!selected.value.length) return
+// 按同一媒体条件依次刮削选中的文件项。
+async function scrapeItems(itemsToScrape: FileItem[], options: ManualScrapeOptions) {
+  const normalizedItems = dedupeFileItems(itemsToScrape)
+  if (!normalizedItems.length) return
 
-  // 确认
-  const confirmed = await createConfirm({
-    title: t('common.confirm'),
-    content: t('file.confirmBatchScrape', { count: selected.value.length }),
-  })
-  if (!confirmed) return
-
+  progressText.value = t('file.scraping', { path: normalizedItems[0].path })
+  progressValue.value = 0
+  openProgressDialog(progressText.value, progressValue.value)
   try {
-    const selectedItems = dedupeFileItems(selected.value)
-
-    for (const item of selectedItems) {
-      await scrape(item, false)
+    for (const [index, item] of normalizedItems.entries()) {
+      await scrape(item, options)
+      progressValue.value = Math.round(((index + 1) / normalizedItems.length) * 100)
+      progressDialogController?.updateProps({ value: progressValue.value })
     }
-
-    exitSelectMode()
   } finally {
+    closeProgressDialog()
+    if (selectMode.value) exitSelectMode()
     list_files({ silent: true })
   }
+}
+
+// 打开单项手动刮削弹窗。
+function showScrape(item: FileItem) {
+  openScrapeDialog([item])
+}
+
+// 打开批量手动刮削弹窗。
+function showBatchScrape() {
+  openScrapeDialog(dedupeFileItems(selected.value))
+}
+
+// 打开手动刮削弹窗，并将确认结果交给文件列表执行。
+function openScrapeDialog(itemsToScrape: FileItem[]) {
+  if (!itemsToScrape.length) return
+  openSharedDialog(
+    ScrapeDialog,
+    { items: itemsToScrape },
+    {
+      scrape: (options: ManualScrapeOptions) => scrapeItems(itemsToScrape, options),
+    },
+    { closeOn: ['close', 'scrape'] },
+  )
 }
 
 // 进度SSE消息处理函数
 function handleProgressMessage(event: MessageEvent) {
   const progress = JSON.parse(event.data)
   if (progress) {
-    progressText.value = progress.text
+    progressText.value = progress.text_i18n || progress.text
     progressValue.value = progress.value
     progressDialogController?.updateProps({ text: progressText.value, value: progressValue.value })
   }
@@ -760,6 +810,8 @@ useKeepAliveRefresh(list_files, {
 })
 
 onUnmounted(() => {
+  imageRequestSeed += 1
+  listLoadingRequestSeed = ++listRequestSeed
   revokeCurrentImgLink()
   stopLoadingProgress()
   closeProgressDialog()
@@ -802,7 +854,7 @@ onUnmounted(() => {
         </IconBtn>
         <!-- 批量操作按钮 -->
         <span v-if="selected.length > 0">
-          <IconBtn @click.stop="batchScrape">
+          <IconBtn @click.stop="showBatchScrape">
             <VIcon color="primary" icon="mdi-auto-fix" />
           </IconBtn>
           <IconBtn @click.stop="showBatchTransfer">
@@ -892,7 +944,7 @@ onUnmounted(() => {
                         <IconBtn @click.stop="recognize(item.path)">
                           <VIcon icon="mdi-text-recognition" />
                         </IconBtn>
-                        <IconBtn @click.stop="scrape(item)">
+                        <IconBtn @click.stop="showScrape(item)">
                           <VIcon icon="mdi-auto-fix" />
                         </IconBtn>
                         <IconBtn @click.stop="showRenmae(item)">

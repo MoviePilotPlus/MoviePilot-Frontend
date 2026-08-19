@@ -1,66 +1,64 @@
 <script setup lang="ts">
-import { openSharedDialog } from '@/composables/useSharedDialog'
 import { useGlobalOfflineStatus } from '@/composables/useOfflineStatus'
+import { useToast } from 'vue-toastification'
 
-const OfflineStatusDialog = defineAsyncComponent(() => import('@/components/dialog/OfflineStatusDialog.vue'))
+const { t } = useI18n()
+const toast = useToast()
+const { connectionStatus, connectionReason } = useGlobalOfflineStatus()
+const shownConnectionPromptKeys = new Set<string>()
 
-interface Props {
-  type?: 'offline' | 'online'
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  type: 'offline',
+const isChecking = computed(() => connectionStatus.value === 'checking')
+const statusTitle = computed(() => (isChecking.value ? t('app.connectionChecking') : t('app.serviceUnavailable')))
+const statusMessage = computed(() => {
+  if (connectionReason.value === 'browser-offline') return t('app.browserOfflineMessage')
+  if (connectionReason.value === 'timeout') return t('app.serviceTimeoutMessage')
+  if (isChecking.value) return t('app.connectionCheckingMessage')
+  return t('app.serviceUnavailableMessage')
 })
 
-const { canPerformNetworkAction } = useGlobalOfflineStatus()
-let offlineDialogController: ReturnType<typeof openSharedDialog> | null = null
+/** 拼接离线状态提示文案，供 Toast 或 Agent 助手气泡展示。 */
+function buildConnectionPromptMessage() {
+  return `${statusTitle.value}：${statusMessage.value}`
+}
 
-/** 打开离线状态共享弹窗。 */
-function showOfflineDialog() {
-  if (offlineDialogController) {
-    offlineDialogController.updateProps({ type: props.type })
+/** 根据当前连接状态选择 Toast 级别，Agent 助手可用时会由全局 Toast 路由接管。 */
+function showConnectionPrompt() {
+  const message = buildConnectionPromptMessage()
+  const options = {
+    timeout: isChecking.value ? 5000 : 7000,
+  }
+
+  if (isChecking.value) {
+    toast.warning(message, options)
     return
   }
 
-  offlineDialogController = openSharedDialog(
-    OfflineStatusDialog,
-    {
-      type: props.type,
-    },
-    {},
-    { closeOn: false },
-  )
+  toast.error(message, options)
 }
 
-/** 关闭离线状态共享弹窗。 */
-function closeOfflineDialog() {
-  offlineDialogController?.close()
-  offlineDialogController = null
+/** 在同一轮连接异常内按状态去重提示，并在恢复在线后允许下一轮提示重新出现。 */
+function handleConnectionStatusChange() {
+  if (connectionStatus.value === 'online') {
+    shownConnectionPromptKeys.clear()
+    return
+  }
+
+  const promptKey =
+    connectionStatus.value === 'checking'
+      ? connectionStatus.value
+      : `${connectionStatus.value}:${connectionReason.value || 'unknown'}`
+
+  if (shownConnectionPromptKeys.has(promptKey)) return
+
+  shownConnectionPromptKeys.add(promptKey)
+  showConnectionPrompt()
 }
 
-watch(
-  () => canPerformNetworkAction.value,
-  canPerform => {
-    if (canPerform) {
-      closeOfflineDialog()
-      return
-    }
-
-    showOfflineDialog()
-  },
-  { immediate: true },
-)
-
-watch(
-  () => props.type,
-  () => {
-    offlineDialogController?.updateProps({ type: props.type })
-  },
-)
-
-onUnmounted(() => {
-  closeOfflineDialog()
+watch([connectionStatus, connectionReason], handleConnectionStatusChange, {
+  flush: 'post',
 })
 </script>
 
-<template></template>
+<template>
+  <span class="d-none" aria-hidden="true" />
+</template>

@@ -1,21 +1,27 @@
 <script lang="ts" setup>
 import type { AxiosRequestConfig, AxiosInstance } from 'axios'
-import type { EndPoints, FileItem } from '@/api/types'
+import type { ApiResponse, EndPoints, FileItem } from '@/api/types'
 import { useDisplay } from 'vuetify'
-import { useI18n } from 'vue-i18n'
 import { openSharedDialog } from '@/composables/useSharedDialog'
 
 const FileNewFolderDialog = defineAsyncComponent(() => import('../dialog/FileNewFolderDialog.vue'))
 
-// 国际化
-const { t } = useI18n()
-
 // 显示器宽度
 const display = useDisplay()
 
+/** 工具栏存储选择项，由文件浏览器从存储配置映射得到。 */
+interface StorageOption {
+  // 存储类型对应的展示图标
+  icon: string
+  // 存储显示名称
+  title: string
+  // 存储类型标识
+  value: string
+}
+
 // 输入参数
 const inProps = defineProps({
-  storages: Array as PropType<any[]>,
+  storages: Array as PropType<StorageOption[]>,
   item: {
     type: Object as PropType<FileItem>,
     required: true,
@@ -25,8 +31,9 @@ const inProps = defineProps({
     required: true,
   },
   endpoints: Object as PropType<EndPoints>,
+  // Axios 实例是可调用函数，运行时 prop 类型需与其实际形态一致。
   axios: {
-    type: Object as PropType<AxiosInstance>,
+    type: Function as PropType<AxiosInstance>,
     required: true,
   },
   sort: {
@@ -75,7 +82,7 @@ const storageObject = computed(() => {
 
 // 切换存储
 function changeStorage(code: string) {
-  if (inProps.item.storage!== code) {
+  if (inProps.item.storage !== code) {
     emit('storagechanged', code)
   }
 }
@@ -95,24 +102,29 @@ function goUp() {
 // 创建目录
 async function mkdir() {
   emit('loading', true)
-  const url = inProps.endpoints?.mkdir.url.replace(/{name}/g, newFolderName.value)
+  try {
+    const url = inProps.endpoints?.mkdir.url.replace(/{name}/g, newFolderName.value)
 
-  const config: AxiosRequestConfig<FileItem> = {
-    url,
-    method: inProps.endpoints?.mkdir.method || 'post',
-    data: inProps.item,
+    const config: AxiosRequestConfig<FileItem> = {
+      url,
+      method: inProps.endpoints?.mkdir.method || 'post',
+      data: inProps.item,
+    }
+
+    const result = await inProps.axios.request<unknown, ApiResponse<unknown>>(config)
+    if (!result?.success) {
+      return
+    }
+
+    newFolderDialogController?.close()
+    newFolderDialogController = null
+    newFolderName.value = ''
+    emit('foldercreated')
+  } catch (error) {
+    console.error('创建目录失败:', error)
+  } finally {
+    emit('loading', false)
   }
-
-  // 调API
-  await inProps.axios.request(config)
-
-  newFolderDialogController?.close()
-  newFolderDialogController = null
-  newFolderName.value = ''
-  emit('loading', false)
-
-  // 通知重新加载
-  emit('foldercreated')
 }
 
 function openNewFolderDialog() {
@@ -147,7 +159,7 @@ defineExpose({
 </script>
 
 <template>
-  <VToolbar flat dense class="rounded-t-lg border-b overflow-hidden">
+  <VToolbar flat dense class="file-browser-toolbar rounded-t-lg border-b overflow-hidden" data-glass-optical-surface>
     <VToolbarItems class="overflow-hidden">
       <VMenu v-if="storages?.length || 0 > 1" offset-y>
         <template #activator="{ props }">

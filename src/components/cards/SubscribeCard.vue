@@ -79,8 +79,11 @@ const downloadedEpisode = computed(() => {
   return Math.min(Math.max(total - (props.media?.lack_episode || 0), 0), total)
 })
 
-// 是否为洗版订阅（影响进度条与 tooltip 的展示分支）
-const isBestVersion = computed(() => isEnabledFlag(props.media?.best_version) && isTvSubscribe(props.media))
+// 是否开启洗版，供电影和电视剧共用洗版标识与配色。
+const hasBestVersion = computed(() => isEnabledFlag(props.media?.best_version))
+
+// 是否为电视剧洗版订阅，仅影响分集进度条与 tooltip 的展示分支。
+const isBestVersion = computed(() => hasBestVersion.value && isTvSubscribe(props.media))
 
 const rightBottomStateDisplay = computed(() => {
   if (subscribeState.value === 'S') {
@@ -92,9 +95,23 @@ const rightBottomStateDisplay = computed(() => {
   return null
 })
 
+// 移动端紧凑卡片的状态展示，颜色统一映射到 Vuetify 全局主题 token。
+const compactStateDisplay = computed(() => {
+  if (subscribeState.value === 'S') {
+    return { color: 'secondary', icon: 'mdi-pause-circle-outline', label: t('subscribe.cardStatePaused') }
+  }
+  if (subscribeState.value === 'P') {
+    return { color: 'info', icon: 'mdi-timer-sand', label: t('subscribe.cardStatePending') }
+  }
+  if (hasBestVersion.value) {
+    return { color: 'success', icon: 'mdi-shimmer', label: t('subscribe.subscribing') }
+  }
+  return { color: 'primary', icon: 'mdi-rss', label: t('subscribe.subscribing') }
+})
+
 // 洗版徽标：共用 mdi-shimmer 图标，分集 / 全集 由 full 标记区分背景
 const bestVersionBadge = computed(() => {
-  if (!isEnabledFlag(props.media?.best_version)) return null
+  if (!hasBestVersion.value) return null
   return {
     icon: 'mdi-shimmer',
     full: isEnabledFlag(props.media?.best_version_full),
@@ -162,6 +179,7 @@ async function removeSubscribe() {
       emit('remove')
     }
   } catch (e) {
+    $toast.error(t('subscribe.requestFailed'))
     console.log(e)
   }
 }
@@ -173,7 +191,9 @@ async function searchSubscribe() {
 
     // 提示
     if (result.success) $toast.success(`${props.media?.name} 提交搜索请求成功！`)
+    else $toast.error(t('subscribe.requestFailed'))
   } catch (e) {
+    $toast.error(t('subscribe.requestFailed'))
     console.log(e)
   }
 }
@@ -200,6 +220,7 @@ async function toggleSubscribeStatus(state: 'R' | 'S') {
       $toast.error(t('subscribe.toggleFailed', { action, message: result.message }))
     }
   } catch (e) {
+    $toast.error(t('subscribe.requestFailed'))
     console.log(e)
   }
 }
@@ -222,6 +243,7 @@ async function resetSubscribe() {
       emit('save')
     } else $toast.error(t('subscribe.resetFailed', { name: props.media?.name, message: result.message }))
   } catch (e) {
+    $toast.error(t('subscribe.requestFailed'))
     console.log(e)
   }
 }
@@ -248,9 +270,14 @@ async function editSubscribeDialog() {
 
 // 获得mediaid
 function getMediaId() {
+  if (props.media?.media_source && props.media?.media_id) {
+    const prefix = props.media.media_source === 'themoviedb' ? 'tmdb' : props.media.media_source
+    return `${prefix}:${props.media.media_id}`
+  }
   if (props.media?.tmdbid) return `tmdb:${props.media?.tmdbid}`
   else if (props.media?.doubanid) return `douban:${props.media?.doubanid}`
   else if (props.media?.bangumiid) return `bangumi:${props.media?.bangumiid}`
+  else if (props.media?.anilistid) return `anilist:${props.media?.anilistid}`
   else return props.media?.mediaid
 }
 
@@ -419,156 +446,260 @@ function handleCardClick() {
               :class="{
                 'subscribe-card-paused': subscribeState === 'S',
                 'subscribe-card-pending-tint': subscribeState === 'P',
+                'subscribe-card-best-version-tint': display.xs.value && hasBestVersion && subscribeState === 'R',
                 'cursor-move': props.sortable,
               }"
               min-height="150"
               @click="handleCardClick"
-              :ripple="!props.batchMode && !props.sortable"
+              :ripple="display.smAndUp.value && !props.batchMode && !props.sortable"
             >
-            <div
-              v-if="bestVersionBadge && imageLoaded"
-              class="best-version-badge"
-              :class="{ 'best-version-badge-full': bestVersionBadge.full }"
-            >
-              <VIcon :icon="bestVersionBadge.icon" color="white" size="16" />
-            </div>
-            <div v-if="!props.sortable" class="me-n3 absolute top-1 right-4">
-              <IconBtn @click.stop>
-                <VIcon icon="mdi-dots-vertical" color="white" />
-                <VMenu activator="parent" close-on-content-click>
-                  <VList>
-                    <template v-for="(item, i) in dropdownItems" :key="i">
-                      <VListItem v-if="item.show !== false" :base-color="item.props.color" @click="item.props.click">
-                        <template #prepend>
-                          <VIcon :icon="item.props.prependIcon" />
-                        </template>
-                        <VListItemTitle v-text="item.title" />
-                      </VListItem>
-                    </template>
-                  </VList>
-                </VMenu>
-              </IconBtn>
-            </div>
-            <template #image>
-              <VImg :src="backdropUrl || posterUrl" aspect-ratio="3/2" cover @load="imageLoadHandler" position="top">
-                <template #placeholder>
-                  <div class="w-full h-full">
-                    <VSkeletonLoader class="object-cover aspect-w-3 aspect-h-2" />
-                  </div>
-                </template>
-                <template #default>
-                  <div class="absolute inset-0 outline-none subscribe-card-background"></div>
-                </template>
-              </VImg>
-            </template>
-            <div>
-              <VCardText class="flex items-center pt-3 pb-2">
-                <div
-                  class="h-auto w-12 flex-shrink-0 overflow-hidden rounded-md relative"
-                  v-if="imageLoaded"
-                  :class="{ 'cursor-move': props.sortable && display.mdAndUp.value }"
-                >
-                  <VImg :src="posterUrl" aspect-ratio="2/3" cover>
+              <div
+                v-if="bestVersionBadge && imageLoaded && display.smAndUp.value"
+                class="best-version-badge"
+                :class="{ 'best-version-badge-full': bestVersionBadge.full }"
+              >
+                <VIcon :icon="bestVersionBadge.icon" color="white" size="16" />
+              </div>
+              <div v-if="!props.sortable && display.smAndUp.value" class="me-n3 absolute top-1 right-4">
+                <IconBtn @click.stop>
+                  <VIcon icon="mdi-dots-vertical" color="white" />
+                  <VMenu activator="parent" close-on-content-click>
+                    <VList>
+                      <template v-for="(item, i) in dropdownItems" :key="i">
+                        <VListItem v-if="item.show !== false" :base-color="item.props.color" @click="item.props.click">
+                          <template #prepend>
+                            <VIcon :icon="item.props.prependIcon" />
+                          </template>
+                          <VListItemTitle v-text="item.title" />
+                        </VListItem>
+                      </template>
+                    </VList>
+                  </VMenu>
+                </IconBtn>
+              </div>
+              <template #image v-if="display.smAndUp.value">
+                <VImg :src="backdropUrl || posterUrl" aspect-ratio="3/2" cover @load="imageLoadHandler" position="top">
+                  <template #placeholder>
+                    <div class="w-full h-full">
+                      <VSkeletonLoader class="object-cover aspect-w-3 aspect-h-2" />
+                    </div>
+                  </template>
+                  <template #default>
+                    <div class="absolute inset-0 outline-none subscribe-card-background"></div>
+                  </template>
+                </VImg>
+              </template>
+
+              <template v-if="display.xs.value">
+                <div class="subscribe-card-mobile-media">
+                  <VImg
+                    :src="backdropUrl || posterUrl"
+                    :aspect-ratio="16 / 9"
+                    cover
+                    position="top"
+                    @load="imageLoadHandler"
+                  >
                     <template #placeholder>
-                      <div class="w-full h-full">
-                        <VSkeletonLoader class="object-cover aspect-w-2 aspect-h-3" />
-                      </div>
+                      <VSkeletonLoader class="h-full w-full" />
                     </template>
                   </VImg>
-                </div>
-                <div class="flex flex-col justify-center overflow-hidden pl-2 xl:pl-4">
-                  <div class="text-sm font-medium text-white sm:pt-1">{{ props.media?.year }}</div>
-                  <div class="mr-2 min-w-0 text-lg font-bold text-white text-ellipsis overflow-hidden line-clamp-2 ...">
-                    {{ props.media?.name }}
-                    {{ formatSeasonLabel(props.media?.season, t('media.specials')) }}
+                  <div class="subscribe-card-mobile-image-scrim subscribe-card-background"></div>
+
+                  <div v-if="props.media?.username || lastUpdateText" class="subscribe-card-mobile-image-meta">
+                    <div
+                      v-if="props.media?.username"
+                      class="subscribe-card-mobile-image-meta__item subscribe-card-mobile-image-meta__user"
+                      :title="props.media?.username"
+                    >
+                      <VIcon icon="mdi-account" size="14" />
+                      <span>{{ props.media?.username }}</span>
+                    </div>
+                    <div
+                      v-if="lastUpdateText"
+                      class="subscribe-card-mobile-image-meta__item subscribe-card-mobile-image-meta__updated"
+                    >
+                      <VIcon icon="mdi-download" size="14" />
+                      <span>{{ lastUpdateText }}</span>
+                    </div>
+                  </div>
+
+                  <div class="subscribe-card-mobile-title">
+                    <div class="subscribe-card-mobile-title-text">
+                      <span>{{ props.media?.name }}</span>
+                      <span
+                        v-if="formatSeasonLabel(props.media?.season, t('media.specials'))"
+                        class="subscribe-card-mobile-season"
+                      >
+                        {{ formatSeasonLabel(props.media?.season, t('media.specials')) }}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </VCardText>
-              <VCardText class="flex min-w-0 justify-space-between align-center flex-wrap px-3">
-                <div class="flex min-w-0 max-w-full align-center">
-                  <VIcon
-                    v-if="props.media?.total_episode && props.sortable"
-                    icon="mdi-progress-download"
-                    size="small"
-                    color="white"
-                    class="me-1"
-                  />
-                  <IconBtn
-                    v-else-if="props.media?.total_episode"
-                    size="small"
-                    v-bind="props"
-                    icon="mdi-progress-download"
-                    color="white"
-                  />
-                  <!-- 守卫改用 total_episode：电视剧订阅可能不带 season 字段（旧数据或自定义来源），仍应展示集数进度 -->
-                  <div v-if="props.media?.total_episode" class="flex-shrink-0 text-subtitle-2 me-2 text-white">
-                    {{ subscribeProgressText }}
-                    <VTooltip v-if="subscribeProgressTooltip" activator="parent" location="top">
-                      {{ subscribeProgressTooltip }}
-                    </VTooltip>
+
+                <div class="subscribe-card-mobile-body">
+                  <div class="subscribe-card-mobile-footer">
+                    <div class="subscribe-card-mobile-meta">
+                      <div
+                        class="subscribe-card-mobile-state"
+                        :style="{ color: `rgb(var(--v-theme-${compactStateDisplay.color}))` }"
+                        :title="compactStateDisplay.label"
+                        :aria-label="compactStateDisplay.label"
+                      >
+                        <VIcon
+                          :icon="compactStateDisplay.icon"
+                          :data-subscribe-state-icon="compactStateDisplay.icon"
+                          size="16"
+                        />
+                        <span v-if="subscribeProgressText" class="subscribe-card-mobile-progress-text">
+                          {{ subscribeProgressText }}
+                        </span>
+                      </div>
+
+                      <IconBtn v-if="!props.sortable" class="subscribe-card-mobile-menu" size="small" @click.stop>
+                        <VIcon icon="mdi-dots-horizontal" size="18" />
+                        <VMenu activator="parent" close-on-content-click>
+                          <VList>
+                            <template v-for="(item, i) in dropdownItems" :key="i">
+                              <VListItem
+                                v-if="item.show !== false"
+                                :base-color="item.props.color"
+                                @click="item.props.click"
+                              >
+                                <template #prepend>
+                                  <VIcon :icon="item.props.prependIcon" />
+                                </template>
+                                <VListItemTitle v-text="item.title" />
+                              </VListItem>
+                            </template>
+                          </VList>
+                        </VMenu>
+                      </IconBtn>
+                    </div>
+
+                    <div v-if="props.media?.total_episode" class="subscribe-card-mobile-progress">
+                      <VProgressLinear
+                        :model-value="getPercentage()"
+                        :bg-color="compactStateDisplay.color"
+                        :color="compactStateDisplay.color"
+                        bg-opacity="0.18"
+                        height="3"
+                        rounded
+                      />
+                    </div>
                   </div>
-                  <VIcon
-                    v-if="props.media?.username && props.sortable"
-                    icon="mdi-account"
-                    size="small"
-                    color="white"
-                    class="flex-shrink-0 me-1"
-                  />
-                  <IconBtn
-                    v-else-if="props.media?.username"
-                    icon="mdi-account"
-                    size="small"
-                    color="white"
-                    class="flex-shrink-0"
-                  />
-                  <!-- 用户名过长时限制在卡片宽度内，并用省略号展示剩余内容 -->
-                  <span
-                    v-if="props.media?.username"
-                    class="min-w-0 truncate text-subtitle-2 text-white"
-                    :title="props.media?.username"
+                </div>
+              </template>
+
+              <div v-else>
+                <VCardText class="flex items-center pt-3 pb-2">
+                  <div
+                    class="h-auto w-12 flex-shrink-0 overflow-hidden rounded-md relative"
+                    v-if="imageLoaded"
+                    :class="{ 'cursor-move': props.sortable && display.mdAndUp.value }"
                   >
-                    {{ props.media?.username }}
-                  </span>
-                </div>
-              </VCardText>
-              <!-- 右下角元数据：暂停 / 待定时替换"x 天前"为状态文案 -->
-              <VCardText
-                v-if="rightBottomStateDisplay"
-                class="absolute right-0 bottom-0 d-flex align-center p-2 text-gray-300 text-xs"
-              >
-                <VIcon :icon="rightBottomStateDisplay.icon" class="me-1" />
-                {{ rightBottomStateDisplay.label }}
-              </VCardText>
-              <VCardText
-                v-else-if="lastUpdateText"
-                class="absolute right-0 bottom-0 d-flex align-center p-2 text-gray-300 text-xs"
-              >
-                <VIcon icon="mdi-download" class="me-1" />
-                {{ lastUpdateText }}
-              </VCardText>
-              <div class="w-full absolute bottom-0">
-                <!--
+                    <VImg :src="posterUrl" aspect-ratio="2/3" cover>
+                      <template #placeholder>
+                        <div class="w-full h-full">
+                          <VSkeletonLoader class="object-cover aspect-w-2 aspect-h-3" />
+                        </div>
+                      </template>
+                    </VImg>
+                  </div>
+                  <div class="flex flex-col justify-center overflow-hidden pl-2 xl:pl-4">
+                    <div class="text-sm font-medium text-white sm:pt-1">{{ props.media?.year }}</div>
+                    <div
+                      class="mr-2 min-w-0 text-lg font-bold text-white text-ellipsis overflow-hidden line-clamp-2 ..."
+                    >
+                      {{ props.media?.name }}
+                      {{ formatSeasonLabel(props.media?.season, t('media.specials')) }}
+                    </div>
+                  </div>
+                </VCardText>
+                <VCardText class="flex min-w-0 justify-space-between align-center flex-wrap px-3">
+                  <div class="flex min-w-0 max-w-full align-center">
+                    <VIcon
+                      v-if="props.media?.total_episode && props.sortable"
+                      icon="mdi-progress-download"
+                      size="small"
+                      color="white"
+                      class="me-1"
+                    />
+                    <IconBtn
+                      v-else-if="props.media?.total_episode"
+                      size="small"
+                      v-bind="props"
+                      icon="mdi-progress-download"
+                      color="white"
+                    />
+                    <!-- 守卫改用 total_episode：电视剧订阅可能不带 season 字段（旧数据或自定义来源），仍应展示集数进度 -->
+                    <div v-if="props.media?.total_episode" class="flex-shrink-0 text-subtitle-2 me-2 text-white">
+                      {{ subscribeProgressText }}
+                      <VTooltip v-if="subscribeProgressTooltip" activator="parent" location="top">
+                        {{ subscribeProgressTooltip }}
+                      </VTooltip>
+                    </div>
+                    <VIcon
+                      v-if="props.media?.username && props.sortable"
+                      icon="mdi-account"
+                      size="small"
+                      color="white"
+                      class="flex-shrink-0 me-1"
+                    />
+                    <IconBtn
+                      v-else-if="props.media?.username"
+                      icon="mdi-account"
+                      size="small"
+                      color="white"
+                      class="flex-shrink-0"
+                    />
+                    <!-- 用户名过长时限制在卡片宽度内，并用省略号展示剩余内容 -->
+                    <span
+                      v-if="props.media?.username"
+                      class="min-w-0 truncate text-subtitle-2 text-white"
+                      :title="props.media?.username"
+                    >
+                      {{ props.media?.username }}
+                    </span>
+                  </div>
+                </VCardText>
+                <!-- 右下角元数据：暂停 / 待定时替换"x 天前"为状态文案 -->
+                <VCardText
+                  v-if="rightBottomStateDisplay"
+                  class="absolute right-0 bottom-0 d-flex align-center p-2 text-gray-300 text-xs"
+                >
+                  <VIcon :icon="rightBottomStateDisplay.icon" class="me-1" />
+                  {{ rightBottomStateDisplay.label }}
+                </VCardText>
+                <VCardText
+                  v-else-if="lastUpdateText"
+                  class="absolute right-0 bottom-0 d-flex align-center p-2 text-gray-300 text-xs"
+                >
+                  <VIcon icon="mdi-download" class="me-1" />
+                  {{ lastUpdateText }}
+                </VCardText>
+                <div class="w-full absolute bottom-0">
+                  <!--
                   分集洗版模式：底色保持深绿、buffer 段显示"已下载未洗版"为浅绿、model 段显示"已洗版完成"为亮绿，
                   形成两段语义；其余订阅维持原有单段进度条
                 -->
-                <VProgressLinear
-                  v-if="isBestVersion && getBufferPercentage() > 0"
-                  :model-value="getPercentage()"
-                  :buffer-value="getBufferPercentage()"
-                  bg-color="success"
-                  bg-opacity="0.25"
-                  color="success"
-                  buffer-color="success"
-                  buffer-opacity="0.55"
-                />
-                <VProgressLinear
-                  v-else-if="getPercentage() > 0"
-                  :model-value="getPercentage()"
-                  bg-color="success"
-                  color="success"
-                />
+                  <VProgressLinear
+                    v-if="isBestVersion && getBufferPercentage() > 0"
+                    :model-value="getPercentage()"
+                    :buffer-value="getBufferPercentage()"
+                    bg-color="success"
+                    bg-opacity="0.25"
+                    color="success"
+                    buffer-color="success"
+                    buffer-opacity="0.55"
+                  />
+                  <VProgressLinear
+                    v-else-if="getPercentage() > 0"
+                    :model-value="getPercentage()"
+                    bg-color="success"
+                    color="success"
+                  />
+                </div>
               </div>
-            </div>
             </VCard>
           </div>
         </div>
@@ -590,6 +721,159 @@ function handleCardClick() {
 
 .subscribe-card {
   border: var(--app-card-light-border);
+}
+
+.subscribe-card-mobile-media {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  flex-shrink: 0;
+  inline-size: 100%;
+}
+
+.subscribe-card-mobile-media .v-img {
+  block-size: 100%;
+}
+
+.subscribe-card-mobile-image-scrim {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+}
+
+.subscribe-card-mobile-image-meta {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  min-inline-size: 0;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  inset-block-start: 0.5rem;
+  inset-inline: 0.5rem;
+  pointer-events: none;
+}
+
+.subscribe-card-mobile-image-meta__item {
+  display: flex;
+  min-inline-size: 0;
+  align-items: center;
+  gap: 0.25rem;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.2;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+
+.subscribe-card-mobile-image-meta__user {
+  flex: 1 1 auto;
+}
+
+.subscribe-card-mobile-image-meta__user span {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subscribe-card-mobile-image-meta__updated {
+  flex-shrink: 0;
+  margin-inline-start: auto;
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.subscribe-card-mobile-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 0.25rem 0.625rem 0.375rem;
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
+}
+
+.subscribe-card-mobile-title {
+  position: absolute;
+  z-index: 2;
+  color: white;
+  font-size: 1rem;
+  font-weight: 650;
+  inset-block-end: 0;
+  inset-inline: 0;
+  line-height: 1.3;
+  padding: 1rem 0.75rem 0.625rem;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+
+.subscribe-card-mobile-title-text {
+  display: -webkit-box;
+  max-block-size: 3.9em;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.subscribe-card-mobile-season {
+  margin-inline-start: 0.25rem;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.subscribe-card-mobile-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+  margin-block-start: auto;
+}
+
+.subscribe-card-mobile-meta {
+  display: flex;
+  min-inline-size: 0;
+  min-block-size: 1.75rem;
+  align-items: center;
+  gap: 0.25rem;
+  justify-content: space-between;
+}
+
+.subscribe-card-mobile-state {
+  display: flex;
+  min-inline-size: 0;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.subscribe-card-mobile-state span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.subscribe-card-mobile-progress-text {
+  flex-shrink: 0;
+}
+
+.subscribe-card-mobile-menu {
+  block-size: 1.75rem;
+  min-block-size: 1.75rem;
+  inline-size: 1.75rem;
+  min-inline-size: 1.75rem;
+  flex: 0 0 1.75rem;
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
+}
+
+.subscribe-card-mobile-progress {
+  display: flex;
+  block-size: 3px;
+  inline-size: 100%;
+}
+
+.subscribe-card-mobile-progress .v-progress-linear {
+  flex: 1 1 auto;
 }
 
 .subscribe-card-shell--selected::after {
@@ -625,14 +909,14 @@ function handleCardClick() {
   position: absolute;
   z-index: 3;
   border-radius: inherit;
-  box-shadow: inset 0 0 48px rgba(56, 189, 248, 40%); // sky-400
+  box-shadow: inset 0 0 48px rgba(var(--v-theme-info), 0.28);
   content: '';
   inset: 0;
   pointer-events: none;
 }
 
 /**
- * 洗版标识：卡片左上角 24x24 圆形徽标
+ * 洗版标识：桌面端左上角使用 24x24 圆形徽标。
  * 分集：深色半透底 + 模糊
  * 全集：磨砂玻璃半透白底 + 大模糊
  */
@@ -656,5 +940,48 @@ function handleCardClick() {
   backdrop-filter: blur(10px);
   background: rgba(255, 255, 255, 22%);
   box-shadow: 0 2px 8px rgba(255, 255, 255, 15%);
+}
+
+@media (width <= 599px) {
+  .subscribe-card {
+    min-block-size: 0 !important;
+  }
+
+  .subscribe-card-background.subscribe-card-mobile-image-scrim {
+    background-image:
+      linear-gradient(180deg, rgba(8, 12, 18, 0.28) 0%, rgba(8, 12, 18, 0) 44%),
+      linear-gradient(0deg, rgba(8, 12, 18, 0.7) 0%, rgba(8, 12, 18, 0) 72%);
+  }
+
+  .subscribe-card-paused {
+    opacity: 1;
+  }
+
+  .subscribe-card-paused .subscribe-card-mobile-media .v-img {
+    filter: saturate(0.65);
+    opacity: 0.58;
+  }
+
+  .subscribe-card-pending-tint::after {
+    box-shadow:
+      inset 0 0 0 1px rgba(var(--v-theme-info), 0.28),
+      inset 0 -4rem 5rem rgba(var(--v-theme-info), 0.08);
+  }
+
+  .subscribe-card-best-version-tint {
+    position: relative;
+  }
+
+  .subscribe-card-best-version-tint::after {
+    position: absolute;
+    z-index: 3;
+    border-radius: inherit;
+    box-shadow:
+      inset 0 0 0 1px rgba(var(--v-theme-success), 0.34),
+      inset 0 -4rem 5rem rgba(var(--v-theme-success), 0.12);
+    content: '';
+    inset: 0;
+    pointer-events: none;
+  }
 }
 </style>

@@ -24,6 +24,7 @@ import {
   filterMenusByPermission,
   hasItemPermission,
   hasPermission,
+  type UserPermissionFeatureKey,
   type UserPermissionKey,
 } from '@/utils/permission'
 import { usePullDownGesture } from '@/composables/usePullDownGesture'
@@ -36,7 +37,7 @@ import {
   THEME_CUSTOMIZER_OPEN_EVENT,
   type ThemeCustomizerSettings,
 } from '@/composables/useThemeCustomizer'
-import logo from '@images/logo.svg?raw'
+import ThemeLogoMark from '@/components/misc/ThemeLogoMark.vue'
 
 const display = useDisplay()
 // PWA模式检测
@@ -107,7 +108,7 @@ const mainContentPaddingTop = computed(() => {
 const showPluginQuickAccess = ref(false)
 
 // 离线状态管理
-const { setAppOffline, isOffline } = useGlobalOfflineStatus()
+const { isOffline } = useGlobalOfflineStatus()
 
 // 动态标签页相关
 // 定义动态标签页类型
@@ -119,6 +120,7 @@ interface DynamicHeaderTabButton {
   class?: string
   action?: () => void
   permission?: UserPermissionKey
+  feature?: UserPermissionFeatureKey
   show?: boolean | ComputedRef<boolean>
   loading?: boolean | ComputedRef<boolean>
   dataAttr?: string
@@ -128,6 +130,8 @@ interface DynamicHeaderTabItem {
   title: string
   icon?: string
   tab: string
+  permission?: UserPermissionKey
+  feature?: UserPermissionFeatureKey
 }
 
 interface DynamicHeaderTab {
@@ -136,6 +140,10 @@ interface DynamicHeaderTab {
   appendButtons?: DynamicHeaderTabButton[]
   routePath?: string // 用于标识哪个路由注册的
   onUpdateModelValue?: (value: string) => void // 用于通知值更新
+}
+
+type DynamicHeaderTabWindow = Window & {
+  __VUE_INJECT_DYNAMIC_HEADER_TAB__?: (tab: DynamicHeaderTab) => void
 }
 
 // 提供动态标签页注册和获取的方法
@@ -152,14 +160,18 @@ const registerDynamicHeaderTab = (tab: DynamicHeaderTab) => {
   applyPendingHorizontalTab()
 }
 
-/** 取消当前页面注册的动态标签页。 */
-const unregisterDynamicHeaderTab = () => {
+/** 仅注销仍由指定路由持有的动态标签，避免相邻页面生命周期互相覆盖。 */
+const unregisterDynamicHeaderTab = (routePath?: string) => {
+  if (routePath && dynamicHeaderTab.value?.routePath !== routePath) return
+
   dynamicHeaderTab.value = null
 }
 
 /** 更新当前动态标签页选中值，并通知注册页面同步状态。 */
 const handleTabChange = (newValue: string) => {
   if (dynamicHeaderTab.value) {
+    if (!visibleDynamicHeaderTabItems.value.some(item => item.tab === newValue)) return
+
     dynamicHeaderTab.value.modelValue = newValue
     // 通知注册的页面更新值
     if (dynamicHeaderTab.value.onUpdateModelValue) {
@@ -171,7 +183,7 @@ const handleTabChange = (newValue: string) => {
 // 添加全局注册方法，解决注入不可用的问题
 if (typeof window !== 'undefined') {
   // 确保在浏览器环境中
-  ;(window as any).__VUE_INJECT_DYNAMIC_HEADER_TAB__ = registerDynamicHeaderTab
+  ;(window as DynamicHeaderTabWindow).__VUE_INJECT_DYNAMIC_HEADER_TAB__ = registerDynamicHeaderTab
 }
 
 // 提供给其他组件使用
@@ -193,12 +205,14 @@ watch(
   { immediate: false },
 )
 
-// 当前路由是否注册了动态标签页。
-const hasDynamicHeaderTab = computed(() => {
-  return (
-    dynamicHeaderTab.value && dynamicHeaderTab.value.items.length > 0 && dynamicHeaderTab.value.routePath === route.path
-  )
+const visibleDynamicHeaderTabItems = computed(() => {
+  if (!dynamicHeaderTab.value || dynamicHeaderTab.value.routePath !== route.path) return []
+
+  return filterItemsByPermission(dynamicHeaderTab.value.items, userPermissions.value)
 })
+
+// 当前路由是否注册了动态标签页。
+const hasDynamicHeaderTab = computed(() => visibleDynamicHeaderTabItems.value.length > 0)
 
 // 水平布局下动态标签页会并入顶部导航三级菜单，不再额外显示标签页栏。
 const showDynamicHeaderTab = computed(() => hasDynamicHeaderTab.value && !showHorizontalThemeNav.value)
@@ -223,20 +237,9 @@ onUnmounted(() => {
   dynamicHeaderTab.value = null
   // 清理全局方法
   if (typeof window !== 'undefined') {
-    delete (window as any).__VUE_INJECT_DYNAMIC_HEADER_TAB__
+    delete (window as DynamicHeaderTabWindow).__VUE_INJECT_DYNAMIC_HEADER_TAB__
   }
 })
-
-/** 处理 Service Worker 推送的离线状态消息。 */
-const handleServiceWorkerMessage = (event: MessageEvent) => {
-  if (event.data && event.data.type === 'OFFLINE_STATUS') {
-    if (event.data.offline) {
-      setAppOffline(true, t('common.serverConnectionFailed'))
-    } else {
-      setAppOffline(false)
-    }
-  }
-}
 
 /** 判断当前页面状态是否允许使用主界面下拉快捷入口手势。 */
 const canUsePullGesture = () => {
@@ -286,6 +289,8 @@ const getMenuList = (header: string) => {
   const filteredMenus = filterMenusByPermission(menus, userPermissions.value)
   return filteredMenus.filter((item: NavMenu) => item.header === header)
 }
+
+const getMenuIdentity = (item: NavMenu) => `${item.title}-${JSON.stringify(item.to ?? null)}`
 
 /** 返回浏览历史中的上一页。 */
 function goBack() {
@@ -395,10 +400,10 @@ function getHorizontalNavTabs(item: NavMenu): DynamicHeaderTabItem[] {
   const targetPath = normalizeMenuPath(item.to)
 
   if (targetPath && isHorizontalNavActive(item) && hasDynamicHeaderTab.value) {
-    return dynamicHeaderTab.value?.items ?? []
+    return visibleDynamicHeaderTabItems.value
   }
 
-  return item.tabs ?? []
+  return filterItemsByPermission(item.tabs ?? [], userPermissions.value)
 }
 
 /** 在目标页面注册动态标签后应用此前暂存的标签切换。 */
@@ -408,7 +413,7 @@ function applyPendingHorizontalTab() {
   const pending = pendingHorizontalTab.value
   if (normalizeMenuPath(route.path) !== pending.path) return
 
-  const tabExists = dynamicHeaderTab.value?.items.some(item => item.tab === pending.tab)
+  const tabExists = visibleDynamicHeaderTabItems.value.some(item => item.tab === pending.tab)
   if (!tabExists) return
 
   handleTabChange(pending.tab)
@@ -424,6 +429,12 @@ function handleClosePluginQuickAccess() {
 function handlePluginClick() {
   showPluginQuickAccess.value = false
 }
+
+// 组件卸载时清理监听
+onBeforeUnmount(() => {
+  window.removeEventListener(THEME_CUSTOMIZER_CHANGE_EVENT, handleThemeCustomizerChange)
+  window.removeEventListener(THEME_CUSTOMIZER_OPEN_EVENT, handleThemeCustomizerOpen)
+})
 
 /** 将插件侧边栏菜单合并到对应的导航分组中。 */
 function appendPluginSidebarMenus() {
@@ -453,34 +464,29 @@ function appendPluginSidebarMenus() {
   }
 }
 
-onMounted(async () => {
-  // 主题定制器由布局统一承载，监听需要尽早注册，避免异步加载菜单期间丢失打开事件。
-  window.addEventListener(THEME_CUSTOMIZER_CHANGE_EVENT, handleThemeCustomizerChange)
-  window.addEventListener(THEME_CUSTOMIZER_OPEN_EVENT, handleThemeCustomizerOpen)
-
-  // 获取菜单列表
+/** 从当前内置菜单、权限上下文与插件快照重建所有侧栏分组。 */
+function rebuildSidebarMenus() {
   startMenus.value = getMenuList(t('menu.start'))
   discoveryMenus.value = getMenuList(t('menu.discovery'))
   subscribeMenus.value = getMenuList(t('menu.subscribe'))
   organizeMenus.value = getMenuList(t('menu.organize'))
   systemMenus.value = getMenuList(t('menu.system'))
-
-  await pluginSidebarNavStore.ensureSidebarNav()
   appendPluginSidebarMenus()
+}
 
-  // 监听Service Worker消息
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage)
-  }
+let sidebarMenusMounted = false
+watch([() => pluginSidebarNavStore.items, userPermissions], () => {
+  if (sidebarMenusMounted) rebuildSidebarMenus()
+})
 
-  // 组件卸载时清理监听
-  onBeforeUnmount(() => {
-    window.removeEventListener(THEME_CUSTOMIZER_CHANGE_EVENT, handleThemeCustomizerChange)
-    window.removeEventListener(THEME_CUSTOMIZER_OPEN_EVENT, handleThemeCustomizerOpen)
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage)
-    }
-  })
+onMounted(async () => {
+  // 主题定制器由布局统一承载，监听需要尽早注册，避免异步加载菜单期间丢失打开事件。
+  window.addEventListener(THEME_CUSTOMIZER_CHANGE_EVENT, handleThemeCustomizerChange)
+  window.addEventListener(THEME_CUSTOMIZER_OPEN_EVENT, handleThemeCustomizerOpen)
+
+  rebuildSidebarMenus()
+  sidebarMenusMounted = true
+  await pluginSidebarNavStore.ensureSidebarNav()
 })
 </script>
 
@@ -521,8 +527,8 @@ onMounted(async () => {
         :class="{ 'theme-navbar-row--horizontal': showHorizontalThemeNav }"
       >
         <RouterLink v-if="showHorizontalThemeNav" :to="canAdmin ? '/dashboard' : '/apps'" class="theme-horizontal-logo">
-          <span class="theme-horizontal-logo__mark" v-html="logo" />
-          <span class="theme-horizontal-logo__text">MOVIEPILOT</span>
+          <ThemeLogoMark class="theme-horizontal-logo__mark" />
+          <span class="theme-horizontal-logo__text moviepilot-wordmark">MOVIEPILOT</span>
         </RouterLink>
         <!-- 👉 Vertical Nav Toggle -->
         <IconBtn v-if="!appMode && display.mdAndDown.value" class="ms-n2" @click="toggleVerticalOverlayNavActive(true)">
@@ -651,7 +657,7 @@ onMounted(async () => {
     </template>
 
     <template #vertical-nav-content>
-      <VerticalNavLink v-for="item in startMenus" :item="item" />
+      <VerticalNavLink v-for="item in startMenus" :key="`start-${getMenuIdentity(item)}`" :item="item" />
       <!-- 👉 发现 -->
       <VerticalNavSectionTitle
         v-if="discoveryMenus.length > 0"
@@ -659,7 +665,7 @@ onMounted(async () => {
           heading: t('menu.discovery'),
         }"
       />
-      <VerticalNavLink v-for="item in discoveryMenus" :item="item" />
+      <VerticalNavLink v-for="item in discoveryMenus" :key="`discovery-${getMenuIdentity(item)}`" :item="item" />
       <!-- 👉 订阅 -->
       <VerticalNavSectionTitle
         v-if="subscribeMenus.length > 0"
@@ -667,7 +673,7 @@ onMounted(async () => {
           heading: t('menu.subscribe'),
         }"
       />
-      <VerticalNavLink v-for="item in subscribeMenus" :item="item" />
+      <VerticalNavLink v-for="item in subscribeMenus" :key="`subscribe-${getMenuIdentity(item)}`" :item="item" />
       <!-- 👉 整理 -->
       <VerticalNavSectionTitle
         v-if="organizeMenus.length > 0"
@@ -675,7 +681,7 @@ onMounted(async () => {
           heading: t('menu.organize'),
         }"
       />
-      <VerticalNavLink v-for="item in organizeMenus" :item="item" />
+      <VerticalNavLink v-for="item in organizeMenus" :key="`organize-${getMenuIdentity(item)}`" :item="item" />
       <!-- 👉 系统 -->
       <VerticalNavSectionTitle
         v-if="systemMenus.length > 0"
@@ -683,7 +689,7 @@ onMounted(async () => {
           heading: t('menu.system'),
         }"
       />
-      <VerticalNavLink v-for="item in systemMenus" :item="item" />
+      <VerticalNavLink v-for="item in systemMenus" :key="`system-${getMenuIdentity(item)}`" :item="item" />
     </template>
 
     <template #after-vertical-nav-items />
@@ -692,7 +698,7 @@ onMounted(async () => {
     <template #dynamic-header-tab>
       <div v-if="showDynamicHeaderTab">
         <HeaderTab
-          :items="dynamicHeaderTab!.items"
+          :items="visibleDynamicHeaderTabItems"
           :model-value="dynamicHeaderTab!.modelValue"
           @update:model-value="handleTabChange"
         >
@@ -781,14 +787,6 @@ onMounted(async () => {
 }
 
 .theme-horizontal-logo__mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  block-size: 2rem;
-  inline-size: 2rem;
-}
-
-.theme-horizontal-logo__mark :deep(svg) {
   display: block;
   block-size: 1.8rem;
   inline-size: 1.8rem;
@@ -863,5 +861,4 @@ onMounted(async () => {
   align-items: center;
   margin-inline-start: auto;
 }
-
 </style>
