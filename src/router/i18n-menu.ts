@@ -61,7 +61,6 @@ export function getNavMenus(t: Composer['t']): NavMenu[] {
       admin: false,
       footer: true,
       permission: 'discovery',
-<<<<<<< HEAD
     },
     {
       title: t('navItems.task'),
@@ -80,10 +79,8 @@ export function getNavMenus(t: Composer['t']): NavMenu[] {
       admin: false,
       footer: false,
       permission: 'discovery',
-=======
       feature: PERMISSION_FEATURE.DISCOVERY_EXPLORE,
       tabs: getDiscoverTabs(t),
->>>>>>> v2
     },
     {
       title: t('navItems.movie'),

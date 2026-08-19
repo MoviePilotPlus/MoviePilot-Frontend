@@ -85,15 +85,10 @@ const progressText = ref(t('dialog.reorganize.processing'))
 // 整理进度
 const progressValue = ref(0)
 
-<<<<<<< HEAD
-=======
 // 整理请求执行期间保持单一提交，避免同一批源文件被重复处理。
 const transferSubmitting = ref(false)
 
-// 进度SSE连接
-const progressSSE = ref<any>(null)
 
->>>>>>> v2
 // 预览加载状态
 const previewLoading = ref(false)
 
@@ -1361,16 +1356,6 @@ async function transfer(background: boolean = false) {
   progressDialog.value = true
   let allSucceeded = true
 
-<<<<<<< HEAD
-  if (!background) {
-    // 开始监听进度
-    startLoadingProgress()
-  }
-
-  // 文件整理
-  if (normalizedItems.value.length) {
-    if (shouldUseBatchFileItems(normalizedItems.value)) {
-=======
   try {
     // 文件整理
     if (normalizedItems.value.length) {
@@ -1395,7 +1380,6 @@ async function transfer(background: boolean = false) {
 
     // 日志整理
     if (props.logids?.length) {
->>>>>>> v2
       if (!background) {
         // 为日志整理任务开启进度监听
         startLoadingProgress('filetransfer')
@@ -1405,31 +1389,12 @@ async function transfer(background: boolean = false) {
       }
     }
 
-<<<<<<< HEAD
-  // 日志整理
-  if (props.logids) {
-    for (const logid of props.logids) {
-      await handleTransferLog(logid, background)
-    }
-  }
-
-  if (!background) {
-    // 停止监听进度
-    stopLoadingProgress()
-  }
-
-  // 关闭进度条
-  progressDialog.value = false
-  // 重新加载
-  emit('done')
-=======
     if (allSucceeded) emit('done')
   } finally {
     if (!background) stopLoadingProgress()
     progressDialog.value = false
     transferSubmitting.value = false
   }
->>>>>>> v2
 }
 
 onMounted(async () => {

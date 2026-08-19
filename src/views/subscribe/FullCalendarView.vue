@@ -200,18 +200,11 @@ const mobileSeriesFilterOptions = computed<MobileCalendarFilterOption[]>(() => {
 // 移动端筛选后的日历事件。
 const mobileFilteredCalendarEvents = computed(() => {
   return rawCalendarEvents.value.filter(event => {
-<<<<<<< HEAD
-    if (
-      mobileSelectedFilterValue.value !== ALL_MOBILE_FILTER_VALUE &&
-      event.title !== mobileSelectedFilterValue.value
-    ) {
-=======
     if (!matchesMediaTypeFilter(event)) {
       return false
     }
 
     if (mobileSelectedFilterValue.value !== ALL_MOBILE_FILTER_VALUE && event.title !== mobileSelectedFilterValue.value) {
->>>>>>> v2
       return false
     }
 
@@ -786,7 +779,10 @@ onActivated(() => {
               {{ t('calendar.episode', { number: calendarEvent.subtitle }) }}
             </div>
             <div v-if="calendarEvent.totalEpisode" class="calendar-event-library-row">
-              <span class="calendar-event-status" :class="`calendar-event-status--${calendarEvent.libraryState}`">
+              <span
+                class="calendar-event-status"
+                :class="`calendar-event-status--${calendarEvent.libraryState}`"
+              >
                 <VIcon :icon="getLibraryStateIcon(calendarEvent.libraryState)" size="13" />
                 {{ getCompactLibraryProgressText(calendarEvent) }}
               </span>
@@ -818,48 +814,12 @@ onActivated(() => {
 
     <template v-else>
       <section class="mobile-calendar-filter-card">
-        <div class="mobile-calendar-filter-head">
-          <div class="mobile-calendar-filter-copy">
-            <h2>{{ t('calendar.mobileFilterTitle') }}</h2>
-            <span>{{ t('calendar.itemCount', { count: mobileSeriesFilterOptions[0]?.count || 0 }) }}</span>
-          </div>
-
-          <button
-            type="button"
-            class="mobile-calendar-expired-toggle"
-            :class="{ 'mobile-calendar-expired-toggle--active': mobileHideExpired }"
-            @click="mobileHideExpired = !mobileHideExpired"
-          >
-            <VIcon :icon="mobileHideExpired ? 'mdi-eye-off-outline' : 'mdi-eye-outline'" size="18" />
-            <span>{{ mobileHideExpired ? t('calendar.hideExpired') : t('calendar.showExpired') }}</span>
-          </button>
+      <div class="mobile-calendar-filter-head">
+        <div class="mobile-calendar-filter-copy">
+          <h2>{{ t('calendar.mobileFilterTitle') }}</h2>
+          <span>{{ t('calendar.itemCount', { count: mobileSeriesFilterOptions[0]?.count || 0 }) }}</span>
         </div>
 
-<<<<<<< HEAD
-        <div class="mobile-calendar-filter-list" role="listbox" :aria-label="t('calendar.mobileFilterTitle')">
-          <button
-            v-for="option in mobileSeriesFilterOptions"
-            :key="option.value"
-            type="button"
-            class="mobile-calendar-filter-chip"
-            :class="{ 'mobile-calendar-filter-chip--active': mobileSelectedFilterValue === option.value }"
-            role="option"
-            :aria-selected="mobileSelectedFilterValue === option.value"
-            @click="mobileSelectedFilterValue = option.value"
-          >
-            {{ option.label }}
-          </button>
-        </div>
-      </section>
-
-      <div v-if="mobileCalendarDayGroups.length" class="mobile-calendar-timeline">
-        <section v-for="group in mobileCalendarDayGroups" :key="group.dateKey" class="mobile-calendar-day">
-          <div class="mobile-calendar-day-marker">
-            <span
-              class="mobile-calendar-day-dot"
-              :class="{ 'mobile-calendar-day-dot--today': isDateToday(group.date) }"
-            />
-=======
         <button
           type="button"
           class="mobile-calendar-expired-toggle"
@@ -978,98 +938,15 @@ onActivated(() => {
                 </div>
               </div>
             </article>
->>>>>>> v2
           </div>
-
-          <div class="mobile-calendar-day-body">
-            <header class="mobile-calendar-day-head">
-              <div class="mobile-calendar-day-title-wrap">
-                <h2>{{ group.title }}</h2>
-                <span>{{ group.subtitle }}</span>
-              </div>
-
-              <span class="mobile-calendar-day-count">{{ t('calendar.episodeCount', { count: group.count }) }}</span>
-            </header>
-
-            <div class="mobile-calendar-event-list">
-              <article
-                v-for="calendarEvent in group.events"
-                :key="`${group.dateKey}-${calendarEvent.title}-${calendarEvent.subtitle}-${calendarEvent.calendarSortIndex}`"
-                class="mobile-calendar-event-card"
-                :class="`mobile-calendar-event-card--${calendarEvent.libraryState}`"
-                :title="getCalendarEventInfoTooltip(calendarEvent)"
-              >
-                <div class="mobile-calendar-event-poster-wrap">
-                  <VImg
-                    :src="calendarEvent.posterPath"
-                    aspect-ratio="2/3"
-                    class="mobile-calendar-event-poster object-cover"
-                    cover
-                  >
-                    <template #placeholder>
-                      <div class="mobile-calendar-event-poster-placeholder">
-                        <VSkeletonLoader class="object-cover aspect-w-2 aspect-h-3" />
-                      </div>
-                    </template>
-                    <template #error>
-                      <div class="mobile-calendar-event-poster-error">
-                        <VIcon icon="mdi-image-off-outline" size="32" />
-                        <span>{{ t('calendar.imageLoadFailed') }}</span>
-                      </div>
-                    </template>
-                  </VImg>
-
-                  <span v-if="getMobilePosterEpisodeTag(calendarEvent)" class="mobile-calendar-poster-episode">
-                    {{ getMobilePosterEpisodeTag(calendarEvent) }}
-                  </span>
-                </div>
-
-                <div class="mobile-calendar-event-content">
-                  <div class="mobile-calendar-event-title-row">
-                    <h3>{{ getMobileEventMainTitle(calendarEvent) }}</h3>
-                    <span
-                      v-if="getMobileEventDateBadge(calendarEvent)"
-                      class="mobile-calendar-date-badge"
-                      :class="{
-                        'mobile-calendar-date-badge--today': isDateToday(calendarEvent.start),
-                        'mobile-calendar-date-badge--upcoming': isDateAfterToday(calendarEvent.start),
-                        'mobile-calendar-date-badge--expired': isDateBeforeToday(calendarEvent.start),
-                      }"
-                    >
-                      {{ getMobileEventDateBadge(calendarEvent) }}
-                    </span>
-                  </div>
-
-                  <p>{{ getMobileEventSubtitle(calendarEvent) }}</p>
-
-                  <div class="mobile-calendar-event-tags">
-                    <span
-                      v-if="getMobileEventEpisodeTag(calendarEvent)"
-                      class="mobile-calendar-event-tag mobile-calendar-event-tag--primary"
-                    >
-                      {{ getMobileEventEpisodeTag(calendarEvent) }}
-                    </span>
-                    <span v-if="getMobileEventRuntimeTag(calendarEvent)" class="mobile-calendar-event-tag">
-                      {{ getMobileEventRuntimeTag(calendarEvent) }}
-                    </span>
-                    <span
-                      class="mobile-calendar-event-tag"
-                      :class="`mobile-calendar-event-tag--library-${calendarEvent.libraryState}`"
-                    >
-                      {{ getLibraryStateText(calendarEvent.libraryState) }}
-                    </span>
-                  </div>
-                </div>
-              </article>
-            </div>
-          </div>
-        </section>
+        </div>
+      </section>
       </div>
 
       <div v-else class="mobile-calendar-empty">
-        <VIcon icon="mdi-calendar-blank-outline" size="44" />
-        <h2>{{ t('common.noData') }}</h2>
-        <p>{{ t('calendar.noMatchingEvents') }}</p>
+      <VIcon icon="mdi-calendar-blank-outline" size="44" />
+      <h2>{{ t('common.noData') }}</h2>
+      <p>{{ t('calendar.noMatchingEvents') }}</p>
       </div>
     </template>
   </div>
@@ -1077,11 +954,7 @@ onActivated(() => {
 
 <style lang="scss">
 .v-application .fc {
-<<<<<<< HEAD
-  --fc-today-bg-color: rgba(var(--v-theme-primary), 0.06);
-=======
   --fc-today-bg-color: rgba(var(--v-theme-primary), 0.12);
->>>>>>> v2
   --fc-border-color: rgba(var(--v-border-color), var(--v-border-opacity));
   --fc-neutral-bg-color: rgb(var(--v-theme-background), 0.3);
   --fc-list-event-hover-bg-color: rgba(var(--v-theme-on-surface), 0.02);
@@ -1608,8 +1481,8 @@ onActivated(() => {
 }
 
 .mobile-calendar-filter-card {
-  border-radius: var(--app-surface-radius);
   backdrop-filter: var(--mobile-calendar-surface-blur);
+  border-radius: var(--app-surface-radius);
   background: rgba(var(--v-theme-surface), var(--mobile-calendar-surface-bg-opacity));
   box-shadow: var(--app-surface-shadow);
   margin-block-end: 1.8rem;
@@ -1631,11 +1504,11 @@ onActivated(() => {
 
 .mobile-calendar-filter-copy h2 {
   overflow: hidden;
-  margin: 0;
   color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-size: 1rem;
   font-weight: 800;
   line-height: 1.35;
+  margin: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1699,6 +1572,10 @@ onActivated(() => {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
+  max-inline-size: min(68vw, 18rem);
+  min-block-size: 2.45rem;
+  padding-block: 0;
+  padding-inline: 1rem;
   border: 0;
   border-radius: var(--app-control-radius);
   background: var(--mobile-calendar-control-bg);
@@ -1708,10 +1585,6 @@ onActivated(() => {
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1;
-  max-inline-size: min(68vw, 18rem);
-  min-block-size: 2.45rem;
-  padding-block: 0;
-  padding-inline: 1rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1728,8 +1601,8 @@ onActivated(() => {
 .mobile-calendar-day {
   position: relative;
   display: grid;
-  column-gap: 0.35rem;
   grid-template-columns: 1.8rem minmax(0, 1fr);
+  column-gap: 0.35rem;
 }
 
 .mobile-calendar-day + .mobile-calendar-day {
@@ -1782,8 +1655,8 @@ onActivated(() => {
   align-items: flex-end;
   justify-content: space-between;
   gap: 1rem;
-  margin-block-end: 0.75rem;
   min-block-size: 2.8rem;
+  margin-block-end: 0.75rem;
 }
 
 .mobile-calendar-day-title-wrap {
@@ -1805,11 +1678,11 @@ onActivated(() => {
 
 .mobile-calendar-day-title-wrap h2 {
   overflow: hidden;
-  margin: 0;
   color: rgb(var(--v-theme-primary));
   font-size: 1.08rem;
   font-weight: 900;
   line-height: 1.18;
+  margin: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1867,13 +1740,13 @@ onActivated(() => {
   position: relative;
   display: grid;
   overflow: hidden;
+  grid-template-columns: clamp(5.2rem, 24vw, 6.6rem) minmax(0, 1fr);
   align-items: center;
-  border-radius: var(--app-surface-radius);
   backdrop-filter: var(--mobile-calendar-surface-blur);
+  border-radius: var(--app-surface-radius);
   background: rgba(var(--v-theme-surface), var(--mobile-calendar-event-bg-opacity));
   box-shadow: var(--app-surface-shadow);
   column-gap: 1rem;
-  grid-template-columns: clamp(5.2rem, 24vw, 6.6rem) minmax(0, 1fr);
   min-block-size: 9.1rem;
   padding-block: 0.85rem;
   padding-inline: 0.85rem 1rem;
@@ -1909,28 +1782,6 @@ onActivated(() => {
   gap: 0.3rem;
 }
 
-<<<<<<< HEAD
-.mobile-calendar-poster-episode {
-  position: absolute;
-  overflow: hidden;
-  background: rgba(0, 0, 0, 68%);
-  border-end-end-radius: var(--app-control-radius);
-  border-end-start-radius: var(--app-control-radius);
-  color: #fff;
-  font-size: 0.72rem;
-  font-weight: 900;
-  inset-block-end: 0;
-  inset-inline: 0;
-  line-height: 1.1;
-  padding-block: 0.28rem;
-  padding-inline: 0.35rem;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-=======
->>>>>>> v2
 .mobile-calendar-event-content {
   display: flex;
   flex-direction: column;
@@ -1942,11 +1793,6 @@ onActivated(() => {
 .mobile-calendar-event-content h3 {
   display: -webkit-box;
   overflow: hidden;
-<<<<<<< HEAD
-  flex: 1 1 auto;
-  margin: 0;
-=======
->>>>>>> v2
   -webkit-box-orient: vertical;
   color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-size: 1.05rem;
@@ -1954,13 +1800,13 @@ onActivated(() => {
   -webkit-line-clamp: 2;
   line-clamp: 2;
   line-height: 1.28;
+  margin: 0;
   overflow-wrap: anywhere;
 }
 
 .mobile-calendar-event-content p {
   display: -webkit-box;
   overflow: hidden;
-  margin: 0;
   -webkit-box-orient: vertical;
   color: rgba(var(--v-theme-on-surface), 0.86);
   font-size: 0.92rem;
@@ -1968,6 +1814,7 @@ onActivated(() => {
   -webkit-line-clamp: 2;
   line-clamp: 2;
   line-height: 1.35;
+  margin: 0;
   overflow-wrap: anywhere;
 }
 
@@ -1982,13 +1829,13 @@ onActivated(() => {
   display: inline-flex;
   overflow: hidden;
   align-items: center;
+  max-inline-size: 100%;
   border-radius: var(--app-control-radius);
   background: rgba(var(--v-theme-on-surface), 0.09);
   color: rgba(var(--v-theme-on-surface), 0.74);
   font-size: 0.76rem;
   font-weight: 800;
   line-height: 1;
-  max-inline-size: 100%;
   min-block-size: 1.7rem;
   padding-block: 0;
   padding-inline: 0.65rem;
@@ -2055,10 +1902,10 @@ html[data-theme='transparent'] .mobile-subscribe-calendar,
   }
 
   .mobile-calendar-event-card {
-    padding: 0.75rem;
-    column-gap: 0.85rem;
     grid-template-columns: 4.9rem minmax(0, 1fr);
+    column-gap: 0.85rem;
     min-block-size: 8.6rem;
+    padding: 0.75rem;
   }
 
   .mobile-calendar-event-content h3 {
