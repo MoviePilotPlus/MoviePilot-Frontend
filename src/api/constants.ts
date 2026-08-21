@@ -458,3 +458,82 @@ export const actionStepDict = actionStepOptions.reduce(
   },
   {} as Record<string, string>,
 )
+
+// ==================== 视频采集功能常量（自 MoviePilot-Frontend_v3 迁入，追加块勿与上游混排） ====================
+
+// Legacy collect constants kept for backward-compatible collect/task views.
+export const downloadStatus = {
+  Init: '初始化',
+  DownloadCreated: '创建完成',
+  DownloadPending: '等待下载',
+  Downloading: '正在下载',
+  DownloadError: '下载出错',
+  DownloadDone: '下载完成',
+  DownloadStop: '下载停止',
+  InfoCollected: '信息采集',
+  Renamed: '重命名',
+  Moved: '已转移',
+  Finished: '完成',
+}
+
+export const collectStatus = {
+  Init: '初始化',
+  Downloaded: '下载完成',
+  Downloading: '正在下载',
+  ScreenshotCollected: '截图采集',
+  InfoCollected: '元数据采集',
+  ImageCollected: '截图完成',
+  DescCollected: '简介采集',
+  Renamed: '重命名',
+  TorrentCreated: '制种',
+  TorrentRemaking: '转种中',
+  TorrentRemaked: '转种完成',
+  Finished: '完成',
+}
+
+export const seedStatus = {
+  Init: '待',
+  TorrentUploaded: '传',
+  TorrentDownloaded: '下',
+  TorrentPublished: '种',
+}
+
+export const tagOptions = {
+  Mandarin: '国语',
+  ChineseSubtitles: '中字',
+  Completed: '完结',
+  Original: '原创',
+  Children: '儿童片',
+  Comedy: '喜剧',
+  Official: '官方',
+  Cantonese: '粤语',
+  DolbyVision: '杜比视界',
+  HDRVivid: 'HDRVivid',
+  HDR10_PLUS: 'HDR10+',
+  HDR10: 'HDR10',
+  HighBitrateHighFrameRate: '高比特率高帧率',
+  ThreeD: '3D',
+  Collection: '合集',
+  SHD: '4K',
+  UHD: '8K',
+  HLG: 'HLG',
+}
+
+export const mediaCateOptions = {
+  Movie: '电影',
+  TV: '剧集',
+}
+
+export const categoryOptions = {
+  Movie: '电影',
+  TV: '电视剧',
+  Documentary: '纪录片',
+  Comic: '动漫',
+  Show: '综艺',
+  Music: '音乐',
+  Sports: '体育',
+  Game: '游戏',
+  Short: '短片',
+  Other: '其他',
+}
+// ==================== 视频采集功能常量结束 ====================

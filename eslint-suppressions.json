@@ -102,9 +102,6 @@
   "src/components/cards/CollectCard.vue": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
     }
   },
   "src/components/cards/DirectoryCard.vue": {
@@ -164,6 +161,9 @@
     }
   },
   "src/components/cards/SiteSchemaCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
     }
@@ -184,7 +184,7 @@
       "count": 1
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
+      "count": 1
     },
     "no-dupe-else-if": {
       "count": 1
@@ -221,25 +221,15 @@
       "count": 1
     }
   },
-  "src/components/cards/UserCard.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
   "src/components/cards/VideoCard.vue": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 1
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 5
-    }
-  },
-  "src/components/cards/__tests__/SubscribeCard.spec.ts": {
-    "sonarjs/super-linear-regex": {
-      "count": 2
     }
   },
   "src/components/dialog/AboutDialog.vue": {
@@ -262,11 +252,6 @@
     },
     "prefer-const": {
       "count": 1
-    }
-  },
-  "src/components/dialog/AgentMcpSettingsDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
     }
   },
   "src/components/dialog/AlistConfigDialog.vue": {
@@ -363,11 +348,6 @@
       "count": 1
     }
   },
-  "src/components/dialog/PluginMarketSettingDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
   "src/components/dialog/ProgressInfoDialog.vue": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 1
@@ -422,6 +402,9 @@
     }
   },
   "src/components/dialog/SiteSchemaEditDialog.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
     "@typescript-eslint/no-explicit-any": {
       "count": 2
     },
@@ -886,11 +869,6 @@
       "count": 2
     }
   },
-  "src/pages/login.vue": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "src/pages/resource.vue": {
     "@typescript-eslint/no-explicit-any": {
       "count": 3
@@ -1047,7 +1025,7 @@
       "count": 1
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
+      "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 12
@@ -1156,10 +1134,7 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
-    },
-    "sonarjs/no-dead-store": {
-      "count": 1
+      "count": 4
     }
   },
   "src/views/collect/TencentMediaListView.vue": {
@@ -1180,7 +1155,7 @@
       "count": 1
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 12
+      "count": 10
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 7
