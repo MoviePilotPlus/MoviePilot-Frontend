@@ -55,6 +55,35 @@ export function getNavMenus(t: Composer['t']): NavMenu[] {
       feature: PERMISSION_FEATURE.DISCOVERY_EXPLORE,
       tabs: getDiscoverTabs(t),
     },
+    // ==================== 视频采集功能导航项（自 MoviePilot-Frontend_v3 迁入，追加块勿与上游混排） ====================
+    {
+      title: t('navItems.collect'),
+      icon: 'mdi-play-box-multiple-outline',
+      to: '/collect',
+      header: t('menu.discovery'),
+      admin: false,
+      footer: true,
+      permission: 'discovery',
+    },
+    {
+      title: t('navItems.task'),
+      icon: 'mdi-arrow-down-bold-hexagon-outline',
+      to: '/task',
+      header: t('menu.discovery'),
+      admin: false,
+      footer: false,
+      permission: 'discovery',
+    },
+    {
+      title: t('navItems.follow'),
+      icon: 'mdi-auto-fix',
+      to: '/follow',
+      header: t('menu.discovery'),
+      admin: false,
+      footer: false,
+      permission: 'discovery',
+    },
+    // ==================== 视频采集功能导航项结束 ====================
     {
       title: t('navItems.movie'),
       full_title: t('navItems.movieSubscribe'),
@@ -250,6 +279,13 @@ export function getSettingTabs(t: Composer['t']): NavMenuTabItem[] {
       icon: 'mdi-bell',
       tab: 'notification',
       description: t('settingTabs.notification.description'),
+    },
+    // 视频采集功能设置标签（自 MoviePilot-Frontend_v3 迁入）
+    {
+      title: t('settingTabs.collect.title'),
+      icon: 'mdi-video',
+      tab: 'collect',
+      description: t('settingTabs.collect.description'),
     },
   ]
 }

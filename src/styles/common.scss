@@ -2021,3 +2021,16 @@ html[data-theme='transparent'] .app-pull-indicator {
 html[data-theme='transparent'].transparent-blur-disabled .app-pull-indicator {
   backdrop-filter: none;
 }
+
+// ==================== 视频采集功能样式（自 MoviePilot-Frontend_v3 迁入，追加块勿与上游混排） ====================
+// For landscape covers (e.g. MGTV/Youku), show fewer cards per row on larger screens.
+.grid-media-card--landscape {
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+}
+
+@media (min-width: 960px) {
+  .grid-media-card--landscape {
+    grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+  }
+}
+// ==================== 视频采集功能样式结束 ====================

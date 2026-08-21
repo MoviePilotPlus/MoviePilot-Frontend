@@ -7,6 +7,11 @@ import zhCN from '@/locales/zh-CN'
 import zhTW from '@/locales/zh-TW'
 import enUS from '@/locales/en-US'
 
+// 视频采集功能词条，独立文件维护以减少上游合并冲突
+import collectZhCN from '@/locales/collect/zh-CN'
+import collectZhTW from '@/locales/collect/zh-TW'
+import collectEnUS from '@/locales/collect/en-US'
+
 // 创建 i18n 实例
 const i18n = createI18n({
   legacy: false, // 使用组合式API
@@ -20,6 +25,11 @@ const i18n = createI18n({
   silentTranslationWarn: true,
   silentFallbackWarn: true,
 })
+
+// 合并视频采集功能词条
+i18n.global.mergeLocaleMessage('zh-CN', collectZhCN)
+i18n.global.mergeLocaleMessage('zh-TW', collectZhTW)
+i18n.global.mergeLocaleMessage('en-US', collectEnUS)
 
 /**
  * 获取浏览器语言设置

@@ -2240,3 +2240,238 @@ export interface CategoryConfig {
   movie?: { [key: string]: CategoryRule }
   tv?: { [key: string]: CategoryRule }
 }
+
+// ==================== 视频采集功能类型（自 MoviePilot-Frontend_v3 迁入，追加块勿与上游混排） ====================
+// PTGen 媒体信息（collect/ptgen/info 接口返回）
+export interface PtgenInfo {
+  // 中文标题
+  cn_title?: string
+  // 英文标题
+  en_title?: string
+  // 年份
+  year?: string
+  // 豆瓣ID
+  douban_id?: string
+  // IMDB ID
+  imdb_id?: string
+  // TMDB ID
+  tmdb_id?: string
+  // TMDB 链接
+  tmdb_link?: string
+  // Bangumi ID
+  bangumi_id?: string
+  // 副标题
+  sub_title?: string
+  // 海报
+  poster?: string
+  // 简介
+  overview?: string
+  // 简介（兼容字段）
+  description?: string
+  // 季号
+  season?: number
+}
+
+// 视频源搜索结果
+export interface VideoInfo {
+  // 名称
+  name?: string
+  // 标题
+  title?: string
+  // 年份
+  year?: string
+  // 简介
+  overview?: string
+  // 封面
+  poster?: string
+  // 媒体ID
+  mediaid?: string
+  // 类型
+  type?: string
+  // 详情页地址
+  url?: string
+}
+
+// 视频剧集信息
+export interface VideoEpisode {
+  // 标题
+  title?: string
+  // 剧集号
+  episode?: number
+  // 播放地址
+  url?: string
+  // 封面
+  image_url?: string
+  // VID
+  vid?: string
+  // CID
+  cid?: string
+}
+
+// 采集任务
+export interface Collect {
+  // ID
+  id: number
+  // 媒体ID
+  mediaid?: string
+  // 中文标题
+  cn_title?: string
+  // 英文标题
+  en_title?: string
+  // 年份
+  year?: string
+  // 季
+  season?: number
+  // 状态
+  status?: string
+  // 制作组
+  team?: string
+  // 标签
+  tags?: string
+  // 类型
+  category?: string
+  // 媒体类型
+  media_category?: string
+  // 豆瓣ID
+  douban_id?: string
+  // IMDB ID
+  imdb_id?: string
+  // TMDB ID
+  tmdb_id?: string
+  // 副标题
+  sub_title?: string
+  // 简介
+  description?: string
+  // 海报
+  poster?: string
+  // 总集数
+  episode_count?: number
+  // 已集数
+  episode_offset?: number
+  // 是否预约
+  is_reserved?: boolean
+  // 采集目录
+  media_base_dir?: string
+  // 创建时间
+  created_at?: string
+  // 更新时间
+  updated_at?: string
+}
+
+// 采集任务创建参数
+export interface CollectCreate {
+  // 媒体ID
+  mediaid?: string
+  // 站点
+  site?: string
+  // 清晰度
+  resolution?: string
+  // 剧集列表
+  episodes?: string[]
+  // 制作组
+  team?: string
+  // 标签
+  tags?: string[]
+  // 命名格式
+  file_format?: string
+  // 采集目录
+  media_base_dir?: string
+  // 分集采集
+  episode_collect?: boolean
+  // 自动发布
+  auto_publish?: boolean
+}
+
+// 下载任务
+export interface DownloadTask {
+  // ID
+  id: number
+  // 采集任务ID
+  collect_id?: number
+  // 标题
+  title?: string
+  // 剧集号
+  episode?: number
+  // 状态
+  status?: string
+  // 进度
+  progress?: number
+  // 下载速度
+  dlspeed?: string
+  // 剩余时间
+  eta?: string
+  // 文件名
+  file_name?: string
+  // 创建时间
+  created_at?: string
+}
+
+// 做种任务
+export interface SiteSeed {
+  // ID
+  id: number
+  // 采集任务ID
+  collect_id?: number
+  // 站点
+  site?: string
+  // 状态
+  status?: string
+  // 种子地址
+  torrent_url?: string
+  // 创建时间
+  created_at?: string
+}
+
+// 采集进度
+export interface Progress {
+  // 步骤
+  step?: string
+  // 状态
+  status?: string
+  // 进度
+  progress?: number
+  // 消息
+  message?: string
+}
+
+// 用户信息
+export interface UserInfo {
+  // 用户名
+  name?: string
+  // 头像
+  avatar?: string
+  // VIP信息
+  vip?: boolean
+}
+
+// 视频源分类信息
+export interface CategoryInfo {
+  level?: string
+  option_value?: string
+  option_name?: string
+  filter_key?: string
+  index_name?: string
+}
+
+export interface CategoryItem {
+  key: string
+  value: string
+}
+
+// 站点模板（siteschema，自 v3 SiteSchemaEditDialog 内联定义提升到公共类型）
+export interface SiteSchema {
+  id: number
+  name: string
+  domain: string
+  download_page: string
+  upload_page: string
+  upload_api: string
+  update_api: string
+  tracker_api: string
+  detail_page: string
+  is_https: boolean
+  cookie_required: boolean
+  twofa_secret: string
+  template: string
+}
+// ==================== 视频采集功能类型结束 ====================

@@ -18,6 +18,8 @@ const AccountSettingRule = defineAsyncComponent(() => import('@/views/setting/Ac
 const AccountSettingSearch = defineAsyncComponent(() => import('@/views/setting/AccountSettingSearch.vue'))
 const AccountSettingSubscribe = defineAsyncComponent(() => import('@/views/setting/AccountSettingSubscribe.vue'))
 const AccountSettingNotification = defineAsyncComponent(() => import('@/views/setting/AccountSettingNotification.vue'))
+// 视频采集功能设置面板（自 MoviePilot-Frontend_v3 迁入）
+const AccountSettingCollect = defineAsyncComponent(() => import('@/views/setting/AccountSettingCollect.vue'))
 
 const visitedTabs = ref(new Set<string>())
 
@@ -29,6 +31,8 @@ const settingTabComponents = [
   { value: 'search', component: AccountSettingSearch },
   { value: 'subscribe', component: AccountSettingSubscribe },
   { value: 'notification', component: AccountSettingNotification },
+  // 视频采集功能（自 MoviePilot-Frontend_v3 迁入）
+  { value: 'collect', component: AccountSettingCollect },
 ]
 
 function markTabVisited(tab: string) {

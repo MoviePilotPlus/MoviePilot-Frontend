@@ -14,6 +14,21 @@ import {
 // Nprogress
 configureNProgress()
 
+// ==================== 视频采集功能：页面切换时中断未完成请求（自 v3 迁入） ====================
+const abortControllers = new Set<AbortController>()
+
+export function registerAbortController(controller: AbortController) {
+  abortControllers.add(controller)
+}
+
+function abortAllControllers() {
+  for (const controller of abortControllers) {
+    controller.abort()
+  }
+  abortControllers.clear()
+}
+// ==================== 视频采集功能中断机制结束 ====================
+
 // Router
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -236,6 +251,73 @@ const router = createRouter({
             requiresAuth: true,
           },
         },
+        // ==================== 视频采集功能路由（自 MoviePilot-Frontend_v3 迁入，追加块勿与上游混排） ====================
+        {
+          path: '/collect',
+          component: () => import('../pages/collect.vue'),
+          meta: {
+            keepAlive: true,
+            requiresAuth: true,
+            permission: 'discovery',
+          },
+        },
+        {
+          path: '/collect/video',
+          component: () => import('../pages/collect-video.vue'),
+          meta: {
+            requiresAuth: true,
+            permission: 'discovery',
+          },
+        },
+        {
+          path: '/collect/batch-reserve',
+          component: () => import('../pages/collect-batch-reserve.vue'),
+          meta: {
+            requiresAuth: true,
+            permission: 'discovery',
+          },
+        },
+        {
+          path: '/follow',
+          component: () => import('../pages/follow.vue'),
+          meta: {
+            requiresAuth: true,
+            permission: 'discovery',
+          },
+        },
+        {
+          path: '/video',
+          component: () => import('../pages/video.vue'),
+          meta: {
+            requiresAuth: true,
+            permission: 'discovery',
+          },
+        },
+        {
+          path: '/task',
+          component: () => import('../pages/task.vue'),
+          meta: {
+            requiresAuth: true,
+            permission: 'discovery',
+          },
+        },
+        {
+          path: '/cdetail',
+          component: () => import('../pages/cdetail.vue'),
+          meta: {
+            requiresAuth: true,
+            permission: 'discovery',
+          },
+        },
+        {
+          path: '/downloadtask',
+          component: () => import('../pages/downloadtask.vue'),
+          meta: {
+            requiresAuth: true,
+            permission: 'discovery',
+          },
+        },
+        // ==================== 视频采集功能路由结束 ====================
         {
           path: '/setting',
           component: () => import('../pages/setting.vue'),
@@ -394,6 +476,8 @@ router.beforeEach(async (to: any, from: any, next: any) => {
 
 // 路由导航完成后
 router.afterEach(() => {
+  // 视频采集功能：中断页面未完成的请求（自 v3 迁入）
+  abortAllControllers()
   setTimeout(() => {
     setRequestNavigatingState(false)
   }, 100)
