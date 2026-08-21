@@ -2,11 +2,13 @@
 import type { PropType } from 'vue'
 import { formatDateDifference, formatFileSize } from '@/@core/utils/formatters'
 import api from '@/api'
-import type { SubtitleInfo } from '@/api/types'
+import type { MediaDataSource, SubtitleInfo } from '@/api/types'
 import { getCachedSiteIcon } from '@/utils/siteIconCache'
 import { downloadedSubtitleMap, markSubtitleDownloaded } from '@/utils/subtitleDownloadCache'
 import { openSharedDialog } from '@/composables/useSharedDialog'
 import { useI18n } from 'vue-i18n'
+import { useGlobalSettingsStore } from '@/stores'
+import { getDisplayImageUrl } from '@/utils/imageUtils'
 
 const AddSubtitleDownloadDialog = defineAsyncComponent(() => import('../dialog/AddSubtitleDownloadDialog.vue'))
 
@@ -16,7 +18,10 @@ const { t } = useI18n()
 // 输入参数
 const props = defineProps({
   subtitle: Object as PropType<SubtitleInfo>,
+  mediaSource: String as PropType<MediaDataSource>,
+  mediaId: String,
 })
+const globalSettingsStore = useGlobalSettingsStore()
 
 // 字幕信息
 const subtitle = ref(props.subtitle)
@@ -24,7 +29,9 @@ const subtitle = ref(props.subtitle)
 // 站点图标
 const siteIcon = ref('')
 
-const isDownloaded = computed(() => Boolean(subtitle.value?.enclosure && downloadedSubtitleMap[subtitle.value.enclosure]))
+const isDownloaded = computed(() =>
+  Boolean(subtitle.value?.enclosure && downloadedSubtitleMap[subtitle.value.enclosure]),
+)
 
 // 查询站点图标
 async function getSiteIcon() {
@@ -34,21 +41,26 @@ async function getSiteIcon() {
   }
 
   try {
-    siteIcon.value = await getCachedSiteIcon(subtitle.value.site, async () => {
+    const icon = await getCachedSiteIcon(subtitle.value.site, async () => {
       try {
-        const response = await api.get(`site/icon/${subtitle.value?.site}`)
-
-        return response?.data?.icon || ''
+        const response = await api.get<{ icon?: string }>(`site/icon/${subtitle.value?.site}`)
+        return response?.icon || ''
       } catch (error) {
         console.error('Failed to load site icon:', error)
         return ''
       }
     })
+    siteIcon.value = getDisplayImageUrl(icon, globalSettingsStore.globalSettings.GLOBAL_IMAGE_CACHE)
   } catch (error) {
     console.error('Failed to load site icon:', error)
     siteIcon.value = ''
   }
 }
+
+// 字幕语言图标可能来自站点外链，展示时统一遵循全局图片缓存开关。
+const languageIconUrl = computed(() =>
+  getDisplayImageUrl(subtitle.value?.language_icon || '', globalSettingsStore.globalSettings.GLOBAL_IMAGE_CACHE),
+)
 
 // 询问并下载字幕
 async function handleAddDownload() {
@@ -57,6 +69,8 @@ async function handleAddDownload() {
     {
       title: subtitle.value?.title,
       subtitle: subtitle.value,
+      mediaSource: props.mediaSource,
+      mediaId: props.mediaId,
     },
     {
       done: addDownloadSuccess,
@@ -135,8 +149,8 @@ watch(
           </VChip>
           <VChip v-if="subtitle?.language" size="x-small" color="info" variant="tonal" class="rounded-sm">
             <VImg
-              v-if="subtitle?.language_icon"
-              :src="subtitle.language_icon"
+              v-if="languageIconUrl"
+              :src="languageIconUrl"
               :alt="subtitle.language"
               width="14"
               height="14"
@@ -153,12 +167,19 @@ watch(
           {{ subtitle?.title }}
         </div>
 
-        <div v-if="subtitle?.description" class="text-body-2 text-medium-emphasis mb-2 break-all" :title="subtitle.description">
+        <div
+          v-if="subtitle?.description"
+          class="text-body-2 text-medium-emphasis mb-2 break-all"
+          :title="subtitle.description"
+        >
           {{ subtitle.description }}
         </div>
 
         <div class="d-flex flex-wrap gap-2 mb-2">
-          <span v-if="subtitle?.pubdate || subtitle?.date_elapsed" class="d-flex align-center text-sm text-medium-emphasis">
+          <span
+            v-if="subtitle?.pubdate || subtitle?.date_elapsed"
+            class="d-flex align-center text-sm text-medium-emphasis"
+          >
             <VIcon size="small" color="grey" icon="mdi-clock-outline" class="me-1"></VIcon>
             {{ subtitle?.date_elapsed || formatDateDifference(subtitle.pubdate || '') }}
           </span>

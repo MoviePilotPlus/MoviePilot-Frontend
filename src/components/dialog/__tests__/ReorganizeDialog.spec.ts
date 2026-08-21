@@ -244,6 +244,11 @@ function createDeferred<T>() {
   return { promise, reject, resolve }
 }
 
+/** 构造后端网络层使用的严格三段式响应。 */
+function apiEnvelope<T>(data: T | null, success = true, message = ''): ApiResponse<T> {
+  return { data, message, success }
+}
+
 function publicSettingHandlers({
   directories = [],
   episodeRules = [],
@@ -256,19 +261,19 @@ function publicSettingHandlers({
   return [
     http.get(new URL('system/setting/public/Directories', API_BASE_URL).href, () => {
       initializationRequestCount += 1
-      return HttpResponse.json({ data: { value: directories }, success: true })
+      return HttpResponse.json(apiEnvelope({ value: directories }))
     }),
     http.get(new URL('system/setting/public/Storages', API_BASE_URL).href, () => {
       initializationRequestCount += 1
-      return HttpResponse.json({ data: { value: storages }, success: true })
+      return HttpResponse.json(apiEnvelope({ value: storages }))
     }),
     http.get(new URL('system/setting/public/EpisodeFormatRuleTable', API_BASE_URL).href, () => {
       initializationRequestCount += 1
-      return HttpResponse.json({ data: { value: episodeRules }, success: true })
+      return HttpResponse.json(apiEnvelope({ value: episodeRules }))
     }),
     http.post(new URL('transfer/manual/history', API_BASE_URL).href, () => {
       initializationRequestCount += 1
-      return HttpResponse.json({ data: { history_count: 0, reorganize: false }, success: true })
+      return HttpResponse.json(apiEnvelope({ history_count: 0, reorganize: false }))
     }),
   ]
 }
@@ -354,6 +359,7 @@ function previewResponse(
         total: items.length,
       },
     },
+    message: '',
     success: true,
   }
 }
@@ -375,7 +381,7 @@ describe('ReorganizeDialog submission safety', () => {
   it('keeps the dialog open when the backend reports a business failure', async () => {
     server.use(
       http.post(new URL('transfer/manual', API_BASE_URL).href, () =>
-        HttpResponse.json({ message: '整理失败', success: false }),
+        HttpResponse.json(apiEnvelope(null, false, '整理失败')),
       ),
     )
     const user = userEvent.setup()
@@ -388,7 +394,9 @@ describe('ReorganizeDialog submission safety', () => {
   })
 
   it('shows a fallback error when a business failure has no message', async () => {
-    server.use(http.post(new URL('transfer/manual', API_BASE_URL).href, () => HttpResponse.json({ success: false })))
+    server.use(
+      http.post(new URL('transfer/manual', API_BASE_URL).href, () => HttpResponse.json(apiEnvelope(null, false))),
+    )
     const user = userEvent.setup()
     const { onDone } = await renderDialog()
 
@@ -415,7 +423,7 @@ describe('ReorganizeDialog submission safety', () => {
   })
 
   it('coalesces repeated submit clicks while a transfer request is pending', async () => {
-    const response = createDeferred<ApiResponse>()
+    const response = createDeferred<ApiResponse<null>>()
     let requestCount = 0
     server.use(
       http.post(new URL('transfer/manual', API_BASE_URL).href, async () => {
@@ -430,7 +438,7 @@ describe('ReorganizeDialog submission safety', () => {
     await fireEvent.click(submitButton)
 
     await waitFor(() => expect(requestCount).toBe(1))
-    response.resolve({ data: undefined, success: true })
+    response.resolve(apiEnvelope(null))
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1))
   })
 
@@ -439,7 +447,7 @@ describe('ReorganizeDialog submission safety', () => {
     server.use(
       http.post(new URL('transfer/manual', API_BASE_URL).href, () => {
         requestCount += 1
-        return HttpResponse.json({ success: true })
+        return HttpResponse.json(apiEnvelope(null))
       }),
     )
     const user = userEvent.setup()
@@ -462,6 +470,43 @@ describe('ReorganizeDialog payloads and lifecycle', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
+  it('shows automatic defaults when media type and source are unset', async () => {
+    await renderDialog()
+
+    expect(screen.getByLabelText<HTMLSelectElement>('类型')).toHaveDisplayValue('自动')
+    expect(screen.getByLabelText<HTMLSelectElement>('数据源')).toHaveDisplayValue('自动')
+  })
+
+  it('resets the data source to auto and hides the media id input after switching media type', async () => {
+    await renderDialog()
+
+    // 类型为自动时隐藏媒体ID输入框
+    expect(screen.queryByLabelText('TheMovieDb编号')).not.toBeInTheDocument()
+
+    // 切换到音乐：显示媒体ID输入框，数据源保持自动（音乐由媒体ID标签兜底为 MusicBrainz）
+    await selectOption('类型', 3)
+    await waitFor(() => expect(screen.getByLabelText('MusicBrainz ID')).toBeInTheDocument())
+    expect(screen.getByLabelText<HTMLSelectElement>('数据源')).toHaveDisplayValue('自动')
+
+    // 切回电影：数据源自动回退为自动，媒体ID输入框随类型重新显示
+    await selectOption('类型', 1)
+    await waitFor(() => expect(screen.getByLabelText('TheMovieDb编号')).toBeInTheDocument())
+    expect(screen.getByLabelText<HTMLSelectElement>('数据源')).toHaveDisplayValue('自动')
+  })
+
+  it('resets a stale music source back to auto when switching away from music type', async () => {
+    await renderDialog()
+
+    // 先手动选择音乐源（触发类型联动为音乐）
+    await selectOption('数据源', 5)
+    await waitFor(() => expect(screen.getByLabelText<HTMLSelectElement>('类型')).toHaveDisplayValue('音乐'))
+
+    // 切回电影后，音乐源不应残留
+    await selectOption('类型', 1)
+    await waitFor(() => expect(screen.getByLabelText<HTMLSelectElement>('数据源')).toHaveDisplayValue('自动'))
+    expect(screen.getByLabelText<HTMLSelectElement>('类型')).toHaveDisplayValue('电影')
+  })
+
   it('deduplicates selected files and submits nullable automatic target fields in one background request', async () => {
     const bodies: unknown[] = []
     const backgrounds: string[] = []
@@ -471,7 +516,7 @@ describe('ReorganizeDialog payloads and lifecycle', () => {
       http.post(new URL('transfer/manual', API_BASE_URL).href, async ({ request }) => {
         bodies.push(await request.json())
         backgrounds.push(new URL(request.url).searchParams.get('background') ?? '')
-        return HttpResponse.json({ success: true })
+        return HttpResponse.json(apiEnvelope(null))
       }),
     )
     const user = userEvent.setup()
@@ -485,14 +530,14 @@ describe('ReorganizeDialog payloads and lifecycle', () => {
       expect.objectContaining({
         episode_group: null,
         fileitems: [first, second],
-        media_id: null,
-        media_source: 'themoviedb',
         target_path: null,
         target_storage: null,
         transfer_type: null,
       }),
     ])
     expect(bodies[0]).not.toHaveProperty('fileitem')
+    expect(bodies[0]).not.toHaveProperty('media_id')
+    expect(bodies[0]).not.toHaveProperty('media_source')
     expect(mocks.progressControllers).toHaveLength(0)
     expect(mocks.toastSuccess).toHaveBeenCalledWith('文件 共 2 项 已加入整理队列！')
   })
@@ -504,7 +549,7 @@ describe('ReorganizeDialog payloads and lifecycle', () => {
     server.use(
       http.post(new URL('transfer/manual', API_BASE_URL).href, async ({ request }) => {
         bodies.push(await request.json())
-        return HttpResponse.json({ success: true })
+        return HttpResponse.json(apiEnvelope(null))
       }),
     )
     const user = userEvent.setup()
@@ -530,7 +575,7 @@ describe('ReorganizeDialog payloads and lifecycle', () => {
     server.use(
       http.post(new URL('transfer/manual', API_BASE_URL).href, async ({ request }) => {
         bodies.push(await request.json())
-        return HttpResponse.json({ success: true })
+        return HttpResponse.json(apiEnvelope(null))
       }),
     )
     const user = userEvent.setup()
@@ -563,7 +608,7 @@ describe('ReorganizeDialog payloads and lifecycle', () => {
   })
 
   it('updates synchronous progress from SSE and always stops it after success', async () => {
-    const response = createDeferred<ApiResponse>()
+    const response = createDeferred<ApiResponse<null>>()
     let payload: unknown
     server.use(
       http.post(new URL('transfer/manual', API_BASE_URL).href, async ({ request }) => {
@@ -582,7 +627,7 @@ describe('ReorganizeDialog payloads and lifecycle', () => {
     )
     await waitFor(() => expect(screen.getByTestId('transfer-progress')).toHaveTextContent('正在写入媒体库:65'))
 
-    response.resolve({ data: undefined, success: true })
+    response.resolve(apiEnvelope(null))
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1))
     expect(payload).toEqual(
       expect.objectContaining({
@@ -596,7 +641,7 @@ describe('ReorganizeDialog payloads and lifecycle', () => {
   })
 
   it('stops the active progress stream when unmounted during a request', async () => {
-    const response = createDeferred<ApiResponse>()
+    const response = createDeferred<ApiResponse<null>>()
     const requestCompleted = createDeferred<void>()
     server.use(
       http.post(new URL('transfer/manual', API_BASE_URL).href, async () => {
@@ -612,7 +657,7 @@ describe('ReorganizeDialog payloads and lifecycle', () => {
     unmount()
 
     expect(mocks.progressControllers[0].stop).toHaveBeenCalledTimes(1)
-    response.resolve({ data: undefined, success: true })
+    response.resolve(apiEnvelope(null))
     await requestCompleted.promise
     await new Promise(resolve => setTimeout(resolve, 0))
   })
@@ -633,7 +678,7 @@ describe('ReorganizeDialog payloads and lifecycle', () => {
     server.use(
       http.post(new URL('transfer/manual', API_BASE_URL).href, async ({ request }) => {
         bodies.push(await request.json())
-        return HttpResponse.json({ success: true })
+        return HttpResponse.json(apiEnvelope(null))
       }),
     )
     const user = userEvent.setup()
@@ -677,16 +722,18 @@ describe('ReorganizeDialog payloads and lifecycle', () => {
     const bodies: unknown[] = []
     server.use(
       http.get(new URL('media/groups/600', API_BASE_URL).href, () =>
-        HttpResponse.json([{ episode_count: 12, group_count: 1, id: 'group-1', name: '播出顺序' }]),
+        HttpResponse.json(apiEnvelope([{ episode_count: 12, group_count: 1, id: 'group-1', name: '播出顺序' }])),
       ),
       http.post(new URL('transfer/manual', API_BASE_URL).href, async ({ request }) => {
         bodies.push(await request.json())
-        return HttpResponse.json({ success: true })
+        return HttpResponse.json(apiEnvelope(null))
       }),
     )
     const user = userEvent.setup()
     await renderDialog()
 
+    // 类型为自动时媒体ID输入框隐藏，先选择类型再查询媒体编号
+    await selectOption('类型', 2)
     await user.click(screen.getByRole('button', { name: '查询媒体编号' }))
     await user.click(screen.getByRole('button', { name: '选择电视剧' }))
     await waitFor(() => expect(screen.getByRole('option', { name: '播出顺序' })).toBeInTheDocument())
@@ -722,14 +769,46 @@ describe('ReorganizeDialog payloads and lifecycle', () => {
       }),
     )
 
-    await selectOption('数据源', 1)
+    await selectOption('数据源', 2)
     await user.click(screen.getByRole('button', { name: '加入整理队列' }))
     await waitFor(() => expect(bodies).toHaveLength(2))
     expect(bodies[1]).toEqual(
       expect.objectContaining({
         episode_group: null,
-        media_id: null,
-        media_source: 'douban',
+      }),
+    )
+    expect(bodies[1]).not.toHaveProperty('media_id')
+    expect(bodies[1]).not.toHaveProperty('media_source')
+  })
+
+  it('submits an explicit music entity namespace for manual transfer', async () => {
+    const bodies: unknown[] = []
+    server.use(
+      http.post(new URL('transfer/manual', API_BASE_URL).href, async ({ request }) => {
+        bodies.push(await request.json())
+        return HttpResponse.json(apiEnvelope(null))
+      }),
+    )
+    const user = userEvent.setup()
+    await renderDialog({
+      items: [createFileItem({ name: '叶惠美', path: '/downloads/叶惠美', type: 'dir' })],
+    })
+
+    await selectOption('类型', 3)
+    await waitFor(() => expect(screen.getByLabelText('MusicBrainz ID')).toBeInTheDocument())
+    await selectOption('音乐实体', 1)
+    await fireEvent.input(screen.getByLabelText('MusicBrainz ID'), {
+      target: { value: '977e6978-139d-425c-bb98-6b0c62d1e45e' },
+    })
+    await user.click(screen.getByRole('button', { name: '加入整理队列' }))
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).toEqual(
+      expect.objectContaining({
+        media_id: '977e6978-139d-425c-bb98-6b0c62d1e45e',
+        media_source: 'musicbrainz',
+        music_type: 'album',
+        type_name: '音乐',
       }),
     )
   })
@@ -748,12 +827,13 @@ describe('ReorganizeDialog payloads and lifecycle', () => {
             rule_name: '标准季集',
             sample_file: 'Movie.mkv',
           },
+          message: '',
           success: true,
         })
       }),
       http.post(new URL('transfer/manual', API_BASE_URL).href, async ({ request }) => {
         transferBodies.push(await request.json())
-        return HttpResponse.json({ success: true })
+        return HttpResponse.json(apiEnvelope(null))
       }),
     )
     const user = userEvent.setup()
@@ -778,7 +858,7 @@ describe('ReorganizeDialog payloads and lifecycle', () => {
     server.use(
       http.post(new URL('transfer/manual', API_BASE_URL).href, async ({ request }) => {
         bodies.push(await request.json())
-        return HttpResponse.json({ success: true })
+        return HttpResponse.json(apiEnvelope(null))
       }),
     )
     const user = userEvent.setup()
@@ -909,7 +989,7 @@ describe('ReorganizeDialog preview', () => {
   it('summarizes a business-level preview failure without closing the preview', async () => {
     server.use(
       http.post(new URL('transfer/manual', API_BASE_URL).href, () =>
-        HttpResponse.json({ message: '目标目录不可用', success: false }),
+        HttpResponse.json(apiEnvelope(null, false, '目标目录不可用')),
       ),
     )
     const user = userEvent.setup()

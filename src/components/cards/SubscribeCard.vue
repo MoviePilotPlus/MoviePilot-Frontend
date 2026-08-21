@@ -4,6 +4,7 @@ import { useConfirm } from '@/composables/useConfirm'
 import { formatDateDifference } from '@/@core/utils/formatters'
 import { formatSeasonLabel } from '@/@core/utils/season'
 import api from '@/api'
+import { getApiBusinessErrorMessage } from '@/api/client'
 import type { Subscribe } from '@/api/types'
 import router from '@/router'
 import { useI18n } from 'vue-i18n'
@@ -11,6 +12,7 @@ import { useDisplay } from 'vuetify'
 import { useGlobalSettingsStore } from '@/stores'
 import { openSharedDialog } from '@/composables/useSharedDialog'
 import { getDisplayImageUrl } from '@/utils/imageUtils'
+import { buildMusicDetailRoute, formatMusicAudioSpecs, formatMusicBitrate } from '@/utils/music'
 
 const SubscribeEditDialog = defineAsyncComponent(() => import('../dialog/SubscribeEditDialog.vue'))
 const SubscribeFilesDialog = defineAsyncComponent(() => import('../dialog/SubscribeFilesDialog.vue'))
@@ -55,6 +57,10 @@ const $toast = useToast()
 
 // 图片是否加载完成
 const imageLoaded = ref(false)
+
+// 背景图或海报加载失败时使用统一占位图，避免订阅卡片留下空白图片区。
+const backdropLoadError = ref(false)
+const posterLoadError = ref(false)
 
 // 当前的订阅状态
 const subscribeState = ref<string>(props.media?.state ?? 'P')
@@ -131,6 +137,44 @@ const subscribeProgressText = computed(() => {
   return `${downloadedEpisode.value} / ${total}`
 })
 
+// 音乐订阅始终展示实体类型；旧数据缺少 music_type 时按既有单曲语义兼容。
+const musicSubscribeMeta = computed(() => {
+  if (props.media?.type !== '音乐') return null
+  const currentSpecs = formatMusicAudioSpecs({
+    audio_format: props.media.current_audio_format,
+    bit_depth: props.media.current_bit_depth,
+    sample_rate: props.media.current_sample_rate,
+    bitrate: props.media.current_bitrate,
+  })
+  const selectedQuality = {
+    hires: t('music.audioQualityHires'),
+    'hires|lossless': t('music.audioQualityLossless'),
+    lossy: t('music.audioQualityLossy'),
+  }[props.media.audio_quality || '']
+  const selectedFormat = props.media.audio_format
+    ? props.media.audio_format === 'DSD|FLAC|ALAC|APE|WAV|AIFF|PCM'
+      ? t('music.audioFormatLossless')
+      : props.media.audio_format.replaceAll('|', '/')
+    : ''
+  const selectedBitrate = props.media.min_bitrate ? `≥ ${formatMusicBitrate(props.media.min_bitrate)}` : ''
+  const qualityText = currentSpecs || [selectedQuality, selectedFormat, selectedBitrate].filter(Boolean).join(' · ')
+  if (props.media.music_type === 'album') {
+    const trackCount = props.media.total_tracks
+    const entityText = trackCount
+      ? `${t('music.entityAlbum')} · ${t('music.trackCount', { count: trackCount })}`
+      : t('music.entityAlbum')
+    return {
+      icon: 'mdi-album',
+      text: [entityText, qualityText].filter(Boolean).join(' · '),
+    }
+  }
+
+  return {
+    icon: 'mdi-music-note',
+    text: [t('music.entityRecording'), qualityText].filter(Boolean).join(' · '),
+  }
+})
+
 // 订阅卡片 hover 文案：
 // - 普通订阅：「已下载 X · 共 Y 集」
 // - 洗版订阅：「已下载 X · 已洗版 N · 共 Y 集」
@@ -154,6 +198,17 @@ function imageLoadHandler() {
   imageLoaded.value = true
 }
 
+// 背景图加载失败后直接切换占位图，避免同一失效地址在 poster fallback 中重复请求。
+function backdropErrorHandler() {
+  backdropLoadError.value = true
+  imageLoaded.value = true
+}
+
+// 海报加载失败后使用占位图，保留卡片布局和可点击区域。
+function posterErrorHandler() {
+  posterLoadError.value = true
+}
+
 // 进度条 model 段百分比：洗版订阅表示"已洗版"占比（亮段），普通订阅表示"已下载"占比
 function getPercentage() {
   const total = props.media?.total_episode || 0
@@ -172,12 +227,9 @@ function getBufferPercentage() {
 // 删除订阅
 async function removeSubscribe() {
   try {
-    const result: { [key: string]: any } = await api.delete(`subscribe/${props.media?.id}`)
-
-    if (result.success) {
-      // 通知父组件刷新
-      emit('remove')
-    }
+    await api.delete(`subscribe/${props.media?.id}`, { feedback: 'silent' })
+    // 通知父组件刷新
+    emit('remove')
   } catch (e) {
     $toast.error(t('subscribe.requestFailed'))
     console.log(e)
@@ -187,11 +239,8 @@ async function removeSubscribe() {
 // 搜索订阅
 async function searchSubscribe() {
   try {
-    const result: { [key: string]: any } = await api.get(`subscribe/search/${props.media?.id}`)
-
-    // 提示
-    if (result.success) $toast.success(`${props.media?.name} 提交搜索请求成功！`)
-    else $toast.error(t('subscribe.requestFailed'))
+    await api.get(`subscribe/search/${props.media?.id}`, { feedback: 'silent' })
+    $toast.success(`${props.media?.name} 提交搜索请求成功！`)
   } catch (e) {
     $toast.error(t('subscribe.requestFailed'))
     console.log(e)
@@ -200,9 +249,9 @@ async function searchSubscribe() {
 
 // 切换订阅状态
 async function toggleSubscribeStatus(state: 'R' | 'S') {
+  const action = state === 'S' ? t('common.pause') : t('common.enable')
   try {
     // 根据传入的 state 判断对应的操作文字
-    const action = state === 'S' ? t('common.pause') : t('common.enable')
     // 弹出确认框
     const isConfirmed = await createConfirm({
       title: t('common.confirmAction', { action }),
@@ -210,17 +259,13 @@ async function toggleSubscribeStatus(state: 'R' | 'S') {
     })
     if (!isConfirmed) return
     // 调用 API 更新订阅状态
-    const result: { [key: string]: any } = await api.put(`subscribe/status/${props.media?.id}?state=${state}`)
-    // 提示
-    if (result.success) {
-      $toast.success(t('subscribe.toggleSuccess', { name: props.media?.name, action }))
-      subscribeState.value = state
-      emit('save')
-    } else {
-      $toast.error(t('subscribe.toggleFailed', { action, message: result.message }))
-    }
+    await api.put(`subscribe/status/${props.media?.id}?state=${state}`, undefined, { feedback: 'silent' })
+    $toast.success(t('subscribe.toggleSuccess', { name: props.media?.name, action }))
+    subscribeState.value = state
+    emit('save')
   } catch (e) {
-    $toast.error(t('subscribe.requestFailed'))
+    const message = getApiBusinessErrorMessage(e)
+    $toast.error(message ? t('subscribe.toggleFailed', { action, message }) : t('subscribe.requestFailed'))
     console.log(e)
   }
 }
@@ -235,15 +280,15 @@ async function resetSubscribe() {
     })
     if (!isConfirmed) return
     // 重置
-    const result: { [key: string]: any } = await api.get(`subscribe/reset/${props.media?.id}`)
-    // 提示
-    if (result.success) {
-      $toast.success(t('subscribe.resetSuccess', { name: props.media?.name }))
-      subscribeState.value = 'R'
-      emit('save')
-    } else $toast.error(t('subscribe.resetFailed', { name: props.media?.name, message: result.message }))
+    await api.get(`subscribe/reset/${props.media?.id}`, { feedback: 'silent' })
+    $toast.success(t('subscribe.resetSuccess', { name: props.media?.name }))
+    subscribeState.value = 'R'
+    emit('save')
   } catch (e) {
-    $toast.error(t('subscribe.requestFailed'))
+    const message = getApiBusinessErrorMessage(e)
+    $toast.error(
+      message ? t('subscribe.resetFailed', { name: props.media?.name, message }) : t('subscribe.requestFailed'),
+    )
     console.log(e)
   }
 }
@@ -268,25 +313,25 @@ async function editSubscribeDialog() {
   )
 }
 
-// 获得mediaid
+// 获取订阅的统一媒体身份
 function getMediaId() {
-  if (props.media?.media_source && props.media?.media_id) {
-    const prefix = props.media.media_source === 'themoviedb' ? 'tmdb' : props.media.media_source
-    return `${prefix}:${props.media.media_id}`
-  }
-  if (props.media?.tmdbid) return `tmdb:${props.media?.tmdbid}`
-  else if (props.media?.doubanid) return `douban:${props.media?.doubanid}`
-  else if (props.media?.bangumiid) return `bangumi:${props.media?.bangumiid}`
-  else if (props.media?.anilistid) return `anilist:${props.media?.anilistid}`
-  else return props.media?.mediaid
+  if (!props.media?.media_source || !props.media.media_id) return undefined
+  return { mediaSource: props.media.media_source, mediaId: String(props.media.media_id) }
 }
 
 // 查看媒体详情
 async function viewMediaDetail() {
+  if (props.media?.type === '音乐') {
+    router.push(buildMusicDetailRoute(props.media))
+    return
+  }
+  const identity = getMediaId()
+  if (!identity) return
   router.push({
     path: '/media',
     query: {
-      mediaid: getMediaId(),
+      media_source: identity.mediaSource,
+      media_id: identity.mediaId,
       title: props.media?.name,
       year: props.media?.year,
       type: props.media?.type,
@@ -360,6 +405,7 @@ const dropdownItems = computed(() => [
       prependIcon: 'mdi-file-document-outline',
       click: viewSubscribeFiles,
     },
+    show: props.media?.type !== '音乐',
   },
   {
     title: t('common.unsubscribe'),
@@ -389,17 +435,56 @@ watch(
   },
 )
 
+// 切换订阅记录时重新尝试加载图片，避免复用卡片组件后沿用旧的失败状态。
+watch(
+  () => [props.media?.id, props.media?.backdrop, props.media?.poster],
+  () => {
+    imageLoaded.value = false
+    backdropLoadError.value = false
+    posterLoadError.value = false
+  },
+)
+
+// 媒体占位图标：电影/电视剧/音乐各自使用对应图标，缺失封面时统一渲染图标 + 底色占位
+const placeholderIcon = computed(() => {
+  switch (props.media?.type) {
+    case '音乐':
+      return 'mdi-album'
+    case '电视剧':
+      return 'mdi-television-classic'
+    case '电影':
+    default:
+      return 'mdi-movie-open-outline'
+  }
+})
+
 // 计算backdrop图片地址
 const backdropUrl = computed(() => {
+  if (backdropLoadError.value) return ''
   const url = props.media?.backdrop || props.media?.poster
-  return getDisplayImageUrl(url || '', globalSettings.GLOBAL_IMAGE_CACHE)
+  if (!url) return ''
+  return getDisplayImageUrl(url, globalSettings.GLOBAL_IMAGE_CACHE)
 })
 
 // 计算海报图片地址
 const posterUrl = computed(() => {
-  const url = props.media?.poster
-  return getDisplayImageUrl(url || '', globalSettings.GLOBAL_IMAGE_CACHE)
+  if (posterLoadError.value) return ''
+  const url = props.media?.poster || props.media?.backdrop
+  if (!url) return ''
+  return getDisplayImageUrl(url, globalSettings.GLOBAL_IMAGE_CACHE)
 })
+
+// 缺失封面时展示媒体占位背景（图标 + 底色），对齐音乐媒体卡片
+const showPlaceholder = computed(() => !backdropUrl.value)
+
+// 占位背景出现时同步标记图片已加载，让卡片正文与徽标正常渲染
+watch(
+  showPlaceholder,
+  show => {
+    if (show) imageLoaded.value = true
+  },
+  { immediate: true },
+)
 
 // 订阅编辑保存
 function onSubscribeEditSave() {
@@ -478,7 +563,22 @@ function handleCardClick() {
                 </IconBtn>
               </div>
               <template #image v-if="display.smAndUp.value">
-                <VImg :src="backdropUrl || posterUrl" aspect-ratio="3/2" cover @load="imageLoadHandler" position="top">
+                <div
+                  v-if="showPlaceholder"
+                  class="subscribe-card-placeholder subscribe-card-placeholder--cover d-flex align-center justify-center relative"
+                >
+                  <VIcon :icon="placeholderIcon" size="64" color="medium-emphasis" />
+                  <div class="absolute inset-0 outline-none subscribe-card-background"></div>
+                </div>
+                <VImg
+                  v-else
+                  :src="backdropUrl || posterUrl"
+                  aspect-ratio="3/2"
+                  cover
+                  @load="imageLoadHandler"
+                  @error="backdropErrorHandler"
+                  position="top"
+                >
                   <template #placeholder>
                     <div class="w-full h-full">
                       <VSkeletonLoader class="object-cover aspect-w-3 aspect-h-2" />
@@ -492,12 +592,21 @@ function handleCardClick() {
 
               <template v-if="display.xs.value">
                 <div class="subscribe-card-mobile-media">
+                  <div
+                    v-if="showPlaceholder"
+                    class="subscribe-card-placeholder d-flex align-center justify-center relative"
+                  >
+                    <VIcon :icon="placeholderIcon" size="64" color="medium-emphasis" />
+                    <div class="absolute inset-0 outline-none subscribe-card-background"></div>
+                  </div>
                   <VImg
+                    v-else
                     :src="backdropUrl || posterUrl"
                     :aspect-ratio="16 / 9"
                     cover
                     position="top"
                     @load="imageLoadHandler"
+                    @error="backdropErrorHandler"
                   >
                     <template #placeholder>
                       <VSkeletonLoader class="h-full w-full" />
@@ -550,8 +659,11 @@ function handleCardClick() {
                           :data-subscribe-state-icon="compactStateDisplay.icon"
                           size="16"
                         />
-                        <span v-if="subscribeProgressText" class="subscribe-card-mobile-progress-text">
-                          {{ subscribeProgressText }}
+                        <span
+                          v-if="subscribeProgressText || musicSubscribeMeta"
+                          class="subscribe-card-mobile-progress-text"
+                        >
+                          {{ subscribeProgressText || musicSubscribeMeta?.text }}
                         </span>
                       </div>
 
@@ -591,13 +703,13 @@ function handleCardClick() {
               </template>
 
               <div v-else>
-                <VCardText class="flex items-center pt-3 pb-2">
+                <VCardText class="flex flex-1 items-center pt-3 pb-9">
                   <div
                     class="h-auto w-12 flex-shrink-0 overflow-hidden rounded-md relative"
-                    v-if="imageLoaded"
+                    v-if="imageLoaded && posterUrl"
                     :class="{ 'cursor-move': props.sortable && display.mdAndUp.value }"
                   >
-                    <VImg :src="posterUrl" aspect-ratio="2/3" cover>
+                    <VImg :src="posterUrl" aspect-ratio="2/3" cover @error="posterErrorHandler">
                       <template #placeholder>
                         <div class="w-full h-full">
                           <VSkeletonLoader class="object-cover aspect-w-2 aspect-h-3" />
@@ -615,7 +727,9 @@ function handleCardClick() {
                     </div>
                   </div>
                 </VCardText>
-                <VCardText class="flex min-w-0 justify-space-between align-center flex-wrap px-3">
+                <VCardText
+                  class="absolute inset-x-0 bottom-2 z-10 flex min-w-0 justify-space-between align-center flex-wrap px-3"
+                >
                   <div class="flex min-w-0 max-w-full align-center">
                     <VIcon
                       v-if="props.media?.total_episode && props.sortable"
@@ -637,6 +751,13 @@ function handleCardClick() {
                       <VTooltip v-if="subscribeProgressTooltip" activator="parent" location="top">
                         {{ subscribeProgressTooltip }}
                       </VTooltip>
+                    </div>
+                    <div
+                      v-else-if="musicSubscribeMeta"
+                      class="flex flex-shrink-0 align-center text-subtitle-2 me-2 text-white"
+                    >
+                      <VIcon :icon="musicSubscribeMeta.icon" size="small" class="me-1" />
+                      {{ musicSubscribeMeta.text }}
                     </div>
                     <VIcon
                       v-if="props.media?.username && props.sortable"
@@ -888,6 +1009,18 @@ function handleCardClick() {
 
 .subscribe-card-background {
   background-image: linear-gradient(180deg, rgba(31, 41, 55, 47%) 0%, rgb(31, 41, 55) 100%);
+}
+
+/* 缺失封面时的媒体占位背景（图标 + 底色），对齐音乐媒体卡片 */
+.subscribe-card-placeholder {
+  block-size: 100%;
+  inline-size: 100%;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+}
+
+/* 桌面版占位与图片同高，避免无图时卡片整体塌陷上浮 */
+.subscribe-card-placeholder--cover {
+  aspect-ratio: 3 / 2;
 }
 
 /**

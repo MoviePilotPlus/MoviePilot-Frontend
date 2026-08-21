@@ -2,6 +2,7 @@
 <script lang="ts" setup>
 import { useToast } from 'vue-toastification'
 import api from '@/api'
+import { manageLlmProvider } from '@/api/manage'
 import { useGlobalSettingsStore } from '@/stores'
 import { DownloaderConf, MediaServerConf } from '@/api/types'
 import DownloaderCard from '@/components/cards/DownloaderCard.vue'
@@ -99,12 +100,22 @@ const SystemSettings = ref<any>({
     DATA_CLEANUP_DOWNLOAD_HISTORY_DAYS: 180,
     DATA_CLEANUP_SITE_USERDATA_DAYS: 180,
     DATA_CLEANUP_TRANSFER_HISTORY_DAYS: 365 * 3,
+    // 本地数据库备份策略同时适用于 SQLite 与 PostgreSQL。
+    DB_BACKUP_ENABLE: false,
+    DB_BACKUP_CRON: '0 3 * * *',
+    DB_BACKUP_PATH: null,
+    DB_BACKUP_RETENTION_DAYS: 30,
+    DB_BACKUP_MAX_COUNT: 30,
+    DB_BACKUP_ON_UPGRADE: true,
     // 媒体
     RECOGNIZE_PLUGIN_FIRST: false,
     MEDIA_RECOGNIZE_SHARE: true,
     TMDB_API_DOMAIN: null,
     TMDB_API_KEY: null,
+    ACOUSTID_API_KEY: null,
+    MUSIC_METADATA_TO_SIMPLIFIED: true,
     TMDB_IMAGE_DOMAIN: null,
+    MUSIC_COVER_PROXY: null,
     TMDB_LOCALE: null,
     META_CACHE_EXPIRE: 0,
     SCRAP_FOLLOW_TMDB: true,
@@ -132,6 +143,11 @@ const SystemSettings = ref<any>({
     RUST_ACCEL: false,
     ENCODING_DETECTION_PERFORMANCE_MODE: true,
     TRANSFER_THREADS: 1,
+    MONITOR_NETWORK_FAST_MODE: false,
+    TRANSFER_MAX_FAILED_RETRIES: 3,
+    FS_PROXY_ENABLED: true,
+    FS_PROXY_TIMEOUT: 30,
+    FS_PROXY_STALL_TIMEOUT: 120,
   },
 })
 
@@ -183,10 +199,20 @@ const scrapingConfig = [
       { key: 'episode_thumb', label: 'setting.system.episodeThumb' },
     ],
   },
+  {
+    section: 'music',
+    items: [
+      { key: 'music_nfo', label: 'setting.system.musicNfo' },
+      { key: 'music_poster', label: 'setting.system.musicPoster' },
+      { key: 'music_lyrics', label: 'setting.system.musicLyrics' },
+    ],
+  },
 ]
 
 // 刮削策略设置
-const ScrapingPolicies = ref<Record<string, 'skip' | 'missingOnly' | 'overwrite'>>(
+type ScrapingPolicy = 'skip' | 'missingOnly' | 'overwrite'
+
+const ScrapingPolicies = ref<Record<string, ScrapingPolicy>>(
   Object.fromEntries(scrapingConfig.flatMap(section => section.items.map(item => [item.key, 'missingOnly']))),
 )
 
@@ -462,7 +488,7 @@ function normalizeThinkingLevelValue(value?: unknown) {
   return aliasMap[normalized] || normalized
 }
 
-function resolveThinkingLevelValue(data?: Record<string, any>) {
+function resolveThinkingLevelValue(data?: Record<string, unknown>) {
   const explicit = normalizeThinkingLevelValue(data?.LLM_THINKING_LEVEL)
   if (explicit) return explicit
 
@@ -587,8 +613,38 @@ const logLevelItems = [
 ]
 
 const dataCleanupFieldRules = [
-  (v: any) => v === 0 || !!v || t('setting.system.dataCleanupDaysRequired'),
-  (v: any) => v >= 0 || t('setting.system.dataCleanupDaysMin'),
+  (value: unknown) => value === 0 || !!value || t('setting.system.dataCleanupDaysRequired'),
+  (value: unknown) => Number(value) >= 0 || t('setting.system.dataCleanupDaysMin'),
+]
+
+const dbBackupPath = computed({
+  get: () => String(SystemSettings.value.Advanced.DB_BACKUP_PATH ?? ''),
+  set: (value: string) => {
+    SystemSettings.value.Advanced.DB_BACKUP_PATH = value
+  },
+})
+
+function hasValidCronFieldCount(value: string) {
+  return value.trim().split(/\s+/).length === 5
+}
+
+function isNonNegativeInteger(value: unknown) {
+  if (value === '' || value === null || value === undefined) return false
+  const numberValue = Number(value)
+  return Number.isInteger(numberValue) && numberValue >= 0
+}
+
+const dbBackupCronRules = [
+  (value: unknown) => {
+    const cron = String(value ?? '').trim()
+    return !cron || hasValidCronFieldCount(cron) || t('setting.system.dbBackupCronInvalid')
+  },
+]
+const dbBackupRetentionRules = [
+  (value: unknown) => isNonNegativeInteger(value) || t('setting.system.dbBackupRetentionDaysInvalid'),
+]
+const dbBackupMaxCountRules = [
+  (value: unknown) => isNonNegativeInteger(value) || t('setting.system.dbBackupMaxCountInvalid'),
 ]
 
 // 安全域名添加变量
@@ -659,8 +715,8 @@ function addImageProxyAllowedPrivateRange() {
 // 调用API查询下载器设置
 async function loadDownloaderSetting() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/Downloaders')
-    downloaders.value = result.data?.value ?? []
+    const result = await api.get<{ value?: DownloaderConf[] }>('system/setting/Downloaders')
+    downloaders.value = result.value ?? []
   } catch (error) {
     console.log(error)
   }
@@ -675,21 +731,21 @@ async function saveDownloaderSetting() {
     if (enabledDownloaders.length > 0) {
       downloaders.value = handleDefaultDownloaders(enabledDownloaders, downloaders.value)
     }
-    const result: { [key: string]: any } = await api.post('system/setting/Downloaders', downloaders.value)
-    if (result.success) $toast.success(t('setting.system.downloaderSaveSuccess'))
-    else $toast.error(t('setting.system.downloaderSaveFailed'))
+    await api.post('system/setting/Downloaders', downloaders.value, { feedback: 'silent' })
+    $toast.success(t('setting.system.downloaderSaveSuccess'))
 
     await loadDownloaderSetting()
   } catch (error) {
     console.log(error)
+    $toast.error(t('setting.system.downloaderSaveFailed'))
   }
 }
 
 // 处理默认下载器状态
-function handleDefaultDownloaders(enabledDownloaders: any[], downloaders: any[]) {
+function handleDefaultDownloaders(enabledDownloaders: DownloaderConf[], currentDownloaders: DownloaderConf[]) {
   const enabledDefaultDownloader = enabledDownloaders.find(item => item.default)
   if (enabledDownloaders.length > 0 && !enabledDefaultDownloader) {
-    downloaders = downloaders.map(item => {
+    return currentDownloaders.map(item => {
       if (item === enabledDownloaders[0]) {
         $toast.info(t('setting.system.defaultDownloaderNotice', { name: item.name }))
         return { ...item, default: true }
@@ -698,14 +754,14 @@ function handleDefaultDownloaders(enabledDownloaders: any[], downloaders: any[])
       return { ...item, default: false }
     })
   }
-  return downloaders
+  return currentDownloaders
 }
 
 // 调用API查询媒体服务器设置
 async function loadMediaServerSetting() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/MediaServers')
-    mediaServers.value = result.data?.value ?? []
+    const result = await api.get<{ value?: MediaServerConf[] }>('system/setting/MediaServers')
+    mediaServers.value = result.value ?? []
   } catch (error) {
     console.log(error)
   }
@@ -714,13 +770,13 @@ async function loadMediaServerSetting() {
 // 调用API保存媒体服务器设置
 async function saveMediaServerSetting() {
   try {
-    const result: { [key: string]: any } = await api.post('system/setting/MediaServers', mediaServers.value)
-    if (result.success) $toast.success(t('setting.system.mediaServerSaveSuccess'))
-    else $toast.error(t('setting.system.mediaServerSaveFailed'))
+    await api.post('system/setting/MediaServers', mediaServers.value, { feedback: 'silent' })
+    $toast.success(t('setting.system.mediaServerSaveSuccess'))
 
     await loadMediaServerSetting()
   } catch (error) {
     console.log(error)
+    $toast.error(t('setting.system.mediaServerSaveFailed'))
   }
 }
 
@@ -728,22 +784,21 @@ async function saveMediaServerSetting() {
 async function loadSystemSettings() {
   invalidateLlmTestState()
   try {
-    const result: { [key: string]: any } = await api.get('system/env')
-    if (result.success) {
-      const defaultSyncInterval = Number(result.data.MEDIASERVER_SYNC_INTERVAL ?? Number.NaN)
-      legacyMediaServerSyncInterval.value = Number.isFinite(defaultSyncInterval) ? defaultSyncInterval : null
-      // 将API返回的值赋值给SystemSettings
-      for (const sectionKey of Object.keys(SystemSettings.value) as Array<keyof typeof SystemSettings.value>) {
-        Object.keys(SystemSettings.value[sectionKey]).forEach((key: string) => {
-          if (result.data.hasOwnProperty(key)) (SystemSettings.value[sectionKey] as any)[key] = result.data[key]
-        })
-      }
-      const accelAvailable = Boolean(result.data.RUST_ACCEL_AVAILABLE ?? result.data.RUST_ACCEL_ENABLED)
-      rustAccelAvailable.value = accelAvailable
-      if (!accelAvailable) SystemSettings.value.Advanced.RUST_ACCEL = false
-      SystemSettings.value.Basic.LLM_THINKING_LEVEL = resolveThinkingLevelValue(result.data)
-      await loadLlmProviders()
+    const result = await api.get<Record<string, unknown>>('system/env')
+    const defaultSyncInterval = Number(result.MEDIASERVER_SYNC_INTERVAL ?? Number.NaN)
+    legacyMediaServerSyncInterval.value = Number.isFinite(defaultSyncInterval) ? defaultSyncInterval : null
+    // 将API返回的值赋值给SystemSettings
+    for (const sectionKey of Object.keys(SystemSettings.value) as Array<keyof typeof SystemSettings.value>) {
+      Object.keys(SystemSettings.value[sectionKey]).forEach((key: string) => {
+        if (Object.prototype.hasOwnProperty.call(result, key))
+          (SystemSettings.value[sectionKey] as Record<string, unknown>)[key] = result[key]
+      })
     }
+    const accelAvailable = Boolean(result.RUST_ACCEL_AVAILABLE ?? result.RUST_ACCEL_ENABLED)
+    rustAccelAvailable.value = accelAvailable
+    if (!accelAvailable) SystemSettings.value.Advanced.RUST_ACCEL = false
+    SystemSettings.value.Basic.LLM_THINKING_LEVEL = resolveThinkingLevelValue(result)
+    await loadLlmProviders()
   } catch (error) {
     console.log(error)
   }
@@ -753,8 +808,8 @@ async function loadSystemSettings() {
 async function loadAgentMcpServers() {
   loadingAgentMcpServers.value = true
   try {
-    const result: { [key: string]: any } = await api.get('message/agent/mcp/servers')
-    if (result.success) agentMcpServers.value = result.data?.servers || []
+    const result = await api.get<{ servers?: AgentMcpServer[] }>('message/agent/mcp/servers')
+    agentMcpServers.value = result.servers || []
   } catch (error) {
     console.log(error)
   } finally {
@@ -767,15 +822,10 @@ function handleAgentMcpSaved(servers: AgentMcpServer[]) {
 }
 
 // 调用API保存设置
-async function saveSystemSetting(value: { [key: string]: any }) {
+async function saveSystemSetting(value: Record<string, unknown>) {
   try {
-    const result: { [key: string]: any } = await api.post('system/env', value)
-    if (result.success) {
-      return true
-    } else {
-      $toast.error(t('setting.system.saveFailed', { message: result?.message }))
-      return false
-    }
+    await api.post('system/env', value, { feedback: 'silent' })
+    return true
   } catch (error) {
     console.log(error)
   }
@@ -792,6 +842,8 @@ async function saveBasicSettings() {
       // 更新全局设置store，使Web Agent图标实时生效
       globalSettingsStore.setData({ ...globalSettingsStore.getData, ...SystemSettings.value.Basic })
       $toast.success(t('setting.system.basicSaveSuccess'))
+    } else {
+      $toast.error(t('setting.system.saveFailed', { message: t('common.apiRequestFailed') }))
     }
   } finally {
     savingBasic.value = false
@@ -803,7 +855,7 @@ async function testLlmConnection() {
 
   const snapshot = buildLlmSnapshot()
   const snapshotKey = buildLlmSnapshotKey(snapshot)
-  const payload = buildLlmTestPayload(snapshot)
+  const { provider: testProvider, ...testParams } = buildLlmTestPayload(snapshot)
   const requestId = ++llmTestRequestId
   if (llmTestAbortController) llmTestAbortController.abort()
   const abortController = new AbortController()
@@ -811,7 +863,8 @@ async function testLlmConnection() {
 
   testingLlm.value = true
   try {
-    const result: { [key: string]: any } = await api.post('llm/test', payload, {
+    await manageLlmProvider(testProvider, 'test', testParams, {
+      feedback: 'silent',
       signal: abortController.signal,
     })
     if (
@@ -822,8 +875,7 @@ async function testLlmConnection() {
       return
     }
 
-    if (result?.success) $toast.success(t('setting.system.llmTestSuccessToast'))
-    else showLlmTestFailedToast(result?.message)
+    $toast.success(t('setting.system.llmTestSuccessToast'))
   } catch (error) {
     if (
       requestId !== llmTestRequestId ||
@@ -835,14 +887,16 @@ async function testLlmConnection() {
     showLlmTestFailedToast(error instanceof Error ? error.message : String(error))
     console.log(error)
   } finally {
-    if (requestId !== llmTestRequestId) return
-    if (llmTestAbortController === abortController) llmTestAbortController = null
-    testingLlm.value = false
+    if (requestId === llmTestRequestId) {
+      if (llmTestAbortController === abortController) llmTestAbortController = null
+      testingLlm.value = false
+    }
   }
 }
 
 // 保存高级设置
 async function saveAdvancedSettings() {
+  if (!normalizeDbBackupSettings()) return
   if (!rustAccelAvailable.value) SystemSettings.value.Advanced.RUST_ACCEL = false
   cleanEmptyFields(SystemSettings.value.Advanced, ['LOG_FILE_FORMAT'])
 
@@ -850,16 +904,50 @@ async function saveAdvancedSettings() {
   const advancedResult = await saveSystemSetting(SystemSettings.value.Advanced)
   const scrapingResult = await saveScrapingSwitchs()
 
+  if (!advancedResult) {
+    $toast.error(t('setting.system.saveFailed', { message: t('common.apiRequestFailed') }))
+  }
+
   if (advancedResult && scrapingResult) {
     advancedDialog.value = false
     $toast.success(t('setting.system.advancedSaveSuccess'))
   }
 }
 
+/** 规范化备份策略，并在请求前阻止后端无法执行的配置。 */
+function normalizeDbBackupSettings() {
+  const settings = SystemSettings.value.Advanced
+  const path = String(settings.DB_BACKUP_PATH ?? '').trim()
+  settings.DB_BACKUP_PATH = path || null
+
+  const cron = String(settings.DB_BACKUP_CRON ?? '').trim()
+  const retentionDays = Number(settings.DB_BACKUP_RETENTION_DAYS)
+  const maxCount = Number(settings.DB_BACKUP_MAX_COUNT)
+
+  if (cron && !hasValidCronFieldCount(cron)) {
+    $toast.error(t('setting.system.dbBackupCronInvalid'))
+    return false
+  }
+  if (!isNonNegativeInteger(settings.DB_BACKUP_RETENTION_DAYS)) {
+    $toast.error(t('setting.system.dbBackupRetentionDaysInvalid'))
+    return false
+  }
+  if (!isNonNegativeInteger(settings.DB_BACKUP_MAX_COUNT)) {
+    $toast.error(t('setting.system.dbBackupMaxCountInvalid'))
+    return false
+  }
+
+  settings.DB_BACKUP_CRON = cron
+  settings.DB_BACKUP_RETENTION_DAYS = retentionDays
+  settings.DB_BACKUP_MAX_COUNT = maxCount
+  return true
+}
+
 // 当字段为空时，将其设置为 null 提交，以便后端恢复为默认值
-function cleanEmptyFields(settings: any, fields: string[]) {
+function cleanEmptyFields(settings: Record<string, unknown>, fields: string[]) {
   fields.forEach(field => {
-    if (settings[field]?.trim?.() === '') {
+    const value = settings[field]
+    if (typeof value === 'string' && value.trim() === '') {
       settings[field] = null
     }
   })
@@ -868,8 +956,7 @@ function cleanEmptyFields(settings: any, fields: string[]) {
 // 快捷复制到剪贴板
 async function copyValue(value: string) {
   try {
-    let success
-    success = copyToClipboard(value)
+    const success = copyToClipboard(value)
     if (await success) $toast.success(t('setting.system.copySuccess'))
     else $toast.error(t('setting.system.copyFailed'))
   } catch (error) {
@@ -1001,9 +1088,7 @@ const moviePilotAutoUpdate = computed({
 const fanartLanguageSelection = computed({
   get: () => {
     if (!SystemSettings.value.Advanced.FANART_LANG) return []
-    return SystemSettings.value.Advanced.FANART_LANG.split(',')
-      .filter(Boolean)
-      .map((lang: any) => lang.trim())
+    return (SystemSettings.value.Advanced.FANART_LANG.split(',') as string[]).filter(Boolean).map(lang => lang.trim())
   },
   set: (val: string[]) => {
     SystemSettings.value.Advanced.FANART_LANG = val.join(',')
@@ -1013,15 +1098,14 @@ const fanartLanguageSelection = computed({
 // 加载刮削开关设置
 async function loadScrapingSwitchs() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/ScrapingSwitchs')
-    if (result.success && result.data?.value) {
-      const loadedSwitches = result.data.value
-      for (const key in loadedSwitches) {
-        if (typeof loadedSwitches[key] === 'boolean') {
-          // 兼容旧数据
-          loadedSwitches[key] = loadedSwitches[key] ? 'missingOnly' : 'skip'
-        }
-      }
+    const result = await api.get<{ value?: Record<string, boolean | ScrapingPolicy> }>('system/setting/ScrapingSwitchs')
+    if (result.value) {
+      const loadedSwitches = Object.fromEntries(
+        Object.entries(result.value).map(([key, value]) => [
+          key,
+          typeof value === 'boolean' ? (value ? 'missingOnly' : 'skip') : value,
+        ]),
+      ) as Record<string, ScrapingPolicy>
       ScrapingPolicies.value = { ...ScrapingPolicies.value, ...loadedSwitches }
     }
   } catch (error) {
@@ -1032,13 +1116,8 @@ async function loadScrapingSwitchs() {
 // 保存刮削开关设置
 async function saveScrapingSwitchs() {
   try {
-    const result: { [key: string]: any } = await api.post('system/setting/ScrapingSwitchs', ScrapingPolicies.value)
-    if (result.success) {
-      return true
-    } else {
-      $toast.error(t('setting.system.scrapingSwitchSaveFailed', { message: result?.message }))
-      return false
-    }
+    await api.post('system/setting/ScrapingSwitchs', ScrapingPolicies.value, { feedback: 'silent' })
+    return true
   } catch (error) {
     console.log(error)
     $toast.error(t('setting.system.scrapingSwitchSaveError'))
@@ -1811,7 +1890,7 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                 <VIcon icon="mdi-plus" />
                 <VMenu activator="parent" close-on-content-click>
                   <VList>
-                    <VListItem v-for="item in downloaderOptions" @click="addDownloader(item.value)">
+                    <VListItem v-for="item in downloaderOptions" :key="item.value" @click="addDownloader(item.value)">
                       <VListItemTitle>{{ item.title }}</VListItemTitle>
                     </VListItem>
                     <VListItem @click="addDownloader('custom')">
@@ -1862,7 +1941,7 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                 <VIcon icon="mdi-plus" />
                 <VMenu activator="parent" close-on-content-click>
                   <VList>
-                    <VListItem v-for="item in mediaServerOptions" @click="addMediaServer(item.value)">
+                    <VListItem v-for="item in mediaServerOptions" :key="item.value" @click="addMediaServer(item.value)">
                       <VListItemTitle>{{ item.title }}</VListItemTitle>
                     </VListItem>
                     <VListItem @click="addMediaServer('custom')">
@@ -2037,6 +2116,17 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                   />
                 </VCol>
                 <VCol cols="12" md="6">
+                  <VTextField
+                    v-model="SystemSettings.Advanced.ACOUSTID_API_KEY"
+                    :label="t('setting.system.acoustIdApiKey')"
+                    :hint="t('setting.system.acoustIdApiKeyHint')"
+                    persistent-hint
+                    :placeholder="t('setting.system.acoustIdApiKeyPlaceholder')"
+                    :rules="[(v: string) => !!v || t('setting.system.acoustIdApiKeyRequired')]"
+                    prepend-inner-icon="mdi-music-box-multiple-outline"
+                  />
+                </VCol>
+                <VCol cols="12" md="6">
                   <VCombobox
                     v-model="SystemSettings.Advanced.TMDB_IMAGE_DOMAIN"
                     :label="t('setting.system.tmdbImageDomain')"
@@ -2046,6 +2136,16 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                     :items="['image.tmdb.org']"
                     :rules="[(v: string) => !!v || t('setting.system.tmdbImageDomainRequired')]"
                     prepend-inner-icon="mdi-image"
+                  />
+                </VCol>
+                <VCol cols="12" md="6">
+                  <VTextField
+                    v-model="SystemSettings.Advanced.MUSIC_COVER_PROXY"
+                    :label="t('setting.system.musicCoverProxy')"
+                    :hint="t('setting.system.musicCoverProxyHint')"
+                    persistent-hint
+                    :placeholder="t('setting.system.musicCoverProxyPlaceholder')"
+                    prepend-inner-icon="mdi-music"
                   />
                 </VCol>
                 <VCol cols="12" md="6">
@@ -2095,6 +2195,14 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                 </VCol>
               </VRow>
               <VRow>
+                <VCol cols="12" md="6">
+                  <VSwitch
+                    v-model="SystemSettings.Advanced.MUSIC_METADATA_TO_SIMPLIFIED"
+                    :label="t('setting.system.musicMetadataToSimplified')"
+                    :hint="t('setting.system.musicMetadataToSimplifiedHint')"
+                    persistent-hint
+                  />
+                </VCol>
                 <VCol cols="12" md="6">
                   <VSwitch
                     v-model="SystemSettings.Advanced.RECOGNIZE_PLUGIN_FIRST"
@@ -2203,7 +2311,7 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                               <span class="ml-2">{{ t(item.label) }}</span>
                             </div>
                           </VCol>
-                          <VDivider v-if="section.section !== 'episode'" class="my-4" />
+                          <VDivider v-if="section.section !== 'music'" class="my-4" />
                         </VRow>
                       </VExpansionPanelText>
                     </VExpansionPanel>
@@ -2374,6 +2482,73 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
               <VRow>
                 <VCol cols="12">
                   <VSwitch
+                    v-model="SystemSettings.Advanced.DB_BACKUP_ENABLE"
+                    :label="t('setting.system.dbBackupEnable')"
+                    :hint="t('setting.system.dbBackupEnableHint')"
+                    persistent-hint
+                  />
+                </VCol>
+                <template v-if="SystemSettings.Advanced.DB_BACKUP_ENABLE">
+                  <VCol cols="12" md="6">
+                    <VCronField
+                      v-model="SystemSettings.Advanced.DB_BACKUP_CRON"
+                      :label="t('setting.system.dbBackupCron')"
+                      :hint="t('setting.system.dbBackupCronHint')"
+                      persistent-hint
+                      clearable
+                      :rules="dbBackupCronRules"
+                      prepend-inner-icon="mdi-clock-outline"
+                    />
+                  </VCol>
+                  <VCol cols="12" md="6">
+                    <VPathField
+                      v-model="dbBackupPath"
+                      storage="local"
+                      :label="t('setting.system.dbBackupPath')"
+                      :placeholder="t('setting.system.dbBackupPathPlaceholder')"
+                      :hint="t('setting.system.dbBackupPathHint')"
+                      persistent-hint
+                      prepend-inner-icon="mdi-folder-outline"
+                    />
+                  </VCol>
+                  <VCol cols="12" md="6">
+                    <VTextField
+                      v-model.number="SystemSettings.Advanced.DB_BACKUP_RETENTION_DAYS"
+                      :label="t('setting.system.dbBackupRetentionDays')"
+                      :hint="t('setting.system.dbBackupRetentionDaysHint')"
+                      persistent-hint
+                      min="0"
+                      step="1"
+                      type="number"
+                      :suffix="t('setting.system.day')"
+                      :rules="dbBackupRetentionRules"
+                      prepend-inner-icon="mdi-calendar-remove-outline"
+                    />
+                  </VCol>
+                  <VCol cols="12" md="6">
+                    <VTextField
+                      v-model.number="SystemSettings.Advanced.DB_BACKUP_MAX_COUNT"
+                      :label="t('setting.system.dbBackupMaxCount')"
+                      :hint="t('setting.system.dbBackupMaxCountHint')"
+                      persistent-hint
+                      min="0"
+                      step="1"
+                      type="number"
+                      :rules="dbBackupMaxCountRules"
+                      prepend-inner-icon="mdi-backup-restore"
+                    />
+                  </VCol>
+                  <VCol cols="12">
+                    <VSwitch
+                      v-model="SystemSettings.Advanced.DB_BACKUP_ON_UPGRADE"
+                      :label="t('setting.system.dbBackupOnUpgrade')"
+                      :hint="t('setting.system.dbBackupOnUpgradeHint')"
+                      persistent-hint
+                    />
+                  </VCol>
+                </template>
+                <VCol cols="12">
+                  <VSwitch
                     v-model="SystemSettings.Advanced.DATA_CLEANUP_ENABLE"
                     :label="t('setting.system.dataCleanupEnable')"
                     :hint="t('setting.system.dataCleanupEnableHint')"
@@ -2525,6 +2700,40 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                     prepend-inner-icon="mdi-swap-horizontal"
                   />
                 </VCol>
+                <VCol cols="12" md="6">
+                  <VTextField
+                    v-model.number="SystemSettings.Advanced.TRANSFER_MAX_FAILED_RETRIES"
+                    :label="t('setting.system.transferMaxFailedRetries')"
+                    :hint="t('setting.system.transferMaxFailedRetriesHint')"
+                    persistent-hint
+                    type="number"
+                    min="1"
+                    max="10"
+                    prepend-inner-icon="mdi-refresh-alert"
+                  />
+                </VCol>
+                <VCol v-if="SystemSettings.Advanced.FS_PROXY_ENABLED" cols="12" md="6">
+                  <VTextField
+                    v-model.number="SystemSettings.Advanced.FS_PROXY_TIMEOUT"
+                    :label="t('setting.system.fsProxyTimeout')"
+                    :hint="t('setting.system.fsProxyTimeoutHint')"
+                    persistent-hint
+                    type="number"
+                    min="5"
+                    prepend-inner-icon="mdi-timer-outline"
+                  />
+                </VCol>
+                <VCol v-if="SystemSettings.Advanced.FS_PROXY_ENABLED" cols="12" md="6">
+                  <VTextField
+                    v-model.number="SystemSettings.Advanced.FS_PROXY_STALL_TIMEOUT"
+                    :label="t('setting.system.fsProxyStallTimeout')"
+                    :hint="t('setting.system.fsProxyStallTimeoutHint')"
+                    persistent-hint
+                    type="number"
+                    min="10"
+                    prepend-inner-icon="mdi-timer-alert-outline"
+                  />
+                </VCol>
               </VRow>
               <VRow>
                 <VCol cols="12" md="6">
@@ -2532,6 +2741,14 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                     v-model="SystemSettings.Advanced.PLUGIN_AUTO_RELOAD"
                     :label="t('setting.system.pluginAutoReload')"
                     :hint="t('setting.system.pluginAutoReloadHint')"
+                    persistent-hint
+                  />
+                </VCol>
+                <VCol cols="12" md="6">
+                  <VSwitch
+                    v-model="SystemSettings.Advanced.FS_PROXY_ENABLED"
+                    :label="t('setting.system.fsProxyEnabled')"
+                    :hint="t('setting.system.fsProxyEnabledHint')"
                     persistent-hint
                   />
                 </VCol>
@@ -2549,6 +2766,14 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                     :label="t('setting.system.rustAccel')"
                     :hint="rustAccelHint"
                     :disabled="!rustAccelAvailable"
+                    persistent-hint
+                  />
+                </VCol>
+                <VCol cols="12" md="6">
+                  <VSwitch
+                    v-model="SystemSettings.Advanced.MONITOR_NETWORK_FAST_MODE"
+                    :label="t('setting.system.monitorNetworkFastMode')"
+                    :hint="t('setting.system.monitorNetworkFastModeHint')"
                     persistent-hint
                   />
                 </VCol>

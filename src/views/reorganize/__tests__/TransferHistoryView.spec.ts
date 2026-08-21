@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { cwd } from 'node:process'
+import { resolve } from 'node:path'
 import type { TransferHistory } from '@/api/types'
 import i18n from '@/plugins/i18n'
 import TransferHistoryView from '@/views/reorganize/TransferHistoryView.vue'
@@ -6,6 +9,8 @@ import { renderWithProviders } from '@tests/support/render'
 import { flushPromises } from '@vue/test-utils'
 import { computed, defineComponent, h, nextTick, ref, unref, type PropType } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const transferHistorySource = readFileSync(resolve(cwd(), 'src/views/reorganize/TransferHistoryView.vue'), 'utf8')
 
 const mocks = vi.hoisted(() => ({
   apiDelete: vi.fn(),
@@ -22,11 +27,11 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api', () => ({
-  default: {
+  default: createDataApiMock({
     delete: (...args: unknown[]) => mocks.apiDelete(...args),
     get: (...args: unknown[]) => mocks.apiGet(...args),
     post: (...args: unknown[]) => mocks.apiPost(...args),
-  },
+  }),
 }))
 
 vi.mock('vue-toastification', () => ({
@@ -110,7 +115,10 @@ const HistoryTableStub = defineComponent({
       return h('section', { 'aria-label': '整理历史桌面列表' }, [
         h('output', { 'aria-label': '整理历史排序结果' }, JSON.stringify(sortResults)),
         ...props.items.map(item =>
-          h('article', { 'data-history-id': item.id }, [h('span', item.title), slots['item.actions']?.({ item })]),
+          h('article', { 'data-history-id': item.id }, [
+            item.image ? (slots['item.title']?.({ item }) ?? h('span', item.title)) : h('span', item.title),
+            slots['item.actions']?.({ item }),
+          ]),
         ),
         h(
           'button',
@@ -226,6 +234,22 @@ const EmptyStub = defineComponent({
   },
 })
 
+const ImageStub = defineComponent({
+  name: 'VImg',
+  inheritAttrs: false,
+  props: {
+    alt: String,
+    cover: Boolean,
+    src: String,
+  },
+  setup(props, { attrs }) {
+    return () =>
+      h('div', { ...attrs, 'data-cover': String(props.cover) }, [
+        h('img', { alt: props.alt, class: 'v-img__img', src: props.src }),
+      ])
+  },
+})
+
 const ListItemStub = defineComponent({
   name: 'VListItem',
   inheritAttrs: false,
@@ -295,6 +319,7 @@ async function renderHistory(initialRoute = '/history') {
         ProgressiveCardGrid: ProgressiveGridStub,
         VCombobox: SearchStub,
         VDataTableVirtual: HistoryTableStub,
+        VImg: ImageStub,
         VInfiniteScroll: InfiniteScrollStub,
         IconBtn: PassthroughStub,
         VList: PassthroughStub,
@@ -401,6 +426,40 @@ describe('TransferHistoryView', () => {
     oldRequest.resolve(historyResponse([createHistory(1, '旧结果')]))
     await flushPromises()
     expect(screen.queryByText('旧结果')).not.toBeInTheDocument()
+  })
+
+  it('constrains desktop Poster images to a fixed 2:3 cover frame', async () => {
+    const item = createHistory(1, '桌面海报', {
+      image: '/poster.jpg',
+    })
+    mocks.apiGet.mockImplementation((path: string) => {
+      if (path === 'system/setting/public/Storages') return Promise.resolve(storageResponse())
+      return Promise.resolve(historyResponse([item]))
+    })
+
+    const { container } = await renderHistory()
+
+    expect(await screen.findByText('桌面海报')).toBeInTheDocument()
+    const frame = container.querySelector<HTMLElement>('.transfer-history-desktop-poster-frame')
+    const poster = frame?.querySelector<HTMLElement>('.transfer-history-desktop-poster')
+    const image = poster?.querySelector<HTMLImageElement>('.v-img__img')
+
+    expect(frame).toBeInTheDocument()
+    expect(poster).toBeInTheDocument()
+    expect(poster).toHaveAttribute('data-cover', 'true')
+    expect(image).toHaveAttribute('src', expect.stringContaining('system/img/0?imgurl=%2Fposter.jpg'))
+    expect(transferHistorySource).toContain('gap: 10px;')
+    expect(transferHistorySource).toContain('padding-block: 6px;')
+    expect(transferHistorySource).toContain('flex: 0 0 36px;')
+    expect(transferHistorySource).toContain('inline-size: 36px;')
+    expect(transferHistorySource).toContain('block-size: 54px;')
+    expect(transferHistorySource).toContain('max-inline-size: 36px;')
+    expect(transferHistorySource).toContain('max-block-size: 54px;')
+    expect(transferHistorySource).toContain('overflow: hidden;')
+    expect(transferHistorySource).toContain('aspect-ratio: 2 / 3;')
+    expect(transferHistorySource).toContain(
+      '.transfer-history-desktop-poster :deep(.v-img__img) {\n  object-fit: cover;',
+    )
   })
 
   it('exposes title, episode, and source-size ordering through desktop table headers', async () => {
@@ -528,6 +587,35 @@ describe('TransferHistoryView', () => {
     runDynamicAction('transferHistory.actions.exitBatchMode')
     await nextTick()
     expect(screen.getByRole('button', { name: '批量选择' })).toBeInTheDocument()
+  })
+
+  it('uses the storage-name fallback for both grouped and ungrouped desktop paths', () => {
+    expect(transferHistorySource.match(/getHistoryStorageName\(item\?\.src_storage\)/g)).toHaveLength(3)
+    expect(transferHistorySource.match(/getHistoryStorageName\(item\?\.dest_storage\)/g)).toHaveLength(3)
+    expect(transferHistorySource).not.toContain("storageDict[item?.src_storage || '']")
+    expect(transferHistorySource).not.toContain("storageDict[item?.dest_storage || '']")
+  })
+
+  it('shows actual audio specs in mobile music history', async () => {
+    mocks.desktop = false
+    const item = createHistory(2, '晴天', {
+      audio_format: 'FLAC',
+      bit_depth: 24,
+      bitrate: 2_304_000,
+      category: '华语流行',
+      sample_rate: 96_000,
+      type: '音乐',
+      year: '2003',
+    })
+    mocks.apiGet.mockImplementation((path: string) => {
+      if (path === 'system/setting/public/Storages') return Promise.resolve(storageResponse())
+      return Promise.resolve(historyResponse([item]))
+    })
+
+    await renderHistory()
+    await fireEvent.click(screen.getByRole('button', { name: '加载下一页' }))
+
+    expect(await screen.findByText('华语流行 / 2003 / FLAC · 24-bit · 96 kHz · 2,304 kbps')).toBeInTheDocument()
   })
 
   it('prevents a mobile request invalidated by a route reset from appending stale records', async () => {

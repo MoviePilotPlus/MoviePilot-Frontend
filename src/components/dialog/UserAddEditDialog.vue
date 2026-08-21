@@ -3,6 +3,7 @@ import { useToast } from 'vue-toastification'
 import type { User } from '@/api/types'
 import { doneNProgress, startNProgress } from '@/api/nprogress'
 import api from '@/api'
+import { getApiBusinessErrorMessage } from '@/api/client'
 import { useDisplay } from 'vuetify'
 import avatar1 from '@images/avatars/avatar-1.png'
 import { useUserStore } from '@/stores'
@@ -150,8 +151,8 @@ const permissionFeatureOptions = computed(() =>
   })),
 )
 
-const activePermissionOption = computed(() =>
-  permissionOptions.find(option => option.key === activePermissionCategory.value) ?? permissionOptions[0],
+const activePermissionOption = computed(
+  () => permissionOptions.find(option => option.key === activePermissionCategory.value) ?? permissionOptions[0],
 )
 
 const activePermissionFeatures = computed(() =>
@@ -322,16 +323,15 @@ async function addUser() {
   isAdding.value = true
   startNProgress()
   try {
-    const result: { [key: string]: string } = await api.post('user/', userForm.value)
-    if (result.success) {
-      $toast.success(t('dialog.userAddEdit.userCreated', { name: userForm.value.name }))
-      emit('save')
-    } else {
-      $toast.error(t('dialog.userAddEdit.userCreateFailed', { message: result.message }))
-      // 清除用户名
-      userForm.value.name = ''
-    }
+    await api.post<null>('user/', userForm.value, { feedback: 'silent' })
+    $toast.success(t('dialog.userAddEdit.userCreated', { name: userForm.value.name }))
+    emit('save')
   } catch (error) {
+    $toast.error(
+      t('dialog.userAddEdit.userCreateFailed', {
+        message: getApiBusinessErrorMessage(error) || t('common.serverConnectionFailed'),
+      }),
+    )
     console.error(error)
   }
   doneNProgress()
@@ -374,47 +374,39 @@ async function updateUser() {
     // 确保权限数据正确传递
     userData.permissions = userPermissions.value
 
-    const result: { [key: string]: any } = await api.put('user/', userData)
+    await api.put<null>('user/', userData, { feedback: 'silent' })
 
-    if (result.success) {
-      if (oldUserName !== currentUserName.value) {
-        $toast.success(t('dialog.userAddEdit.userUpdateSuccess', { name: `${oldUserName} → ${currentUserName.value}` }))
-        // 如果是当前登录用户，更新当前用户名称显示
-        if (isCurrentUser.value) {
-          userStore.setUserName(currentUserName.value)
-        }
-      } else {
-        $toast.success(t('dialog.userAddEdit.userUpdateSuccess', { name: userForm.value?.name }))
-      }
-      // 更新本地头像显示
-      if (oldAvatar !== currentAvatar.value && isCurrentUser.value) {
-        userStore.setAvatar(currentAvatar.value)
-      }
-      // 如果是当前登录用户，更新权限信息
+    if (oldUserName !== currentUserName.value) {
+      $toast.success(t('dialog.userAddEdit.userUpdateSuccess', { name: `${oldUserName} → ${currentUserName.value}` }))
+      // 如果是当前登录用户，更新当前用户名称显示
       if (isCurrentUser.value) {
-        userStore.setPermissions(userPermissions.value)
+        userStore.setUserName(currentUserName.value)
       }
-      emit('save')
     } else {
-      if (oldUserName !== currentUserName.value) {
-        $toast.error(t('dialog.userAddEdit.userUpdateFailed', { message: result.message }))
-        currentUserName.value = oldUserName
-      } else {
-        $toast.error(t('dialog.userAddEdit.userUpdateFailed', { message: result.message }))
-      }
+      $toast.success(t('dialog.userAddEdit.userUpdateSuccess', { name: userForm.value?.name }))
     }
-    //失败缓存值还原
+    // 更新本地头像显示
+    if (oldAvatar !== currentAvatar.value && isCurrentUser.value) {
+      userStore.setAvatar(currentAvatar.value)
+    }
+    // 如果是当前登录用户，更新权限信息
+    if (isCurrentUser.value) {
+      userStore.setPermissions(userPermissions.value)
+    }
+    emit('save')
+  } catch (error) {
+    $toast.error(t('dialog.userAddEdit.userUpdateFailed', { message: error instanceof Error ? error.message : '' }))
+    console.error('更新失败:', error)
+  } finally {
+    // 表单中的已保存值用于恢复操作，待提交值只保留在对应的编辑状态中。
     currentUserName.value = userForm.value.name
     userForm.value.name = oldUserName
     currentAvatar.value = userForm.value.avatar
     userForm.value.avatar = oldAvatar
     userForm.value.password = ''
-  } catch (error) {
-    $toast.error(t('dialog.userAddEdit.userUpdateFailed', { message: '' }))
-    console.error('更新失败:', error)
+    doneNProgress()
+    isUpdating.value = false
   }
-  doneNProgress()
-  isUpdating.value = false
 }
 
 // 用户状态转换，true/false转换为1/0
@@ -771,7 +763,9 @@ onMounted(() => {
                   }"
                   @click="userPermissions[activePermissionCategory] && togglePermissionFeature(feature.key)"
                   @keydown.enter="userPermissions[activePermissionCategory] && togglePermissionFeature(feature.key)"
-                  @keydown.space.prevent="userPermissions[activePermissionCategory] && togglePermissionFeature(feature.key)"
+                  @keydown.space.prevent="
+                    userPermissions[activePermissionCategory] && togglePermissionFeature(feature.key)
+                  "
                 >
                   <VCheckboxBtn
                     :model-value="isFeatureEnabled(feature.key)"
@@ -871,7 +865,10 @@ onMounted(() => {
   background: var(--permission-editor-panel-bg);
   color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   cursor: pointer;
-  transition: border-color 0.18s ease, background-color 0.18s ease, opacity 0.18s ease;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    opacity 0.18s ease;
 }
 
 .permission-category-option {

@@ -4,6 +4,8 @@ import type { TransferHistory } from '@/api/types'
 import noImage from '@images/no-image.jpeg'
 import { formatDateDifference, formatFileSize } from '@/@core/utils/formatters'
 import { useI18n } from 'vue-i18n'
+import { formatMusicAudioSpecs } from '@/utils/music'
+import { useKeepAliveRefresh } from '@/composables/useKeepAliveRefresh'
 
 const { t } = useI18n()
 
@@ -13,10 +15,10 @@ const recentImports = ref<TransferHistory[]>([])
 /** 查询最近成功整理的媒体记录。 */
 async function loadRecentImports() {
   try {
-    const response: { data?: { list?: TransferHistory[] } } = await api.get('history/transfer', {
+    const response = await api.get<{ list?: TransferHistory[] }>('history/transfer', {
       params: { page: 1, count: 5, status: true },
     })
-    recentImports.value = response.data?.list ?? []
+    recentImports.value = response.list ?? []
   } catch (error) {
     console.error(error)
   }
@@ -32,14 +34,16 @@ function getPosterUrl(item: TransferHistory) {
 /** 组合媒体类型、季集和文件大小作为记录副标题。 */
 function getImportMeta(item: TransferHistory) {
   const values = [item.type, item.seasons, item.episodes]
+  if (item.type === '音乐') values.push(formatMusicAudioSpecs(item))
   const fileSize = Number(item.src_fileitem?.size ?? 0)
   if (fileSize > 0) values.push(formatFileSize(fileSize))
 
   return values.filter(Boolean).join(' · ')
 }
 
-onMounted(loadRecentImports)
-onActivated(loadRecentImports)
+const { refresh: refreshRecentImports } = useKeepAliveRefresh(loadRecentImports)
+
+onMounted(refreshRecentImports)
 </script>
 
 <template>

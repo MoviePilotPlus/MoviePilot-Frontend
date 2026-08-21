@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const API_BASE_URL = 'http://localhost/api/v1/'
 
 const mocks = vi.hoisted(() => ({
+  confirm: vi.fn(),
   doneNProgress: vi.fn(),
   startNProgress: vi.fn(),
   toastError: vi.fn(),
@@ -25,6 +26,10 @@ vi.mock('@/api/nprogress', () => ({
 
 vi.mock('vue-toastification', () => ({
   useToast: () => ({ error: mocks.toastError, success: mocks.toastSuccess }),
+}))
+
+vi.mock('@/composables/useConfirm', () => ({
+  useConfirm: () => mocks.confirm,
 }))
 
 type SelectItem = string | { title: string; value: string }
@@ -138,7 +143,8 @@ function createTorrent(overrides: Partial<TorrentInfo> = {}): TorrentInfo {
     freedate_diff: '',
     grabs: 3,
     hit_and_run: false,
-    imdbid: 'tt0060001',
+    media_id: 'tt0060001',
+    media_source: 'imdb',
     labels: [],
     peers: 2,
     pri_order: 0,
@@ -158,7 +164,8 @@ function createMedia(overrides: Partial<MediaInfo> = {}): MediaInfo {
   return {
     episode_run_time: [],
     origin_country: [],
-    source: 'themoviedb',
+    media_id: '6001',
+    media_source: 'themoviedb',
     title: '测试电影',
     tmdb_id: 6001,
     type: '电影',
@@ -295,6 +302,7 @@ describe('AddDownloadDialog directories', () => {
 describe('AddDownloadDialog submissions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.confirm.mockResolvedValue(false)
     vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.spyOn(console, 'log').mockImplementation(() => {})
   })
@@ -313,7 +321,10 @@ describe('AddDownloadDialog submissions', () => {
     server.use(downloadHandler('download/add', { data: null, success: true }, 200, submitted))
     const user = userEvent.setup()
 
-    await renderDialog({ recognizeSource: 'bangumi' })
+    await renderDialog({
+      recognizeSource: 'bangumi',
+      torrent: createTorrent({ media_id: undefined, media_source: undefined }),
+    })
 
     await user.click(screen.getByRole('button', { name: '显示高级选项' }))
     await user.type(screen.getByLabelText('Bangumi编号'), '24680')
@@ -330,7 +341,7 @@ describe('AddDownloadDialog submissions', () => {
     const deferred = createDeferred<JsonBodyType>()
     const submitted = vi.fn()
     server.use(downloadHandler('download/add', deferred.promise, 200, submitted))
-    const torrent = createTorrent()
+    const torrent = createTorrent({ media_id: undefined, media_source: undefined })
     const user = userEvent.setup()
     const { events } = await renderDialog({
       directories: [createDirectory({ download_path: '/downloads/remote', storage: 'rclone' })],
@@ -371,6 +382,50 @@ describe('AddDownloadDialog submissions', () => {
     expect(submitButton).not.toBeDisabled()
   })
 
+  it('submits the selected album namespace for a music torrent without media context', async () => {
+    const submitted = vi.fn()
+    server.use(downloadHandler('download/add', { data: null, success: true }, 200, submitted))
+    const user = userEvent.setup()
+
+    await renderDialog({
+      recognizeSource: 'themoviedb',
+      torrent: createTorrent({
+        category: '音乐',
+        media_id: undefined,
+        media_source: undefined,
+        title: '周杰伦 - 叶惠美 FLAC',
+      }),
+    })
+
+    await user.click(screen.getByRole('button', { name: '显示高级选项' }))
+    await user.selectOptions(screen.getByLabelText('音乐实体'), 'album')
+    await user.type(screen.getByLabelText('MusicBrainz ID'), '977e6978-139d-425c-bb98-6b0c62d1e45e')
+    await user.click(screen.getByRole('button', { name: '开始下载' }))
+
+    await waitFor(() => expect(submitted).toHaveBeenCalledOnce())
+    expect(submitted.mock.calls[0][0]).toMatchObject({
+      media_id: '977e6978-139d-425c-bb98-6b0c62d1e45e',
+      media_source: 'musicbrainz',
+      music_type: 'album',
+    })
+  })
+
+  it('uses the source-native identity carried by a torrent without auxiliary ID fallback', async () => {
+    const submitted = vi.fn()
+    server.use(downloadHandler('download/add', { data: null, success: true }, 200, submitted))
+    const torrent = createTorrent({ media_id: 'tt0111161', media_source: 'imdb' })
+    const user = userEvent.setup()
+
+    await renderDialog({ torrent })
+    await user.click(screen.getByRole('button', { name: '开始下载' }))
+
+    await waitFor(() => expect(submitted).toHaveBeenCalledOnce())
+    expect(submitted.mock.calls[0][0]).toMatchObject({
+      media_id: 'tt0111161',
+      media_source: 'imdb',
+    })
+  })
+
   it('uses download/ for an existing media without locking unrelated optional fields', async () => {
     const submitted = vi.fn()
     server.use(downloadHandler('download/', { data: null, success: true }, 200, submitted))
@@ -392,6 +447,72 @@ describe('AddDownloadDialog submissions', () => {
     expect(mocks.doneNProgress).toHaveBeenCalledOnce()
   })
 
+  it('retries an unrecognized download after confirmation', async () => {
+    const submitted: Array<Record<string, unknown>> = []
+    server.use(
+      http.post(new URL('download/add', API_BASE_URL).href, async ({ request }) => {
+        submitted.push((await request.json()) as Record<string, unknown>)
+        if (submitted.length === 1) {
+          return HttpResponse.json({
+            data: { requires_confirmation: true },
+            message: '无法识别媒体信息',
+            success: false,
+          })
+        }
+        return HttpResponse.json({ data: { download_id: 'collection-download' }, success: true })
+      }),
+    )
+    mocks.confirm.mockResolvedValue(true)
+    const user = userEvent.setup()
+    const { events, torrent } = await renderDialog()
+
+    await user.click(screen.getByRole('button', { name: '开始下载' }))
+
+    await waitFor(() => expect(events.done).toHaveBeenCalledWith(torrent.enclosure))
+    expect(mocks.confirm).toHaveBeenCalledWith({
+      type: 'warn',
+      title: '无法识别媒体信息',
+      content: '无法识别此资源的媒体信息，是否仍要下载？',
+      confirmText: '继续下载',
+    })
+    expect(submitted).toHaveLength(2)
+    expect(submitted[0]).not.toHaveProperty('allow_unrecognized')
+    expect(submitted[1]).toEqual({
+      ...submitted[0],
+      allow_unrecognized: true,
+    })
+    expect(events.error).not.toHaveBeenCalled()
+    expect(mocks.toastError).not.toHaveBeenCalled()
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('测试站 测试种子 下载成功！')
+    expect(mocks.startNProgress).toHaveBeenCalledOnce()
+    expect(mocks.doneNProgress).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the download dialog open when unrecognized download confirmation is cancelled', async () => {
+    const submitted = vi.fn()
+    server.use(
+      downloadHandler(
+        'download/add',
+        { data: { requires_confirmation: true }, message: '无法识别媒体信息', success: false },
+        200,
+        submitted,
+      ),
+    )
+    const user = userEvent.setup()
+    const { events } = await renderDialog()
+
+    await user.click(screen.getByRole('button', { name: '开始下载' }))
+
+    await waitFor(() => expect(mocks.confirm).toHaveBeenCalledOnce())
+    expect(submitted).toHaveBeenCalledOnce()
+    expect(events.done).not.toHaveBeenCalled()
+    expect(events.error).not.toHaveBeenCalled()
+    expect(mocks.toastSuccess).not.toHaveBeenCalled()
+    expect(mocks.toastError).not.toHaveBeenCalled()
+    expect(mocks.doneNProgress).toHaveBeenCalledOnce()
+    expect(screen.getByRole('button', { name: '开始下载' })).not.toBeDisabled()
+  })
+
   it('treats success:false at HTTP 200 as a business failure', async () => {
     server.use(downloadHandler('download/add', { data: null, message: '下载器拒绝任务', success: false }))
     const user = userEvent.setup()
@@ -401,6 +522,7 @@ describe('AddDownloadDialog submissions', () => {
 
     await waitFor(() => expect(events.error).toHaveBeenCalledWith('下载器拒绝任务'))
     expect(events.done).not.toHaveBeenCalled()
+    expect(mocks.confirm).not.toHaveBeenCalled()
     expect(mocks.toastError).toHaveBeenCalledWith('测试站 测试种子 下载失败：下载器拒绝任务！')
     expect(mocks.startNProgress).toHaveBeenCalledOnce()
     expect(mocks.doneNProgress).toHaveBeenCalledOnce()

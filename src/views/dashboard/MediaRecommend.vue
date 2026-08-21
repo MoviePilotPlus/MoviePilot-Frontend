@@ -3,7 +3,7 @@ import api from '@/api'
 import type { MediaInfo } from '@/api/types'
 import DashboardRetryButton from '@/components/misc/DashboardRetryButton.vue'
 import { useDashboardSnapshot } from '@/composables/useDashboardSnapshot'
-import { getMediaSubscribeId } from '@/composables/useMediaSubscribe'
+import { getMediaSubscribeId, getMediaSubscribeIdentity } from '@/composables/useMediaSubscribe'
 import { useGlobalSettingsStore } from '@/stores'
 import { getDisplayImageUrl } from '@/utils/imageUtils'
 import { createBuiltInRecommendSources, type RecommendViewSource } from '@/utils/recommendSources'
@@ -60,22 +60,9 @@ function getSourceIcon(source?: RecommendViewSource) {
   return 'mdi-movie-open-star-outline'
 }
 
-/** 将不同接口包装格式归一化为媒体数组。 */
-function normalizeMediaResponse(response: unknown): MediaInfo[] {
-  if (Array.isArray(response)) return response
-  if (!response || typeof response !== 'object') return []
-
-  const data = (response as { data?: unknown }).data
-  if (Array.isArray(data)) return data
-  if (data && typeof data === 'object' && Array.isArray((data as { list?: unknown }).list)) {
-    return (data as { list: MediaInfo[] }).list
-  }
-  return []
-}
-
 /** 判断媒体是否具备可展示图片和可进入详情页的标识。 */
 function isUsableMedia(item: MediaInfo) {
-  const hasMediaId = Boolean(item.tmdb_id || item.collection_id)
+  const hasMediaId = Boolean((item.media_source && item.media_id) || item.collection_id)
   return Boolean(item.title && (item.backdrop_path || item.poster_path) && hasMediaId)
 }
 
@@ -103,10 +90,10 @@ async function loadMedia(sourcePath = selectedSourcePath.value) {
   loading.value = !cachedItems
   loadFailed.value = false
   try {
-    const response = await api.get(sourcePath)
+    const response = await api.get<MediaInfo[] | null>(sourcePath)
     if (currentRequestId !== requestId) return
 
-    const items = normalizeMediaResponse(response).filter(isUsableMedia).slice(0, RECOMMEND_SLIDE_COUNT)
+    const items = (response ?? []).filter(isUsableMedia).slice(0, RECOMMEND_SLIDE_COUNT)
     mediaSnapshots.get(sourcePath)?.writeSnapshot(items)
     mediaItems.value = items
     hasSnapshot.value = true
@@ -155,11 +142,14 @@ function goToMediaDetail() {
     void router.push({ path: `/browse/tmdb/collection/${item.collection_id}`, query: { title: item.title } })
     return
   }
+  const identity = getMediaSubscribeIdentity(item)
+  if (!identity) return
 
   void router.push({
     path: '/media',
     query: {
-      mediaid: getMediaSubscribeId(item),
+      media_source: identity.source,
+      media_id: identity.mediaId,
       title: item.title,
       type: item.type,
       year: item.year,

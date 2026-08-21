@@ -24,9 +24,9 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api', () => ({
-  default: {
+  default: createDataApiMock({
     get: (...args: unknown[]) => mocks.apiGet(...args),
-  },
+  }),
 }))
 
 vi.mock('vue-toastification', () => ({
@@ -78,13 +78,12 @@ async function renderNativeSubscribeHarness(subscribePermission = true) {
 }
 
 describe('native subscribe media normalization', () => {
-  it('normalizes legacy provider aliases and English media types', () => {
+  it('normalizes the declared media identity and English media types', () => {
     const result = normalizeNativeSubscribeMedia({
-      anilistid: '154587',
-      bangumiid: 4011,
-      doubanid: 3601,
+      anilist_id: 999,
+      media_id: '154587',
+      media_source: 'anilist',
       title: '测试剧集',
-      tmdbid: '2501',
       type: 'tv',
       year: 2026,
     })
@@ -92,21 +91,20 @@ describe('native subscribe media normalization', () => {
     expect(result).toEqual({
       success: true,
       media: expect.objectContaining({
-        anilist_id: 154587,
-        bangumi_id: '4011',
-        douban_id: '3601',
+        media_id: '154587',
+        media_source: 'anilist',
         title: '测试剧集',
-        tmdb_id: 2501,
         type: '电视剧',
         year: '2026',
       }),
     })
+    if (result.success) expect(result.media).not.toHaveProperty('anilist_id')
   })
 
-  it('accepts generic source identifiers', () => {
+  it('accepts another fixed source identifier', () => {
     const result = normalizeNativeSubscribeMedia({
       media_id: 'subject-42',
-      media_source: 'custom-source',
+      media_source: 'bilibili',
       title: '自定义媒体',
       type: 'movie',
     })
@@ -115,7 +113,26 @@ describe('native subscribe media normalization', () => {
       success: true,
       media: expect.objectContaining({
         media_id: 'subject-42',
-        source: 'custom-source',
+        media_source: 'bilibili',
+        type: '电影',
+      }),
+    })
+  })
+
+  it('accepts a plugin-defined media source identity', () => {
+    const result = normalizeNativeSubscribeMedia({
+      media_id: 'custom-42',
+      media_source: 'acme.video',
+      title: '插件媒体',
+      type: 'movie',
+    })
+
+    expect(result).toEqual({
+      success: true,
+      media: expect.objectContaining({
+        media_id: 'custom-42',
+        media_source: 'acme.video',
+        title: '插件媒体',
         type: '电影',
       }),
     })
@@ -126,6 +143,8 @@ describe('native subscribe media normalization', () => {
     [{ title: '缺少类型', tmdb_id: 1 }, 'unsupportedType'],
     [{ title: '', tmdb_id: 1, type: '电影' }, 'missingTitle'],
     [{ title: '缺少ID', type: '电视剧' }, 'missingId'],
+    [{ title: '仅有旧来源 ID', tmdb_id: 1, type: '电影' }, 'missingId'],
+    [{ media_id: '1', media_source: 'invalid:source', title: '非法来源', type: '电影' }, 'missingId'],
   ])('rejects invalid input %#', (input, reason) => {
     expect(normalizeNativeSubscribeMedia(input)).toEqual({ success: false, reason })
   })
@@ -147,7 +166,9 @@ describe('plugin native subscribe flow', () => {
     ])
     const nativeSubscribe = await renderNativeSubscribeHarness()
 
-    await expect(nativeSubscribe({ title: '原生选季', tmdbid: 500, type: 'tv' })).resolves.toEqual({ success: true })
+    await expect(
+      nativeSubscribe({ media_id: '500', media_source: 'themoviedb', title: '原生选季', type: 'tv' }),
+    ).resolves.toEqual({ success: true })
 
     expect(mocks.apiGet).toHaveBeenCalledWith('subscribe/')
     expect(mocks.subscribeOptions?.subscribedSeasons.value).toEqual([1, 3])
@@ -157,14 +178,26 @@ describe('plugin native subscribe flow', () => {
 
   it('restores movie subscribe and exists state before using the native movie flow', async () => {
     mocks.checkSubscribe.mockResolvedValue(true)
-    mocks.apiGet.mockResolvedValue({ success: true })
+    mocks.apiGet.mockResolvedValue({ item: { id: 'library-600' } })
     const nativeSubscribe = await renderNativeSubscribeHarness()
 
-    await expect(nativeSubscribe({ title: '原生电影', tmdb_id: 600, type: '电影' })).resolves.toEqual({ success: true })
+    await expect(
+      nativeSubscribe({
+        media_source: 'themoviedb',
+        media_id: '600',
+        title: '原生电影',
+        type: '电影',
+      }),
+    ).resolves.toEqual({ success: true })
 
     expect(mocks.checkSubscribe).toHaveBeenCalledWith(null)
     expect(mocks.apiGet).toHaveBeenCalledWith('mediaserver/exists', {
-      params: expect.objectContaining({ mtype: '电影', title: '原生电影', tmdbid: 600 }),
+      params: expect.objectContaining({
+        media_source: 'themoviedb',
+        media_id: '600',
+        mtype: '电影',
+        title: '原生电影',
+      }),
     })
     expect(mocks.subscribeOptions?.isSubscribed.value).toBe(true)
     expect(mocks.subscribeOptions?.isExists()).toBe(true)
@@ -182,7 +215,12 @@ describe('plugin native subscribe flow', () => {
 
   it('returns a structured fallback result when the user lacks subscribe permission', async () => {
     const nativeSubscribe = await renderNativeSubscribeHarness(false)
-    const result = await nativeSubscribe({ title: '无权限', tmdb_id: 700, type: '电影' })
+    const result = await nativeSubscribe({
+      media_id: '700',
+      media_source: 'themoviedb',
+      title: '无权限',
+      type: '电影',
+    })
 
     expect(result).toEqual({
       code: 'PERMISSION_DENIED',

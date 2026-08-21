@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import api from '@/api'
+import { manageStorage } from '@/api/manage'
 import { useI18n } from 'vue-i18n'
 import { useDisplay } from 'vuetify'
 
@@ -38,65 +38,65 @@ async function handleDone() {
   emit('done')
 }
 
-// 调用/aliyun/qrcode api生成二维码
+// 调用存储统一管理接口生成二维码
 async function getQrcode() {
   try {
-    const result: { [key: string]: any } = await api.get('/storage/qrcode/alipan')
-    if (result.success && result.data) {
-      qrCodeUrl.value = result.data.codeUrl
-      timeoutTimer = setTimeout(checkQrcode, 3000)
-    } else {
-      text.value = result.message
-    }
+    const result = await manageStorage<{ codeUrl: string }>(
+      'alipan',
+      'generate_qrcode',
+      {},
+      { feedback: 'silent' },
+    )
+    qrCodeUrl.value = result.codeUrl
+    timeoutTimer = setTimeout(checkQrcode, 3000)
   } catch (e) {
     console.error(e)
+    text.value = e instanceof Error ? e.message : t('common.apiRequestFailed')
   }
 }
 
-// 调用/aliyun/check api验证二维码
+// 调用存储统一管理接口验证二维码
 async function checkQrcode() {
   try {
-    const result: { [key: string]: any } = await api.get('/storage/check/alipan')
-    if (result.success && result.data) {
-      const qrCodeStatus = result.data.status
-      text.value = result.data.tip
-      if (qrCodeStatus == 'LoginSuccess') {
-        // 登录成功
-        alertType.value = 'success'
-        handleDone()
-      } else if (qrCodeStatus == 'WaitLogin' || qrCodeStatus == 'ScanSuccess') {
-        // 等待登录扫码成功
-        alertType.value = 'info'
-        clearTimeout(timeoutTimer)
-        timeoutTimer = setTimeout(checkQrcode, 3000)
-      } else {
-        // 二维码过期
-        alertType.value = 'error'
-      }
+    const result = await manageStorage<{ status: string; tip: string }>(
+      'alipan',
+      'check_login',
+      {},
+      { feedback: 'silent' },
+    )
+    const qrCodeStatus = result.status
+    text.value = result.tip
+    if (qrCodeStatus == 'LoginSuccess') {
+      // 登录成功
+      alertType.value = 'success'
+      handleDone()
+    } else if (qrCodeStatus == 'WaitLogin' || qrCodeStatus == 'ScanSuccess') {
+      // 等待登录扫码成功
+      alertType.value = 'info'
+      clearTimeout(timeoutTimer)
+      timeoutTimer = setTimeout(checkQrcode, 3000)
     } else {
+      // 二维码过期
       alertType.value = 'error'
-      text.value = result.message
     }
   } catch (e) {
     console.error(e)
+    alertType.value = 'error'
+    text.value = e instanceof Error ? e.message : t('common.apiRequestFailed')
   }
 }
 
 // 重置配置
 async function handleReset() {
   try {
-    const result: { [key: string]: any } = await api.get('/storage/reset/alipan')
-    console.log(result.success)
-    if (result.success) {
-      // 重置成功
-      alertType.value = 'success'
-      handleDone()
-    } else {
-      alertType.value = 'error'
-      text.value = result.message
-    }
+    await manageStorage('alipan', 'reset_config', {}, { feedback: 'silent' })
+    // 重置成功
+    alertType.value = 'success'
+    handleDone()
   } catch (e) {
     console.error(e)
+    alertType.value = 'error'
+    text.value = e instanceof Error ? e.message : t('common.apiRequestFailed')
   }
 }
 

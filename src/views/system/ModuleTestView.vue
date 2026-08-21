@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import api from '@/api'
+import api, { getApiBusinessErrorMessage, isApiBusinessFailure } from '@/api'
 import { useI18n } from 'vue-i18n'
 import { useTheme } from 'vuetify'
 
@@ -14,12 +14,6 @@ interface ModuleListItem {
   name: string
   name_i18n?: string
   name_key?: string
-}
-
-interface ModuleTestResponse {
-  success: boolean
-  message?: string
-  message_i18n?: string
 }
 
 // 定义所有的模块ID、名称列表
@@ -46,24 +40,22 @@ async function getModules() {
     isChecking.value = true
     overallProgress.value = 0
 
-    const result: { [key: string]: any } = await api.get('system/modulelist')
-    if (result.success) {
-      const moduleList = result.data?.modules
-      if (moduleList) {
-        // 初始化模块列表
-        modules.value = moduleList.map((module: ModuleListItem, index: number) => ({
-          id: module.id,
-          name: module.name_i18n || module.name,
-          state: undefined,
-          errmsg: '',
-          loading: false,
-          visible: false,
-          delay: index * 200, // 每个模块延迟200ms出现
-        }))
+    const result = await api.get<{ modules?: ModuleListItem[] }>('system/modulelist')
+    const moduleList = result.modules
+    if (moduleList) {
+      // 初始化模块列表
+      modules.value = moduleList.map((module, index) => ({
+        id: module.id,
+        name: module.name_i18n || module.name,
+        state: undefined,
+        errmsg: '',
+        loading: false,
+        visible: false,
+        delay: index * 200, // 每个模块延迟200ms出现
+      }))
 
-        // 开始检查
-        await startModuleCheck()
-      }
+      // 开始检查
+      await startModuleCheck()
     }
   } catch (error) {
     console.error(error)
@@ -104,26 +96,24 @@ async function moduleTest(index: number) {
     const moduleid = target.id
     target.loading = true
 
-    const result = (await api.get(`system/moduletest/${moduleid}`)) as ModuleTestResponse
+    await api.get<null>(`system/moduletest/${moduleid}`, { feedback: 'silent' })
     target.loading = false
 
-    if (result.success) {
-      target.state = 'success'
-      target.name = `${target.name} - ${t('moduleTest.normal')}`
-    } else if (!result.message) {
-      target.state = undefined
-      target.name = `${target.name} - ${t('moduleTest.disabled')}`
-    } else {
-      target.state = 'error'
-      target.name = `${target.name} - ${t('moduleTest.error')}！`
-      target.errmsg = result.message_i18n || result.message || ''
-    }
+    target.state = 'success'
+    target.name = `${target.name} - ${t('moduleTest.normal')}`
   } catch (error) {
     console.error(error)
     const target = modules.value[index]
     target.loading = false
+    // 未运行的模块后端返回空消息的业务失败，按未启用展示。
+    if (isApiBusinessFailure(error) && !getApiBusinessErrorMessage(error)) {
+      target.state = undefined
+      target.name = `${target.name} - ${t('moduleTest.disabled')}`
+      target.errmsg = ''
+      return
+    }
     target.state = 'error'
-    target.errmsg = t('moduleTest.requestFailed')
+    target.errmsg = error instanceof Error ? error.message : t('moduleTest.requestFailed')
   }
 }
 

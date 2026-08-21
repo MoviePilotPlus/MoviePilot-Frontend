@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
+import api, { isApiResponse } from '@/api'
 import { useAuthStore, useUserStore } from '@/stores'
 import { getCurrentLocale } from '@/plugins/i18n'
 import { AGENT_ASSISTANT_LAYER_Z_INDEX } from '@/constants/agentAssistant'
@@ -73,6 +74,20 @@ interface AgentChoiceSelection {
   selected_description?: string
 }
 
+interface AgentChoiceCallbackData {
+  message?: string
+  traditional?: boolean
+  original_message_id?: string
+  original_chat_id?: string
+  choice_selection?: unknown
+  feedback?: {
+    selected_label?: string
+    selected_value?: string
+    selected_description?: string
+  }
+  display_message?: string
+}
+
 interface AgentChatMessage {
   id: string
   role: AgentMessageRole
@@ -110,6 +125,17 @@ interface AgentStreamEvent {
   target_message?: Partial<AgentChatMessage> & { id?: string }
   session_id?: string
 }
+
+const AGENT_STREAM_EVENT_TYPES = new Set<AgentStreamEvent['type']>([
+  'start',
+  'delta',
+  'tool',
+  'attachment',
+  'choice',
+  'message_update',
+  'done',
+  'error',
+])
 
 interface AgentPendingAttachment {
   id: string
@@ -153,6 +179,11 @@ interface AgentPendingStreamRecovery {
 
 interface AgentStreamReadResult {
   receivedTerminalEvent: boolean
+}
+
+interface ParsedSseBlock {
+  eventName: string
+  data: string
 }
 
 interface AgentSlashCommand {
@@ -211,6 +242,8 @@ const STREAM_STATE_PERSIST_DELAY = 1000
 
 const inputText = ref('')
 const messages = ref<AgentChatMessage[]>([])
+// 受保护内容只驻留当前组件内存，不进入消息历史或本地持久化。
+const protectedDeliveries = ref<string[]>([])
 const historySessions = ref<AgentSessionHistoryItem[]>([])
 const sessionId = ref('')
 const sending = ref(false)
@@ -228,6 +261,7 @@ const historyLoading = ref(false)
 const historyLoadingMore = ref(false)
 const historyPage = ref(1)
 const historyHasMore = ref(true)
+const fullscreen = ref(false)
 const slashCommands = ref<AgentSlashCommand[]>([])
 const slashCommandsLoading = ref(false)
 const slashCommandsLoaded = ref(false)
@@ -249,6 +283,7 @@ let userAbortRequested = false
 let streamRecoveryAbortRequested = false
 let streamRecoveryTimer: number | null = null
 let activeStreamStartedAt = 0
+let protectedDeliveryGeneration = 0
 
 // 汇总实时请求与后台恢复状态，保证恢复期间仍展示处理中并锁定会话操作。
 const isBusy = computed(() => sending.value || Boolean(pendingStreamRecovery.value))
@@ -293,9 +328,11 @@ const recordingTimeText = computed(() => {
 
   return `${minutes}:${String(remainSeconds).padStart(2, '0')}`
 })
-// 窄屏下直接全屏，避免聊天内容被压成半屏窄栏。
-const drawerWidth = computed(() => (display.mdAndDown.value ? '100vw' : '30rem'))
-const hasMessages = computed(() => messages.value.length > 0)
+// 窄屏下直接全屏，桌面端则允许用户按需扩展对话区域。
+const drawerWidth = computed(() => (display.mdAndDown.value || fullscreen.value ? '100vw' : '30rem'))
+// 仅桌面宽屏展示全屏开关，窄屏已默认占满视口。
+const canToggleFullscreen = computed(() => !display.mdAndDown.value)
+const hasConversationContent = computed(() => messages.value.length > 0 || protectedDeliveries.value.length > 0)
 const hasHistorySessions = computed(() => historySessions.value.length > 0)
 const currentUserName = computed(() => userStore.getUserName || t('common.user'))
 const isOpen = computed({
@@ -315,6 +352,12 @@ function createId(prefix: string) {
 // 创建 Web 智能助手本地会话 ID。
 function createSessionId() {
   return `web-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+// 受保护内容只属于当前可见范围；递增代次可阻止旧流在清理后重新写入。
+function invalidateProtectedDeliveries() {
+  protectedDeliveryGeneration += 1
+  protectedDeliveries.value = []
 }
 
 // 将未知字段安全转换为可展示文本。
@@ -671,22 +714,6 @@ function dedupeHistorySessions(sessions: AgentSessionHistoryItem[]) {
   return deduped.sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
-// 调用智能助手接口，并统一处理鉴权和标准响应格式。
-async function fetchAgentApi(path: string, options: RequestInit = {}) {
-  const response = await fetch(resolveApiUrl(path), {
-    ...options,
-    headers: buildAgentRequestHeaders(options.headers),
-    credentials: 'include',
-  })
-
-  if (!response.ok) throw new Error(await resolveAgentResponseErrorMessage(response))
-
-  const result = await response.json()
-  if (!result?.success) throw new Error(result?.message_i18n || result?.message || t('agentAssistant.error'))
-
-  return result.data
-}
-
 // 从 localStorage 读取历史会话索引，读取失败时回退为空列表。
 function restoreHistorySessions() {
   try {
@@ -702,7 +729,9 @@ async function loadServerHistorySessions() {
   historyHasMore.value = true
   historyLoading.value = true
   try {
-    const data = await fetchAgentApi(`message/agent/sessions?page=1&count=${HISTORY_PAGE_SIZE}`)
+    const data = await api.get<unknown>(`message/agent/sessions?page=1&count=${HISTORY_PAGE_SIZE}`, {
+      feedback: 'silent',
+    })
     const sessions = Array.isArray(data)
       ? (data
           .map(item => normalizeServerSession(item as AgentServerSession))
@@ -729,7 +758,9 @@ async function loadMoreServerHistorySessions(options?: { done?: (status: Infinit
   historyLoadingMore.value = true
   try {
     const nextPage = historyPage.value + 1
-    const data = await fetchAgentApi(`message/agent/sessions?page=${nextPage}&count=${HISTORY_PAGE_SIZE}`)
+    const data = await api.get<unknown>(`message/agent/sessions?page=${nextPage}&count=${HISTORY_PAGE_SIZE}`, {
+      feedback: 'silent',
+    })
     const sessions = Array.isArray(data)
       ? (data
           .map(item => normalizeServerSession(item as AgentServerSession))
@@ -757,7 +788,7 @@ async function loadSlashCommands() {
 
   slashCommandsLoading.value = true
   try {
-    const data = await fetchAgentApi('message/agent/commands')
+    const data = await api.get<unknown>('message/agent/commands', { feedback: 'silent' })
     slashCommands.value = Array.isArray(data)
       ? data
           .map(item => ({
@@ -804,7 +835,9 @@ async function handleHistoryInfiniteLoad({
 
 // 加载服务端历史会话详情，并更新本地缓存。
 async function loadServerHistorySession(targetSessionId: string) {
-  const data = await fetchAgentApi(`message/agent/sessions/${encodeURIComponent(targetSessionId)}`)
+  const data = await api.get<unknown>(`message/agent/sessions/${encodeURIComponent(targetSessionId)}`, {
+    feedback: 'silent',
+  })
   const session = normalizeServerSession(data as AgentServerSession, true)
   if (!session) throw new Error(t('agentAssistant.historyLoadFailed'))
 
@@ -1064,16 +1097,14 @@ function upsertCurrentSessionHistory() {
 async function saveCurrentSessionToServer() {
   if (!sessionId.value || messages.value.length === 0) return
 
-  await fetchAgentApi(`message/agent/sessions/${encodeURIComponent(sessionId.value)}/display`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+  await api.put<unknown>(
+    `message/agent/sessions/${encodeURIComponent(sessionId.value)}/display`,
+    {
       title: buildSessionHistoryTitle(messages.value),
       messages: normalizeStoredMessages(messages.value),
-    }),
-  })
+    },
+    { feedback: 'silent' },
+  )
 }
 
 // 持久化当前会话状态，并按需同步到历史会话列表。
@@ -1117,9 +1148,12 @@ function buildAgentRequestHeaders(headers?: HeadersInit) {
 // 解析智能助手 fetch 失败响应，优先使用后端返回的本地化错误文本。
 async function resolveAgentResponseErrorMessage(response: Response) {
   try {
-    const payload = await response.clone().json()
-    const message = payload?.detail_i18n || payload?.message_i18n || payload?.detail || payload?.message
-    if (typeof message === 'string' && message) return message
+    const payload: unknown = await response.clone().json()
+    if (isApiResponse(payload) && payload.message.trim()) return payload.message
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      const detail = (payload as Record<string, unknown>).detail
+      if (typeof detail === 'string' && detail.trim()) return detail
+    }
   } catch {
     // 非 JSON 错误响应保留 HTTP 状态文本，避免吞掉原始错误。
   }
@@ -1503,20 +1537,55 @@ function queueStreamEvent(event: AgentStreamEvent, assistantMessage: AgentChatMe
   schedulePendingStreamDeltaFlush()
 }
 
-// 解析一个 SSE 数据块。
-function parseSseBlock(block: string) {
-  const data = block
-    .split('\n')
-    .filter(line => line.startsWith('data:'))
-    .map(line => line.slice(5).trimStart())
-    .join('\n')
+// 拆分 SSE event name 与 data，确保受保护 frame 在普通事件解析前完成分流。
+function splitSseBlock(block: string) {
+  let eventName = ''
+  const dataLines: string[] = []
 
-  if (!data) return null
-  return JSON.parse(data) as AgentStreamEvent
+  for (const rawLine of block.split(/\r?\n/)) {
+    if (!rawLine || rawLine.startsWith(':')) continue
+
+    const separatorIndex = rawLine.indexOf(':')
+    const field = separatorIndex >= 0 ? rawLine.slice(0, separatorIndex) : rawLine
+    let value = separatorIndex >= 0 ? rawLine.slice(separatorIndex + 1) : ''
+    if (value.startsWith(' ')) value = value.slice(1)
+
+    if (field === 'event') eventName = value
+    if (field === 'data') dataLines.push(value)
+  }
+
+  if (!dataLines.length) return null
+
+  const data = dataLines.join('\n')
+  if (!data.trim()) return null
+  return { eventName, data } satisfies ParsedSseBlock
+}
+
+function parseProtectedTransportFrame(data: string): string | null {
+  try {
+    const frame = JSON.parse(data) as Record<string, unknown>
+    return typeof frame.content === 'string' ? frame.content : null
+  } catch {
+    return null
+  }
+}
+
+function consumeProtectedTransportFrame(data: string, streamGeneration: number) {
+  if (!isOpen.value || streamGeneration !== protectedDeliveryGeneration) return
+
+  const content = parseProtectedTransportFrame(data)
+  if (content === null) return
+
+  protectedDeliveries.value.push(content)
+  nextTick(() => scheduleMessageScrollerUpdate({ toBottom: messageScrollerShouldFollow }))
 }
 
 // 读取并应用智能助手 SSE 响应流。
-async function readAgentStream(response: Response, assistantMessage: AgentChatMessage): Promise<AgentStreamReadResult> {
+async function readAgentStream(
+  response: Response,
+  assistantMessage: AgentChatMessage,
+  streamGeneration: number,
+): Promise<AgentStreamReadResult> {
   if (!response.body) {
     throw new Error(t('agentAssistant.noStream'))
   }
@@ -1527,8 +1596,36 @@ async function readAgentStream(response: Response, assistantMessage: AgentChatMe
   let receivedTerminalEvent = false
 
   // 应用事件并记录服务端是否明确结束本轮流，区分正常完成与无异常的后台断流。
-  const consumeEvent = (event: AgentStreamEvent | null) => {
-    if (!event) return
+  const consumeBlock = (block: string) => {
+    const parsedBlock = splitSseBlock(block)
+    if (!parsedBlock) return
+
+    if (parsedBlock.eventName === 'interaction-protected') {
+      consumeProtectedTransportFrame(parsedBlock.data, streamGeneration)
+      return
+    }
+    if (
+      parsedBlock.eventName &&
+      parsedBlock.eventName !== 'message' &&
+      !AGENT_STREAM_EVENT_TYPES.has(parsedBlock.eventName as AgentStreamEvent['type'])
+    ) {
+      return
+    }
+
+    const parsedEvent = JSON.parse(parsedBlock.data) as unknown
+    if (!parsedEvent || typeof parsedEvent !== 'object' || Array.isArray(parsedEvent)) {
+      return
+    }
+
+    const eventRecord = parsedEvent as Record<string, unknown>
+    if (
+      typeof eventRecord.type !== 'string' ||
+      !AGENT_STREAM_EVENT_TYPES.has(eventRecord.type as AgentStreamEvent['type'])
+    )
+      return
+
+    const event = eventRecord as unknown as AgentStreamEvent
+    if (parsedBlock.eventName && parsedBlock.eventName !== 'message' && parsedBlock.eventName !== event.type) return
 
     queueStreamEvent(event, assistantMessage)
     if (event.type === 'done' || event.type === 'error') receivedTerminalEvent = true
@@ -1544,13 +1641,13 @@ async function readAgentStream(response: Response, assistantMessage: AgentChatMe
       buffer = blocks.pop() || ''
 
       for (const block of blocks) {
-        consumeEvent(parseSseBlock(block))
+        consumeBlock(block)
       }
     }
 
     buffer += decoder.decode()
     if (buffer.trim()) {
-      consumeEvent(parseSseBlock(buffer))
+      consumeBlock(buffer)
     }
   } finally {
     flushPendingStreamDelta()
@@ -1673,19 +1770,9 @@ async function uploadAgentAttachment(file: File) {
   formData.append('file', file)
   formData.append('session_id', sessionId.value)
 
-  const response = await fetch(resolveApiUrl('message/agent/upload'), {
-    method: 'POST',
-    headers: buildAgentRequestHeaders(),
-    body: formData,
-    credentials: 'include',
+  return await api.post<AgentMessageAttachment & AgentOutgoingFile>('message/agent/upload', formData, {
+    feedback: 'silent',
   })
-
-  if (!response.ok) throw new Error(await resolveAgentResponseErrorMessage(response))
-
-  const result = await response.json()
-  if (!result?.success) throw new Error(result?.message_i18n || result?.message || t('agentAssistant.uploadFailed'))
-
-  return result.data as AgentMessageAttachment & AgentOutgoingFile
 }
 
 // 准备本轮发送给 Agent 的图片、文件、音频和展示附件。
@@ -1743,22 +1830,22 @@ async function streamAgentMessage(
   const displayContent = (displayText ?? content).trim()
   if (!content && !images.length && !files.length && !audioRefs.length) return
 
-  if (echoUser) addMessage('user', displayContent || content, 'done', userAttachments, choiceSelection)
-  const assistantMessage = addMessage('assistant', '', 'streaming')
-
   abortController = new AbortController()
   userAbortRequested = false
   streamRecoveryAbortRequested = false
   const streamStartedAt = Date.now()
+  const streamProtectedDeliveryGeneration = protectedDeliveryGeneration
   activeStreamStartedAt = streamStartedAt
   let shouldFollowBottomAfterStream = true
   let shouldSaveClientSnapshot = true
+  let assistantMessage: AgentChatMessage | null = null
 
   try {
     const response = await fetch(resolveApiUrl('message/agent/stream'), {
       method: 'POST',
       headers: buildAgentRequestHeaders({
         'Content-Type': 'application/json',
+        'X-MoviePilot-Agent-Interaction': '1',
       }),
       body: JSON.stringify({
         text: content,
@@ -1776,14 +1863,20 @@ async function streamAgentMessage(
       signal: abortController.signal,
     })
 
+    const isSecretConfirmation = response.headers.get('X-MoviePilot-Agent-Control') === 'secret-confirmation'
+    if (!isSecretConfirmation && echoUser) {
+      addMessage('user', displayContent || content, 'done', userAttachments, choiceSelection)
+    }
+    assistantMessage = addMessage('assistant', '', 'streaming')
     if (!response.ok) {
       throw new Error(await resolveAgentResponseErrorMessage(response))
     }
 
-    const streamResult = await readAgentStream(response, assistantMessage)
+    const streamResult = await readAgentStream(response, assistantMessage, streamProtectedDeliveryGeneration)
     shouldFollowBottomAfterStream = isMessageScrollerNearBottom()
     if (!streamResult.receivedTerminalEvent) {
       shouldSaveClientSnapshot = false
+      invalidateProtectedDeliveries()
       beginStreamRecovery(sessionId.value, streamStartedAt)
       refreshMessageList()
       if (document.visibilityState === 'visible') scheduleStreamRecovery(0)
@@ -1793,7 +1886,8 @@ async function streamAgentMessage(
     pendingStreamRecovery.value = null
     clearStreamRecoveryTimer()
     if (isEmptyAssistantMessage(assistantMessage)) {
-      messages.value = messages.value.filter(message => message.id !== assistantMessage.id)
+      const emptyAssistantMessageId = assistantMessage.id
+      messages.value = messages.value.filter(message => message.id !== emptyAssistantMessageId)
       refreshMessageList()
       return
     }
@@ -1806,6 +1900,7 @@ async function streamAgentMessage(
     if (error?.name === 'AbortError' && streamRecoveryAbortRequested) return
 
     if (error?.name === 'AbortError' && userAbortRequested) {
+      if (!assistantMessage) return
       assistantMessage.status = 'done'
       markToolsDone(assistantMessage)
       refreshMessageList()
@@ -1814,13 +1909,17 @@ async function streamAgentMessage(
 
     if (isRecoverableStreamDisconnect(error)) {
       shouldSaveClientSnapshot = false
+      invalidateProtectedDeliveries()
       beginStreamRecovery(sessionId.value, streamStartedAt)
-      assistantMessage.status = 'streaming'
-      refreshMessageList()
+      if (assistantMessage) {
+        assistantMessage.status = 'streaming'
+        refreshMessageList()
+      }
       if (document.visibilityState === 'visible') scheduleStreamRecovery(1200)
       return
     }
 
+    assistantMessage ||= addMessage('assistant', '', 'streaming')
     assistantMessage.status = 'error'
     replaceAssistantTextSegments(assistantMessage, error?.message || t('agentAssistant.error'))
     markToolsDone(assistantMessage)
@@ -1846,7 +1945,8 @@ async function streamAgentMessage(
 
 // 发送输入框中的文本和附件。
 async function sendMessage() {
-  const text = inputText.value.trim()
+  const rawText = inputText.value
+  const text = rawText.trim()
   const attachments = [...pendingAttachments.value]
   if ((!text && !attachments.length) || isBusy.value) return
 
@@ -2009,27 +2109,19 @@ async function handleChoiceClick(message: AgentChatMessage, choice: AgentChoiceC
   streamError.value = ''
 
   try {
-    const response = await fetch(resolveApiUrl('message/agent/callback'), {
-      method: 'POST',
-      headers: buildAgentRequestHeaders({
-        'Content-Type': 'application/json',
-      }),
-      body: JSON.stringify({
+    const data = await api.post<AgentChoiceCallbackData>(
+      'message/agent/callback',
+      {
         session_id: sessionId.value,
         callback_data: button.callback_data,
         original_message_id: message.id,
         original_chat_id: sessionId.value,
-      }),
-      credentials: 'include',
-    })
+      },
+      { feedback: 'silent' },
+    )
 
-    if (!response.ok) throw new Error(await resolveAgentResponseErrorMessage(response))
-
-    const result = await response.json()
-    if (!result?.success) throw new Error(result?.message_i18n || result?.message || t('agentAssistant.choiceExpired'))
-
-    const agentMessage = String(result.data?.message || '')
-    if (result.data?.traditional) {
+    const agentMessage = String(data.message || '')
+    if (data.traditional) {
       const choiceSelection = buildChoiceSelection(choice, button)
       choiceSelection.selected_description = getChoiceButtonSelectionText(button)
       markChoiceSelected(choice, button, choiceSelection)
@@ -2039,21 +2131,19 @@ async function handleChoiceClick(message: AgentChatMessage, choice: AgentChoiceC
         echoUser: false,
         displayText: choiceSelection.selected_label || choiceSelection.selected_description,
         choiceSelection,
-        originalMessageId: String(result.data?.original_message_id || message.id),
-        originalChatId: String(result.data?.original_chat_id || sessionId.value),
+        originalMessageId: String(data.original_message_id || message.id),
+        originalChatId: String(data.original_chat_id || sessionId.value),
       })
       return
     }
 
-    const backendSelection = normalizeChoiceSelection(result.data?.choice_selection)
+    const backendSelection = normalizeChoiceSelection(data.choice_selection)
     const choiceSelection = backendSelection || buildChoiceSelection(choice, button)
-    choiceSelection.selected_label =
-      result.data?.feedback?.selected_label || choiceSelection.selected_label || button.label
-    choiceSelection.selected_value =
-      result.data?.feedback?.selected_value || choiceSelection.selected_value || agentMessage
+    choiceSelection.selected_label = data.feedback?.selected_label || choiceSelection.selected_label || button.label
+    choiceSelection.selected_value = data.feedback?.selected_value || choiceSelection.selected_value || agentMessage
     choiceSelection.selected_description =
-      result.data?.display_message ||
-      result.data?.feedback?.selected_description ||
+      data.display_message ||
+      data.feedback?.selected_description ||
       choiceSelection.selected_description ||
       getChoiceButtonSelectionText(button)
 
@@ -2095,17 +2185,20 @@ function stopGeneration() {
   }
   persistState()
   if (sessionId.value) {
-    fetchAgentApi(`message/agent/sessions/${encodeURIComponent(sessionId.value)}/stop`, {
-      method: 'POST',
-    }).catch(() => {
-      // 本地中止优先，停止接口失败不阻塞用户操作。
-    })
+    api
+      .post<unknown>(`message/agent/sessions/${encodeURIComponent(sessionId.value)}/stop`, undefined, {
+        feedback: 'silent',
+      })
+      .catch(() => {
+        // 本地中止优先，停止接口失败不阻塞用户操作。
+      })
   }
   abortController?.abort()
 }
 
 // 开始新的空白会话。
 function startNewSession() {
+  invalidateProtectedDeliveries()
   stopGeneration()
   sessionId.value = createSessionId()
   messages.value = []
@@ -2124,6 +2217,7 @@ async function loadHistorySession(targetSessionId: string) {
   if (!historySession) return
 
   try {
+    invalidateProtectedDeliveries()
     stopGeneration()
     if (!historySession.messages.length) {
       historySession = await loadServerHistorySession(targetSessionId)
@@ -2145,8 +2239,8 @@ async function deleteHistorySession(targetSessionId: string) {
   if (isBusy.value && targetSessionId === sessionId.value) return
 
   try {
-    await fetchAgentApi(`message/agent/sessions/${encodeURIComponent(targetSessionId)}`, {
-      method: 'DELETE',
+    await api.delete<null>(`message/agent/sessions/${encodeURIComponent(targetSessionId)}`, {
+      feedback: 'silent',
     })
   } catch (error) {
     // 删除接口失败时仍允许清理本地兜底历史，避免坏记录一直挡在列表里。
@@ -2177,7 +2271,13 @@ function formatHistoryTime(timestamp: number) {
 
 // 关闭智能助手面板。
 function closeDrawer() {
+  invalidateProtectedDeliveries()
   isOpen.value = false
+}
+
+// 在桌面侧栏与全屏对话模式之间切换。
+function toggleFullscreen() {
+  fullscreen.value = !fullscreen.value
 }
 
 // 同步面板打开状态到全局 DOM，供悬浮入口避让面板宽度。
@@ -2238,10 +2338,12 @@ function handleInputKeydown(event: KeyboardEvent) {
   sendMessage()
 }
 
+// 开始输入法组合输入，避免回车确认候选词时误发送消息。
 function handleCompositionStart() {
   isComposing.value = true
 }
 
+// 结束输入法组合输入，恢复回车发送能力。
 function handleCompositionEnd() {
   isComposing.value = false
 }
@@ -2252,7 +2354,12 @@ watch(drawerWidth, () => {
 })
 
 watch(isOpen, open => {
-  if (open) scrollToBottom()
+  if (open) {
+    scrollToBottom()
+    return
+  }
+
+  invalidateProtectedDeliveries()
 })
 
 watch(isBusy, value => emit('thinking-change', value), { immediate: true })
@@ -2275,6 +2382,7 @@ onScopeDispose(clearMessageScrollFrame)
 onScopeDispose(clearStreamPersistTimer)
 onScopeDispose(clearPendingStreamDelta)
 onScopeDispose(clearStreamRecoveryTimer)
+onScopeDispose(invalidateProtectedDeliveries)
 onScopeDispose(() => {
   if (typeof window === 'undefined') return
 
@@ -2288,7 +2396,11 @@ onScopeDispose(() => {
   <aside
     v-show="isOpen"
     class="agent-assistant-panel"
-    :class="{ 'is-motion-paused': !props.motionActive, 'is-open': isOpen }"
+    :class="{
+      'is-fullscreen': fullscreen,
+      'is-motion-paused': !props.motionActive,
+      'is-open': isOpen,
+    }"
     :style="drawerStyle"
     role="dialog"
     :aria-label="t('agentAssistant.title')"
@@ -2354,10 +2466,10 @@ onScopeDispose(() => {
                   class="agent-assistant-history-infinite"
                   @load="handleHistoryInfiniteLoad"
                 >
-                  <VVirtualScroll renderless :items="historySessions" :item-height="HISTORY_ITEM_HEIGHT">
-                    <template #default="{ item: historySession, itemRef }">
+                  <VVirtualScroll :renderless="true" :items="historySessions" :item-height="HISTORY_ITEM_HEIGHT">
+                    <template #default="{ item: historySession, ...slotProps }">
                       <button
-                        :ref="itemRef"
+                        :ref="'itemRef' in slotProps ? slotProps.itemRef : undefined"
                         :key="historySession.sessionId"
                         class="agent-assistant-history-item"
                         :class="{ 'is-active': isCurrentHistorySession(historySession.sessionId) }"
@@ -2404,6 +2516,16 @@ onScopeDispose(() => {
           >
             <VIcon icon="mdi-message-plus-outline" />
           </IconBtn>
+          <IconBtn
+            v-if="canToggleFullscreen"
+            class="agent-assistant-fullscreen-toggle"
+            :title="t(fullscreen ? 'agentAssistant.exitFullscreen' : 'agentAssistant.enterFullscreen')"
+            :aria-label="t(fullscreen ? 'agentAssistant.exitFullscreen' : 'agentAssistant.enterFullscreen')"
+            :aria-pressed="fullscreen"
+            @click="toggleFullscreen"
+          >
+            <VIcon :icon="fullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'" />
+          </IconBtn>
           <IconBtn :title="t('common.close')" :aria-label="t('common.close')" @click="closeDrawer">
             <VIcon icon="mdi-close" />
           </IconBtn>
@@ -2413,11 +2535,11 @@ onScopeDispose(() => {
       <main
         ref="messageListRef"
         class="agent-assistant-messages"
-        :class="{ 'agent-assistant-messages--has-content': hasMessages }"
+        :class="{ 'agent-assistant-messages--has-content': hasConversationContent }"
         @scroll.passive="handleMessageScrollerScroll"
       >
         <div class="agent-assistant-messages__content">
-          <div v-if="!hasMessages" class="agent-assistant-empty">
+          <div v-if="!hasConversationContent" class="agent-assistant-empty">
             <div class="agent-assistant-empty__mark">
               <VIcon icon="lucide:sparkles" size="28" />
             </div>
@@ -2576,6 +2698,17 @@ onScopeDispose(() => {
               <span />
             </div>
           </div>
+
+          <div v-if="protectedDeliveries.length" class="agent-assistant-protected-deliveries">
+            <div
+              v-for="(content, index) in protectedDeliveries"
+              :key="index"
+              class="agent-assistant-protected-delivery"
+            >
+              <VIcon icon="mdi-shield-lock-outline" size="16" aria-hidden="true" />
+              <span v-text="content" />
+            </div>
+          </div>
         </div>
       </main>
 
@@ -2711,6 +2844,27 @@ onScopeDispose(() => {
   max-block-size: none !important;
   min-block-size: 100vh !important;
   overscroll-behavior: contain;
+}
+
+.agent-assistant-panel.is-fullscreen {
+  border-inline-start: 0;
+  box-shadow: none;
+
+  .agent-assistant-message__bubble {
+    max-inline-size: min(100%, 64rem);
+  }
+
+  .agent-assistant-segments,
+  .agent-assistant-choices,
+  .agent-assistant-attachments {
+    inline-size: min(100%, 64rem);
+  }
+
+  .agent-assistant-composer {
+    inline-size: min(calc(100% - 2rem), 72rem);
+    inset-inline: 0;
+    margin-inline: auto;
+  }
 }
 
 @supports (block-size: 100lvh) {
@@ -3048,6 +3202,11 @@ onScopeDispose(() => {
   min-block-size: 100%;
 }
 
+.agent-assistant-panel.is-fullscreen .agent-assistant-messages__content {
+  inline-size: min(100%, 72rem);
+  margin-inline: auto;
+}
+
 /* 只有消息态预留输入框空间，避免 iOS 空态被 padding 撑出不可滚动的滚动条。 */
 .agent-assistant-messages--has-content {
   padding-block-end: calc(env(safe-area-inset-bottom, 0px) + 8.75rem);
@@ -3105,6 +3264,32 @@ onScopeDispose(() => {
   align-items: flex-start;
 }
 
+.agent-assistant-protected-deliveries {
+  display: grid;
+  gap: 0.5rem;
+  inline-size: min(100%, 34rem);
+  margin-block-end: 1rem;
+}
+
+.agent-assistant-protected-delivery {
+  display: grid;
+  align-items: start;
+  border: 1px solid rgba(var(--v-theme-warning), 0.42);
+  border-radius: var(--app-control-radius);
+  background: rgba(var(--v-theme-warning), 0.08);
+  color: rgba(var(--v-theme-on-surface), 0.9);
+  column-gap: 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  line-height: 1.55;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  padding-block: 0.65rem;
+  padding-inline: 0.75rem;
+  white-space: pre-wrap;
+}
+
 .agent-assistant-message__meta {
   display: inline-flex;
   align-items: center;
@@ -3121,6 +3306,7 @@ onScopeDispose(() => {
   line-height: 1.55;
   max-inline-size: min(100%, 34rem);
   min-inline-size: 0;
+  overflow-wrap: anywhere;
   padding-block: 0.75rem;
   padding-inline: 0.85rem;
 }

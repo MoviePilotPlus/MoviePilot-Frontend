@@ -4,11 +4,13 @@ import { useToast } from 'vue-toastification'
 import { requiredValidator } from '@/@validators'
 import api from '@/api'
 import type { Context, MediaDataSource, MediaInfo } from '@/api/types'
-import { getMediaSubscribeId, getMediaSubscribeIdentity } from '@/composables/useMediaSubscribe'
+import { getMediaSubscribeIdentity } from '@/composables/useMediaSubscribe'
 import router from '@/router'
 import { useGlobalSettingsStore } from '@/stores'
 import { getLogoUrl } from '@/utils/imageUtils'
 import { useI18n } from 'vue-i18n'
+import { isMusicMediaSource } from '@/utils/mediaId'
+import { useMediaSources } from '@/composables/useMediaSources'
 
 interface PipelineStep {
   icon: string
@@ -27,6 +29,7 @@ interface MediaIdentity {
 
 interface MediaSourceDisplay {
   icon?: string
+  iconColor?: string
   image?: string
   key: string
   label: string
@@ -43,6 +46,9 @@ const MEDIA_SOURCE_LABELS: Record<string, string> = {
   anilist: 'AniList',
   bangumi: 'Bangumi',
   douban: 'Douban',
+  doubanmusic: '豆瓣音乐',
+  musicbrainz: 'MusicBrainz',
+  theaudiodb: 'TheAudioDB',
   themoviedb: 'TheMovieDb',
 }
 
@@ -52,20 +58,33 @@ const MEDIA_SOURCE_LOGOS: Record<string, string> = {
   themoviedb: getLogoUrl('tmdb'),
 }
 
-const NAME_TEST_TITLE_HISTORY_KEY = 'MP_NAME_TEST_TITLE_HISTORY'
-const NAME_TEST_TITLE_HISTORY_LIMIT = 5
+// 无专属 logo 的数据源使用品牌色图标展示
+const MEDIA_SOURCE_ICONS: Record<string, { icon: string; color: string }> = {
+  anilist: { icon: 'mdi-alpha-a-circle', color: '#02a9ff' },
+  musicbrainz: { icon: 'mdi-album', color: '#eb743b' },
+  theaudiodb: { icon: 'mdi-music-box-multiple', color: '#35a7a0' },
+  doubanmusic: { icon: 'mdi-music-circle', color: '#00b51d' },
+}
 
 const emit = defineEmits<{ close: [] }>()
 
 // 国际化
 const { t } = useI18n()
 const globalSettingsStore = useGlobalSettingsStore()
+const { mediaSourceItems: getMediaSourceItems } = useMediaSources()
+const customMediaSourceItems = getMediaSourceItems('media')
+const customMusicSourceItems = getMediaSourceItems('music')
 
 const mediaSourceItems = computed<{ title: string; value: MediaDataSource }[]>(() => [
   { title: t('setting.cache.recognitionSource.themoviedb'), value: 'themoviedb' },
   { title: t('setting.cache.recognitionSource.douban'), value: 'douban' },
   { title: t('setting.cache.recognitionSource.bangumi'), value: 'bangumi' },
   { title: t('setting.cache.recognitionSource.anilist'), value: 'anilist' },
+  { title: t('setting.cache.recognitionSource.musicbrainz'), value: 'musicbrainz' },
+  { title: t('setting.cache.recognitionSource.theaudiodb'), value: 'theaudiodb' },
+  { title: t('setting.cache.recognitionSource.doubanmusic'), value: 'doubanmusic' },
+  ...customMediaSourceItems.value,
+  ...customMusicSourceItems.value,
 ])
 
 // 获取后台默认识别数据源，未知值兼容回退到TheMovieDb。
@@ -88,40 +107,8 @@ const nameTestForm = reactive<NameTestForm>({
   source: getDefaultMediaSource(),
 })
 
-/** 从本地存储读取最近使用的识别标题。 */
-function loadTitleHistory() {
-  try {
-    const storedHistory: unknown = JSON.parse(localStorage.getItem(NAME_TEST_TITLE_HISTORY_KEY) || '[]')
-    if (!Array.isArray(storedHistory)) return []
-
-    return storedHistory
-      .filter((title): title is string => typeof title === 'string' && Boolean(title.trim()))
-      .map(title => title.trim())
-      .filter((title, index, titles) => titles.indexOf(title) === index)
-      .slice(0, NAME_TEST_TITLE_HISTORY_LIMIT)
-  } catch {
-    return []
-  }
-}
-
-const nameTestTitleHistory = ref<string[]>(loadTitleHistory())
-
-/** 将本次提交的标题移到历史记录首位，并只保留最新五条。 */
-function saveTitleHistory(title: string) {
-  const normalizedTitle = title.trim()
-  if (!normalizedTitle) return
-
-  nameTestTitleHistory.value = [
-    normalizedTitle,
-    ...nameTestTitleHistory.value.filter(historyTitle => historyTitle !== normalizedTitle),
-  ].slice(0, NAME_TEST_TITLE_HISTORY_LIMIT)
-
-  try {
-    localStorage.setItem(NAME_TEST_TITLE_HISTORY_KEY, JSON.stringify(nameTestTitleHistory.value))
-  } catch {
-    // 本地存储不可用时仍继续执行本次识别。
-  }
-}
+// 音乐识别不应用影视自定义识别词，隐藏输入区避免误导。
+const showCustomWords = computed(() => !isMusicMediaSource(nameTestForm.source))
 
 // 识别按钮状态
 const nameTestLoading = ref(false)
@@ -140,17 +127,34 @@ const savingCustomWords = ref(false)
 
 const metaInfo = computed(() => nameTestResult.value?.meta_info)
 const mediaInfo = computed(() => nameTestResult.value?.media_info)
-const isRecognized = computed(() => Boolean(metaInfo.value?.name))
+// 音乐识别的元信息没有 name 字段，依靠 title 判断识别是否成功
+const isMusicResult = computed(() => mediaInfo.value?.type === '音乐' || metaInfo.value?.type === '音乐')
+const isRecognized = computed(() => Boolean(metaInfo.value?.name || (isMusicResult.value && metaInfo.value?.title)))
 const resultTitle = computed(() => mediaInfo.value?.title || metaInfo.value?.name || t('nameTest.unrecognized'))
 const resultSubtitle = computed(() => {
   const parts = [mediaInfo.value?.year || metaInfo.value?.year]
-  if (metaInfo.value?.season_episode) parts.push(metaInfo.value.season_episode)
+  if (isMusicResult.value) {
+    // 音乐结果没有季集信息，展示艺术家和专辑辅助确认
+    const artistText = mediaInfo.value?.artist || metaInfo.value?.artist
+    if (artistText) parts.push(artistText)
+    if (mediaInfo.value?.album) parts.push(mediaInfo.value.album)
+  } else if (metaInfo.value?.season_episode) {
+    parts.push(metaInfo.value.season_episode)
+  }
   return parts.filter(Boolean).join(' · ') || t('nameTest.waitingResult')
 })
 const mediaClassification = computed(() => {
   return [mediaInfo.value?.type || metaInfo.value?.type, mediaInfo.value?.category].filter(Boolean).join(' · ') || '-'
 })
 const resourceChips = computed(() => {
+  if (isMusicResult.value) {
+    return [
+      mediaInfo.value?.music_type,
+      metaInfo.value?.audio_format,
+      metaInfo.value?.audio_specs,
+      mediaInfo.value?.category,
+    ].filter(Boolean) as string[]
+  }
   return [
     metaInfo.value?.web_source,
     metaInfo.value?.edition,
@@ -161,15 +165,7 @@ const resourceChips = computed(() => {
   ].filter(Boolean) as string[]
 })
 // 是否已匹配到具体媒体，决定是否展示查看详情入口
-const canViewMediaDetail = computed(() =>
-  Boolean(
-    mediaInfo.value?.tmdb_id ||
-    mediaInfo.value?.douban_id ||
-    mediaInfo.value?.bangumi_id ||
-    mediaInfo.value?.anilist_id ||
-    mediaInfo.value?.media_id,
-  ),
-)
+const canViewMediaDetail = computed(() => Boolean(getMediaSubscribeIdentity(mediaInfo.value)))
 
 /** 生成媒体源官方详情页地址。 */
 function getMediaOfficialLink(media: MediaInfo, source: string, mediaId: string) {
@@ -186,12 +182,19 @@ function getMediaOfficialLink(media: MediaInfo, source: string, mediaId: string)
       return `https://bgm.tv/subject/${encodedId}`
     case 'anilist':
       return `https://anilist.co/anime/${encodedId}`
+    case 'musicbrainz':
+      // MusicBrainz 各实体共用 UUID，优先使用识别结果自带的详情页地址
+      return media.detail_link || `https://musicbrainz.org/recording/${encodedId}`
+    case 'theaudiodb':
+      return media.detail_link || `https://www.theaudiodb.com/track/${encodedId}`
+    case 'doubanmusic':
+      return media.detail_link || `https://music.douban.com/subject/${encodedId}`
     default:
       return undefined
   }
 }
 
-/** 生成识别结果中的数据源原生 ID，并兼容旧接口字段。 */
+/** 生成识别结果中的数据源原生 ID。 */
 function getMediaIdentity(media?: MediaInfo): MediaIdentity | undefined {
   if (!media) return undefined
 
@@ -209,9 +212,11 @@ function getMediaIdentity(media?: MediaInfo): MediaIdentity | undefined {
 const mediaIdentity = computed(() => getMediaIdentity(mediaInfo.value))
 const recognizedMediaSource = computed<MediaSourceDisplay>(() => {
   const sourceKey = mediaIdentity.value?.sourceKey || nameTestForm.source
+  const iconInfo = MEDIA_SOURCE_ICONS[sourceKey]
 
   return {
-    icon: sourceKey === 'anilist' ? 'mdi-alpha-a-circle' : undefined,
+    icon: iconInfo?.icon,
+    iconColor: iconInfo?.color,
     image: MEDIA_SOURCE_LOGOS[sourceKey],
     key: sourceKey,
     label: mediaIdentity.value?.source || MEDIA_SOURCE_LABELS[sourceKey] || sourceKey,
@@ -227,10 +232,14 @@ const pipelineSteps = computed<PipelineStep[]>(() => [
   {
     icon: 'mdi-puzzle-check-outline',
     title: t('nameTest.steps.meta.title'),
-    value:
-      [metaInfo.value?.name, metaInfo.value?.resource_term, metaInfo.value?.release_group]
-        .filter(Boolean)
-        .join(' · ') || '-',
+    value: isMusicResult.value
+      ? // 音乐元信息展示曲名、艺术家、专辑和音频格式
+        [metaInfo.value?.title, metaInfo.value?.artist, metaInfo.value?.album, metaInfo.value?.audio_format]
+          .filter(Boolean)
+          .join(' · ') || '-'
+      : [metaInfo.value?.name, metaInfo.value?.resource_term, metaInfo.value?.release_group]
+          .filter(Boolean)
+          .join(' · ') || '-',
   },
   {
     icon: 'mdi-shape-outline',
@@ -260,11 +269,14 @@ function getPosterImage(url = '') {
 /** 关闭识别测试弹窗后，跳转查看当前识别结果匹配到的媒体详情。 */
 async function viewMediaDetail() {
   if (!canViewMediaDetail.value || !mediaInfo.value) return
+  const identity = getMediaSubscribeIdentity(mediaInfo.value)
+  if (!identity) return
 
   const target = {
     path: '/media',
     query: {
-      mediaid: getMediaSubscribeId(mediaInfo.value),
+      media_source: identity.source,
+      media_id: identity.mediaId,
       title: mediaInfo.value.title,
       year: mediaInfo.value.year,
       type: mediaInfo.value.type,
@@ -282,7 +294,6 @@ async function nameTest() {
   if (!normalizedTitle) return
 
   nameTestForm.title = normalizedTitle
-  saveTitleHistory(normalizedTitle)
 
   try {
     nameTestLoading.value = true
@@ -293,8 +304,9 @@ async function nameTest() {
       params: {
         title: nameTestForm.title,
         subtitle: nameTestForm.subtitle,
-        custom_words: nameTestForm.customWords?.trim() || undefined,
-        source: nameTestForm.source,
+        // 音乐识别不应用识别词，隐藏状态下不随请求携带
+        custom_words: showCustomWords.value ? nameTestForm.customWords?.trim() || undefined : undefined,
+        media_source: nameTestForm.source,
       },
     })
     nameTestText.value = t('nameTest.recognizeAgain')
@@ -322,7 +334,7 @@ async function saveCustomWords() {
   savingCustomWords.value = true
   try {
     const queryResult: { [key: string]: any } = await api.get('system/setting/CustomIdentifiers')
-    const existingLines: string[] = Array.isArray(queryResult?.data?.value) ? queryResult.data.value : []
+    const existingLines: string[] = Array.isArray(queryResult?.value) ? queryResult.value : []
     const appendLines = newLines.filter(line => !existingLines.includes(line))
 
     if (!appendLines.length) {
@@ -330,13 +342,8 @@ async function saveCustomWords() {
       return
     }
 
-    const saveResult: { [key: string]: any } = await api.post('system/setting/CustomIdentifiers', [
-      ...existingLines,
-      ...appendLines,
-    ])
-
-    if (saveResult.success) $toast.success(t('nameTest.saveWordsSuccess'))
-    else $toast.error(saveResult.message || t('nameTest.saveWordsFailed'))
+    await api.post<null>('system/setting/CustomIdentifiers', [...existingLines, ...appendLines], { feedback: 'silent' })
+    $toast.success(t('nameTest.saveWordsSuccess'))
   } catch (error) {
     console.error(error)
     $toast.error(t('nameTest.saveWordsFailed'))
@@ -352,14 +359,15 @@ async function saveCustomWords() {
       <VForm validate-on="submit lazy" @submit.prevent="nameTest">
         <VRow class="shortcut-form">
           <VCol cols="12" class="shortcut-form-col">
-            <VCombobox
+            <VTextarea
               v-model="nameTestForm.title"
-              :items="nameTestTitleHistory"
               :label="t('nameTest.title')"
               :hint="t('nameTest.titleHint')"
               persistent-hint
               :rules="[requiredValidator]"
               prepend-inner-icon="mdi-movie-open"
+              rows="2"
+              auto-grow
             />
           </VCol>
           <VCol cols="12" class="shortcut-form-col">
@@ -383,7 +391,7 @@ async function saveCustomWords() {
               prepend-inner-icon="mdi-subtitles"
             />
           </VCol>
-          <VCol cols="12" class="shortcut-form-col">
+          <VCol v-if="showCustomWords" cols="12" class="shortcut-form-col">
             <VTextarea
               v-model="nameTestForm.customWords"
               :label="t('nameTest.customWords')"
@@ -513,7 +521,7 @@ async function saveCustomWords() {
                   <VIcon
                     v-else-if="step.source.icon"
                     class="media-source-logo"
-                    color="#02a9ff"
+                    :color="step.source.iconColor || '#02a9ff'"
                     :icon="step.source.icon"
                   />
                   <span>{{ step.source.label }}</span>

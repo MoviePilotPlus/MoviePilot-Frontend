@@ -2,7 +2,7 @@
 import type { LocationQuery } from 'vue-router'
 import NoDataFound from '@/components/states/NoDataFound.vue'
 import api from '@/api'
-import type { Context, SubtitleInfo } from '@/api/types'
+import type { Context, MediaDataSource, SubtitleInfo } from '@/api/types'
 import TorrentCard from '@/components/cards/TorrentCard.vue'
 import TorrentItem from '@/components/cards/TorrentItem.vue'
 import SubtitleCard from '@/components/cards/SubtitleCard.vue'
@@ -20,6 +20,7 @@ import { useUserStore } from '@/stores'
 import { buildUserPermissionContext, hasPermission } from '@/utils/permission'
 import { SearchReplaceBatchCollector, isSearchReplaceBatchEvent } from '@/utils/searchStream'
 import { getCurrentLocale } from '@/plugins/i18n'
+import { isMediaDataSource, isValidMediaSourceId } from '@/utils/mediaId'
 
 // 国际化
 const { t } = useI18n()
@@ -45,6 +46,8 @@ const router = useRouter()
 
 interface SearchParams {
   keyword: string
+  media_source: MediaDataSource | ''
+  media_id: string
   type: string
   area: string
   title: string
@@ -52,15 +55,22 @@ interface SearchParams {
   season: string
   episode: string
   sites: string
+  music_type: string
   result_type: string
 }
 
 interface LastSearchContextResponse {
-  success?: boolean
-  data?: {
-    params?: Partial<SearchParams>
-    results?: Array<Context | SubtitleInfo>
-  }
+  params?: Partial<SearchParams>
+  results?: Array<Context | SubtitleInfo>
+}
+
+interface AiRecommendStatusData {
+  status?: string
+  results?: number[]
+  error_i18n?: string
+  error?: string
+  message_i18n?: string
+  message?: string
 }
 
 const resourceSearchParamsStorageKey = 'MP_ResourceSearchParams'
@@ -68,9 +78,17 @@ type TorrentViewType = 'card' | 'row'
 // 只有最新搜索可以提交结果和可重放参数，避免旧请求覆盖新查询。
 let activeSearchRequestId = 0
 
+/** 接受内置或插件扩展来源，并拒绝格式非法的来源标识。 */
+function normalizeMediaSource(value: unknown): MediaDataSource | '' {
+  const normalized = value?.toString().trim().toLowerCase()
+  return isMediaDataSource(normalized) ? normalized : ''
+}
+
 function createSearchParams(query: LocationQuery): SearchParams {
   return {
     keyword: query?.keyword?.toString() ?? '',
+    media_source: normalizeMediaSource(query?.media_source),
+    media_id: query?.media_id?.toString() ?? '',
     type: query?.type?.toString() ?? '',
     area: query?.area?.toString() ?? '',
     title: query?.title?.toString() ?? '',
@@ -78,6 +96,7 @@ function createSearchParams(query: LocationQuery): SearchParams {
     season: query?.season?.toString() ?? '',
     episode: query?.episode?.toString() ?? '',
     sites: query?.sites?.toString() ?? '',
+    music_type: query?.music_type?.toString() ?? '',
     result_type: query?.result_type?.toString() === 'subtitle' ? 'subtitle' : 'torrent',
   }
 }
@@ -85,6 +104,8 @@ function createSearchParams(query: LocationQuery): SearchParams {
 function normalizeSearchParams(params?: Partial<SearchParams> | null): SearchParams {
   return {
     keyword: params?.keyword?.toString() ?? '',
+    media_source: normalizeMediaSource(params?.media_source),
+    media_id: params?.media_id?.toString() ?? '',
     type: params?.type?.toString() ?? '',
     area: params?.area?.toString() ?? '',
     title: params?.title?.toString() ?? '',
@@ -92,12 +113,47 @@ function normalizeSearchParams(params?: Partial<SearchParams> | null): SearchPar
     season: params?.season?.toString() ?? '',
     episode: params?.episode?.toString() ?? '',
     sites: params?.sites?.toString() ?? '',
+    music_type: params?.music_type?.toString() ?? '',
     result_type: params?.result_type?.toString() === 'subtitle' ? 'subtitle' : 'torrent',
   }
 }
 
+/** 判断搜索参数是否包含一组有效的枚举来源与原生媒体 ID。 */
+function hasValidMediaIdentity(params: SearchParams): boolean {
+  const mediaId = params.media_id.trim()
+  return Boolean(params.media_source && mediaId && isValidMediaSourceId(mediaId, params.media_source))
+}
+
 function hasSearchKeyword(params: SearchParams): boolean {
-  return params.keyword.trim().length > 0
+  return params.keyword.trim().length > 0 || hasValidMediaIdentity(params)
+}
+
+/** 只在本地历史状态读取边界迁移旧版 `source:id` 复合关键词。 */
+function migrateLegacyStoredSearchParams(params: Partial<SearchParams>): Partial<SearchParams> {
+  if (params.media_source || params.media_id || typeof params.keyword !== 'string') return params
+  const match = params.keyword.match(/^([a-zA-Z_]+):(.+)$/)
+  if (!match) return params
+  const aliases: Record<string, MediaDataSource> = {
+    tmdb: 'themoviedb',
+    themoviedb: 'themoviedb',
+    douban: 'douban',
+    bangumi: 'bangumi',
+    anilist: 'anilist',
+    imdb: 'imdb',
+    tvdb: 'tvdb',
+    musicbrainz: 'musicbrainz',
+    theaudiodb: 'theaudiodb',
+    doubanmusic: 'doubanmusic',
+    bilibili: 'bilibili',
+    mangguodiscover: 'mangguodiscover',
+    migu: 'migu',
+    tencentvideodiscover: 'tencentvideodiscover',
+  }
+  const mediaSource = aliases[match[1].toLowerCase()]
+  const mediaId = match[2].trim()
+  return mediaSource && mediaId && isValidMediaSourceId(mediaId, mediaSource)
+    ? { ...params, keyword: '', media_source: mediaSource, media_id: mediaId }
+    : params
 }
 
 function createSearchRequestToken(): string {
@@ -113,7 +169,8 @@ function loadStoredSearchParams(): SearchParams | null {
     const rawParams = localStorage.getItem(resourceSearchParamsStorageKey)
     if (!rawParams) return null
 
-    const params = normalizeSearchParams(JSON.parse(rawParams) as Partial<SearchParams>)
+    const storedParams = JSON.parse(rawParams) as Partial<SearchParams>
+    const params = normalizeSearchParams(migrateLegacyStoredSearchParams(storedParams))
     return hasSearchKeyword(params) ? params : null
   } catch (error) {
     console.warn('读取资源搜索参数失败:', error)
@@ -161,9 +218,9 @@ async function fetchLastSearchContext() {
   try {
     const result = (await api.get('search/last/context')) as LastSearchContextResponse
     if (requestId === activeSearchRequestId) {
-      applyRememberedSearchParams(result?.data?.params, true)
+      applyRememberedSearchParams(result?.params, true)
     }
-    return Array.isArray(result?.data?.results) ? result.data.results : []
+    return Array.isArray(result?.results) ? result.results : []
   } catch (error) {
     console.warn('读取上次搜索上下文失败，回退到仅加载结果:', error)
     const results = await api.get('search/last')
@@ -195,6 +252,9 @@ async function resolveRefreshSearchParams() {
 
 // 查询TMDBID或标题
 const keyword = computed(() => activeSearchParams.value.keyword)
+
+// 精确媒体身份对用户无意义，进度卡片中仅展示标题即可。
+const isMediaIdKeyword = computed(() => hasValidMediaIdentity(activeSearchParams.value))
 
 // 查询类型
 const type = computed(() => activeSearchParams.value.type)
@@ -351,6 +411,9 @@ const displayResourceCount = computed(() =>
 
 // 搜索中只显示进度区域，避免结果抬头和进度条同时占用顶部空间。
 const showResultHeader = computed(() => isRefreshed.value && !progressActive.value)
+
+// 记录过滤前的候选资源数，用于过滤后无结果时给出友好提示
+let streamCandidateCount = 0
 
 let pendingStreamItems: Array<Context> = []
 let pendingSubtitleStreamItems: Array<SubtitleInfo> = []
@@ -546,18 +609,19 @@ function setSearchParam(params: URLSearchParams, key: string, value: unknown) {
 
 // 构建搜索流URL
 function buildSearchStreamUrl(params: SearchParams, requestToken?: string) {
-  const isMediaSearch = /^[a-zA-Z]+:/.test(params.keyword)
+  const isMediaSearch = hasValidMediaIdentity(params)
   const url = getApiUrl(
     params.result_type === 'subtitle'
       ? isMediaSearch
-        ? `search/subtitle/media/${encodeURIComponent(params.keyword)}/stream`
+        ? `search/subtitle/media/${encodeURIComponent(params.media_id)}/stream`
         : 'search/subtitle/title/stream'
       : isMediaSearch
-        ? `search/media/${encodeURIComponent(params.keyword)}/stream`
+        ? `search/media/${encodeURIComponent(params.media_id)}/stream`
         : 'search/title/stream',
   )
 
   if (params.result_type === 'subtitle' && isMediaSearch) {
+    setSearchParam(url.searchParams, 'media_source', params.media_source)
     setSearchParam(url.searchParams, 'mtype', params.type)
     setSearchParam(url.searchParams, 'title', params.title)
     setSearchParam(url.searchParams, 'year', params.year)
@@ -568,14 +632,17 @@ function buildSearchStreamUrl(params: SearchParams, requestToken?: string) {
     setSearchParam(url.searchParams, 'keyword', params.keyword)
     setSearchParam(url.searchParams, 'sites', params.sites)
   } else if (isMediaSearch) {
+    setSearchParam(url.searchParams, 'media_source', params.media_source)
     setSearchParam(url.searchParams, 'mtype', params.type)
     setSearchParam(url.searchParams, 'area', params.area)
     setSearchParam(url.searchParams, 'title', params.title)
     setSearchParam(url.searchParams, 'year', params.year)
     setSearchParam(url.searchParams, 'season', params.season)
     setSearchParam(url.searchParams, 'sites', params.sites)
+    setSearchParam(url.searchParams, 'music_type', params.music_type)
   } else {
     setSearchParam(url.searchParams, 'keyword', params.keyword)
+    setSearchParam(url.searchParams, 'mtype', params.type)
     setSearchParam(url.searchParams, 'sites', params.sites)
   }
 
@@ -593,6 +660,7 @@ function resetSearchResults() {
   // 新搜索开始时先回到未完成态，避免上一轮空态在 SSE 返回前抢先显示。
   isRefreshed.value = false
   errorDescription.value = t('resource.noResourceFound')
+  streamCandidateCount = 0
   rawDataList.value = []
   rawSubtitleDataList.value = []
   originalDataList.value = []
@@ -680,11 +748,29 @@ function appendSubtitleStreamResults(items: SubtitleInfo[]) {
   scheduleStreamFlush()
 }
 
+// 更新候选资源数：优先使用后端显式给出的 candidate_items，否则取搜索阶段事件的 total_items
+function updateStreamCandidateCount(eventData: { candidate_items?: unknown; stage?: unknown; total_items?: unknown }) {
+  if (typeof eventData.candidate_items === 'number') {
+    streamCandidateCount = Math.max(streamCandidateCount, eventData.candidate_items)
+  } else if (eventData.stage === 'searching' && typeof eventData.total_items === 'number') {
+    streamCandidateCount = Math.max(streamCandidateCount, eventData.total_items)
+  }
+}
+
+// 过滤后无结果但存在候选资源时，用友好提示替代默认的“未搜索到任何资源”
+function applyFilteredEmptyResultMessage(resultCount: number) {
+  if (resultCount === 0 && streamCandidateCount > 0) {
+    errorDescription.value = t('resource.filteredNoResults', { count: streamCandidateCount })
+  }
+}
+
 // 完整最终结果到达后原子替换资源列表。
 function applyFinalStreamResults(items: Context[]) {
   streamFinalResultApplied = true
   flushBufferedStreamState()
   setStreamResults(items)
+  // 候选全部被过滤规则淘汰时给出友好提示
+  applyFilteredEmptyResultMessage(items.length)
 }
 
 // 应用最终字幕搜索结果
@@ -730,6 +816,7 @@ function handleSearchStreamMessage(eventData: { [key: string]: any }) {
       updateSearchProgress(eventData, completedItems !== null)
       if (completedItems) applyFinalSubtitleStreamResults(completedItems)
     } else {
+      updateStreamCandidateCount(eventData)
       const completedItems = streamReplaceBatchCollector.append(eventData)
       updateSearchProgress(eventData, completedItems !== null)
       if (completedItems) applyFinalStreamResults(completedItems)
@@ -755,6 +842,7 @@ function handleSearchStreamMessage(eventData: { [key: string]: any }) {
   }
 
   const items = Array.isArray(eventData.items) ? (eventData.items as Context[]) : []
+  updateStreamCandidateCount(eventData)
   if (eventData.type === 'append') {
     updateSearchProgress(eventData)
     appendStreamResults(items)
@@ -766,6 +854,10 @@ function handleSearchStreamMessage(eventData: { [key: string]: any }) {
     applyFinalStreamResults(items)
   } else {
     updateSearchProgress(eventData)
+    // 标题搜索没有 replace 事件，最终结果为空时在此给出友好提示
+    if (eventData.type === 'done' && !streamFinalResultApplied) {
+      applyFilteredEmptyResultMessage(items.length)
+    }
   }
 }
 
@@ -786,12 +878,12 @@ async function searchByRequest(params: SearchParams, requestToken: string | unde
 
 // 静默刷新使用普通请求，保留当前结果直到新数据完整返回，避免返回页面时露出搜索进度态。
 async function requestSearchResults(params: SearchParams, requestToken?: string) {
-  let result: { [key: string]: any }
-  const isMediaSearch = /^[a-zA-Z]+:/.test(params.keyword)
-  // 如果keyword的格式是 xxxx:xxxxx 且:前面的xxxx为字符，则按照媒体ID格式搜索
+  let result: Array<Context | SubtitleInfo>
+  const isMediaSearch = hasValidMediaIdentity(params)
   if (params.result_type === 'subtitle' && isMediaSearch) {
-    result = await api.get(`search/subtitle/media/${params.keyword}`, {
+    result = await api.get(`search/subtitle/media/${encodeURIComponent(params.media_id)}`, {
       params: {
+        media_source: params.media_source,
         mtype: params.type,
         title: params.title,
         year: params.year,
@@ -810,14 +902,16 @@ async function requestSearchResults(params: SearchParams, requestToken?: string)
       },
     })
   } else if (isMediaSearch) {
-    result = await api.get(`search/media/${params.keyword}`, {
+    result = await api.get(`search/media/${encodeURIComponent(params.media_id)}`, {
       params: {
+        media_source: params.media_source,
         mtype: params.type,
         area: params.area,
         title: params.title,
         year: params.year,
-        season: params.season,
-        sites: params.sites,
+        ...(params.season ? { season: params.season } : {}),
+        ...(params.sites ? { sites: params.sites } : {}),
+        ...(params.music_type ? { music_type: params.music_type } : {}),
         _ts: requestToken,
       },
     })
@@ -826,17 +920,14 @@ async function requestSearchResults(params: SearchParams, requestToken?: string)
     result = await api.get(`search/title`, {
       params: {
         keyword: params.keyword,
+        ...(params.type ? { mtype: params.type } : {}),
         sites: params.sites,
         _ts: requestToken,
       },
     })
   }
 
-  if (result && result.success) {
-    return (result.data || []) as Array<Context | SubtitleInfo>
-  }
-
-  throw new Error(result?.message || t('resource.noResourceFound'))
+  return result || []
 }
 
 // 按流搜索
@@ -933,7 +1024,7 @@ async function fetchData(options: { force?: boolean; params?: SearchParams; sile
     activeSearchParams.value = { ...currentSearchParams }
     rememberSearchParams(currentSearchParams)
   }
-  const requestToken = options.force || Boolean(currentSearchParams.keyword) ? createSearchRequestToken() : undefined
+  const requestToken = options.force || hasSearchKeyword(currentSearchParams) ? createSearchRequestToken() : undefined
   const hasCurrentResults = isSubtitleSearch.value ? rawSubtitleDataList.value.length > 0 : rawDataList.value.length > 0
   const silentRefresh = Boolean(options.silent && isRefreshed.value && hasCurrentResults)
 
@@ -969,6 +1060,9 @@ async function fetchData(options: { force?: boolean; params?: SearchParams; sile
     } else {
       resetSearchResults()
       startLoadingProgress()
+      // 记录发起搜索时的页面路径，搜索完成后只清理本页地址栏参数，
+      // 避免用户搜索期间跳转其他页面（如媒体详情）时误删其 query 参数
+      const searchPath = route.path
       try {
         await searchByStream(currentSearchParams, requestToken)
       } catch (error) {
@@ -986,7 +1080,7 @@ async function fetchData(options: { force?: boolean; params?: SearchParams; sile
       if (requestId !== activeSearchRequestId) return
       stopLoadingProgress()
       // 搜索完成后移除地址栏参数，避免分享/刷新残留搜索条件
-      if (Object.keys(route.query).length > 0) {
+      if (route.path === searchPath && Object.keys(route.query).length > 0) {
         await router.replace({ path: route.path, query: {} })
       }
     }
@@ -1120,7 +1214,7 @@ async function sendInitialRequest(force: boolean = false) {
     }
 
     console.log('发送初始请求以启动任务', force ? '(force)' : '')
-    await api.post('search/recommend', requestBody)
+    await api.post<AiRecommendStatusData>('search/recommend', requestBody, { feedback: 'silent' })
   } catch (error) {
     console.error('发送初始请求失败:', error)
     isRecommending.value = false
@@ -1144,15 +1238,11 @@ function startAiRecommendPolling() {
 // 轮询智能推荐状态（始终使用 check_only 模式）
 async function pollAiRecommend() {
   try {
-    const result: { [key: string]: any } = await api.post('search/recommend', {
-      check_only: true,
-    })
-
-    const { success, data } = result
-    const status = data?.status
+    const data = await api.post<AiRecommendStatusData>('search/recommend', { check_only: true }, { feedback: 'silent' })
+    const status = data.status
 
     // 正在运行，继续轮询
-    if (success && status === 'running') {
+    if (status === 'running') {
       console.log('AI推理中...')
       return
     }
@@ -1161,28 +1251,22 @@ async function pollAiRecommend() {
     stopAiRecommendPolling()
     isRecommending.value = false
 
-    if (success && status === 'completed') {
+    if (status === 'completed') {
       // 推荐完成
-      if (data.results?.length > 0) {
+      const results = data.results ?? []
+      if (results.length > 0) {
         // 加载智能推荐结果
-        loadAiRecommendedResults(data.results)
+        loadAiRecommendedResults(results)
 
         // 自动切换到智能推荐结果（会自动保存筛选条件）
         await switchToAiResults()
       }
-    } else if (success && status === 'disabled') {
+    } else if (status === 'disabled') {
       // 功能停用
       console.error('AI功能未启用')
     } else {
-      // 错误情况（status === 'error' 或 success 为 false）
-      const errMsg =
-        result.message_i18n ||
-        result.message ||
-        data?.error_i18n ||
-        data?.error ||
-        data?.message_i18n ||
-        data?.message ||
-        'Unknown error'
+      // 成功数据中的业务错误兼容旧字段；顶层失败由 catch 读取统一错误 message。
+      const errMsg = data?.error_i18n || data?.error || data?.message_i18n || data?.message || 'Unknown error'
       console.error('智能推荐错误:', errMsg)
       toast.error(`${t('resource.aiRecommendError')}: ${errMsg}`)
     }
@@ -1190,6 +1274,7 @@ async function pollAiRecommend() {
     console.error('智能推荐轮询失败:', error)
     stopAiRecommendPolling()
     isRecommending.value = false
+    toast.error(`${t('resource.aiRecommendError')}: ${error instanceof Error ? error.message : t('common.error')}`)
   }
 }
 
@@ -1246,19 +1331,15 @@ async function reRecommend() {
 async function checkAiRecommendStatus() {
   try {
     // 首次检查时使用 check_only 模式
-    const result: { [key: string]: any } = await api.post('search/recommend', {
-      check_only: true,
-    })
-
-    const { success, data } = result
-    const status = data?.status
+    const data = await api.post<AiRecommendStatusData>('search/recommend', { check_only: true }, { feedback: 'silent' })
+    const status = data.status
 
     // 状态检查只是初始化已有推荐结果，非禁用状态下即使后端暂无历史状态也不应锁住按钮
     if (status !== 'disabled') {
       aiStatusChecked.value = true
     }
 
-    if (success && data) {
+    if (data) {
       const { results } = data
 
       // 如果有完成的结果，加载它
@@ -1317,6 +1398,9 @@ watchEffect(() => {
 watch(
   () => route.query,
   query => {
+    // 页面被 keep-alive 缓存后仍会响应全局路由变化；只有本页处于前台时才消费查询参数，
+    // 否则详情页等路由携带的媒体身份参数会触发后台资源搜索
+    if (route.path !== '/resource') return
     if (Object.keys(query).length === 0) return
 
     const nextSearchParams = createSearchParams(query)
@@ -1380,7 +1464,13 @@ onUnmounted(() => {
             <div class="progress-copy">
               <span class="progress-title">{{ progressText }}</span>
               <div v-if="hasSearchTags" class="progress-tags d-flex flex-wrap">
-                <VChip v-if="keyword" class="search-tag progress-tag" color="primary" size="small" variant="tonal">
+                <VChip
+                  v-if="keyword && !isMediaIdKeyword"
+                  class="search-tag progress-tag"
+                  color="primary"
+                  size="small"
+                  variant="tonal"
+                >
                   {{ t('resource.keyword') }}: {{ keyword }}
                 </VChip>
                 <VChip v-if="title" class="search-tag progress-tag" color="primary" size="small" variant="tonal">
@@ -1517,6 +1607,8 @@ onUnmounted(() => {
               v-for="(item, index) in streamPreviewSubtitleDataList"
               :key="getSubtitleItemKey(item, index)"
               :subtitle="item"
+              :media-source="activeSearchParams.media_source || undefined"
+              :media-id="activeSearchParams.media_id || undefined"
               class="stream-result-item"
             />
           </div>
@@ -1528,7 +1620,11 @@ onUnmounted(() => {
             :estimated-item-height="320"
           >
             <template #default="{ item }">
-              <SubtitleCard :subtitle="item" />
+              <SubtitleCard
+                :subtitle="item"
+                :media-source="activeSearchParams.media_source || undefined"
+                :media-id="activeSearchParams.media_id || undefined"
+              />
             </template>
           </ProgressiveCardGrid>
           <div
@@ -1591,7 +1687,11 @@ onUnmounted(() => {
                 :key="getSubtitleItemKey(item, index)"
                 class="stream-result-item"
               >
-                <SubtitleItem :subtitle="item" />
+                <SubtitleItem
+                  :subtitle="item"
+                  :media-source="activeSearchParams.media_source || undefined"
+                  :media-id="activeSearchParams.media_id || undefined"
+                />
                 <VDivider v-if="index < streamPreviewSubtitleDataList.length - 1" class="my-2" />
               </div>
             </div>
@@ -1605,7 +1705,11 @@ onUnmounted(() => {
                 :get-item-key="getSubtitleItemKey"
               >
                 <template #default="{ item, index }">
-                  <SubtitleItem :subtitle="item" />
+                  <SubtitleItem
+                    :subtitle="item"
+                    :media-source="activeSearchParams.media_source || undefined"
+                    :media-id="activeSearchParams.media_id || undefined"
+                  />
                   <VDivider v-if="index < rawSubtitleDataList.length - 1" class="my-2" />
                 </template>
               </ProgressiveCardGrid>

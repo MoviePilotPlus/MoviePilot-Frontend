@@ -5,7 +5,9 @@ import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { formatDateDifference } from '@core/utils/formatters'
 import api from '@/api'
-import type { ApiResponse, PassKey } from '@/api/types'
+import { getApiBusinessErrorMessage } from '@/api/client'
+import type { PassKey } from '@/api/types'
+import { isAxiosError } from 'axios'
 
 interface Props {
   modelValue: boolean
@@ -35,13 +37,27 @@ const show = computed({
 // PassKey列表
 const passkeyList = ref<PassKey[]>([])
 
+// 列表请求状态用于区分加载失败和合法空列表。
+const passkeyListLoading = ref(false)
+const passkeyListFailed = ref(false)
+
 // PassKey注册loading
 const passkeyRegistering = ref(false)
 
 // PassKey名称
 const passkeyName = ref('')
 
-const passkeyTransactionToken = ref('')
+let passkeyListGeneration = 0
+let passkeyRegistrationGeneration = 0
+let passkeyRegistrationAbortController: AbortController | null = null
+
+// 注册尝试只属于当前对话框会话，结束会话或开始新尝试时取消整条 WebAuthn 链路。
+function invalidatePasskeyRegistration() {
+  passkeyRegistrationGeneration += 1
+  passkeyRegistrationAbortController?.abort()
+  passkeyRegistrationAbortController = null
+  passkeyRegistering.value = false
+}
 
 // 格式化日期
 function formatDate(dateStr: string) {
@@ -50,14 +66,20 @@ function formatDate(dateStr: string) {
 
 // 获取PassKey列表
 async function fetchPassKeyList() {
+  const generation = ++passkeyListGeneration
+  passkeyListLoading.value = true
+  passkeyListFailed.value = false
   try {
-    const result = (await api.get('mfa/passkey/list')) as ApiResponse<PassKey[]>
-    if (result.success) {
-      passkeyList.value = result.data || []
-      emit('update:passkeyList', passkeyList.value)
-    }
+    const result = await api.get<PassKey[]>('mfa/passkey/list')
+    if (generation !== passkeyListGeneration || !props.modelValue) return
+    passkeyList.value = result || []
+    emit('update:passkeyList', passkeyList.value)
   } catch (error) {
+    if (generation !== passkeyListGeneration || !props.modelValue) return
+    passkeyListFailed.value = true
     console.error(error)
+  } finally {
+    if (generation === passkeyListGeneration) passkeyListLoading.value = false
   }
 }
 
@@ -78,21 +100,29 @@ async function registerPassKey() {
     return
   }
 
+  invalidatePasskeyRegistration()
+  const generation = passkeyRegistrationGeneration
+  const registrationAbortController = new AbortController()
+  passkeyRegistrationAbortController = registrationAbortController
+  const registrationName = passkeyName.value
   passkeyRegistering.value = true
   try {
     // 1. 开始注册
-    const startResult = (await api.post('mfa/passkey/register/start', {
-      name: passkeyName.value,
-    })) as ApiResponse<{ options: string; transaction_token: string }>
+    const startResult = await api.post<{ options: string; transaction_token: string }>(
+      'mfa/passkey/register/start',
+      {
+        name: registrationName,
+      },
+      {
+        signal: registrationAbortController.signal,
+        feedback: 'silent',
+      },
+    )
 
-    if (!startResult.success) {
-      $toast.error(startResult.message || t('profile.passkeyRegisterFailed'))
-      return
-    }
+    if (generation !== passkeyRegistrationGeneration || !props.modelValue) return
 
-    const { options, transaction_token: transactionToken } = startResult.data
+    const { options, transaction_token: transactionToken } = startResult
     const publicKeyOptions = JSON.parse(options)
-    passkeyTransactionToken.value = transactionToken
 
     // 2. 调用WebAuthn API
     const credential = (await navigator.credentials.create({
@@ -108,7 +138,10 @@ async function registerPassKey() {
           id: base64UrlToUint8Array(cred.id),
         })),
       },
+      signal: registrationAbortController.signal,
     })) as PublicKeyCredential
+
+    if (generation !== passkeyRegistrationGeneration || !props.modelValue) return
 
     if (!credential) {
       $toast.error(t('profile.passkeyRegisterCancelled'))
@@ -129,34 +162,43 @@ async function registerPassKey() {
     }
 
     // 4. 完成注册
-    const finishResult = (await api.post('mfa/passkey/register/finish', {
-      credential: credentialJSON,
-      transaction_token: passkeyTransactionToken.value,
-      name: passkeyName.value,
-    })) as ApiResponse
+    await api.post(
+      'mfa/passkey/register/finish',
+      {
+        credential: credentialJSON,
+        transaction_token: transactionToken,
+        name: registrationName,
+      },
+      {
+        signal: registrationAbortController.signal,
+        feedback: 'silent',
+      },
+    )
 
-    if (finishResult.success) {
-      $toast.success(t('profile.passkeyRegisterSuccess'))
-      passkeyName.value = ''
-      await fetchPassKeyList()
-    } else {
-      $toast.error(finishResult.message || t('profile.passkeyRegisterFailed'))
-    }
-  } catch (error: any) {
+    if (generation !== passkeyRegistrationGeneration || !props.modelValue) return
+
+    $toast.success(t('profile.passkeyRegisterSuccess'))
+    passkeyName.value = ''
+    await fetchPassKeyList()
+  } catch (error) {
+    if (generation !== passkeyRegistrationGeneration || !props.modelValue) return
     console.error('PassKey注册失败:', error)
-    if (error.name === 'NotAllowedError') {
+    if (error instanceof Error && error.name === 'NotAllowedError') {
       $toast.error(t('profile.passkeyRegisterCancelled'))
-    } else if (error.name === 'NotSupportedError') {
+    } else if (error instanceof Error && error.name === 'NotSupportedError') {
       $toast.error(t('login.passkeyNotSupported'))
-    } else if (error.message?.includes('start failed')) {
+    } else if (error instanceof Error && error.message.includes('start failed')) {
       $toast.error(t('login.passkeyLoginStartFailed'))
-    } else if (error.response) {
+    } else if (isAxiosError(error) && error.response) {
       $toast.error(error.response.data?.message || error.response.data?.detail || t('profile.passkeyRegisterFailed'))
     } else {
-      $toast.error(error.message || t('profile.passkeyRegisterFailed'))
+      $toast.error(error instanceof Error ? error.message : t('profile.passkeyRegisterFailed'))
     }
   } finally {
-    passkeyRegistering.value = false
+    if (generation === passkeyRegistrationGeneration) passkeyRegistering.value = false
+    if (passkeyRegistrationAbortController === registrationAbortController) {
+      passkeyRegistrationAbortController = null
+    }
   }
 }
 
@@ -167,19 +209,12 @@ async function deletePassKey(passkeyId: number) {
     text: t('profile.confirmToDeletePasskey'),
     callback: async (password: string) => {
       try {
-        const result = (await api.post('mfa/passkey/delete', {
-          passkey_id: passkeyId,
-          password,
-        })) as ApiResponse
-        if (result.success) {
-          $toast.success(t('profile.passkeyDeleteSuccess'))
-          await fetchPassKeyList()
-        } else {
-          $toast.error(result.message || t('profile.passkeyDeleteFailed'))
-        }
+        await api.post('mfa/passkey/delete', { passkey_id: passkeyId, password }, { feedback: 'silent' })
+        $toast.success(t('profile.passkeyDeleteSuccess'))
+        await fetchPassKeyList()
       } catch (error) {
         console.error(error)
-        $toast.error(t('profile.passkeyDeleteFailed'))
+        $toast.error(getApiBusinessErrorMessage(error) || t('profile.passkeyDeleteFailed'))
       }
     },
   })
@@ -194,13 +229,21 @@ watch(
       passkeyName.value = ''
     } else {
       // 弹窗关闭时，清空数据
+      passkeyListGeneration += 1
+      invalidatePasskeyRegistration()
       passkeyName.value = ''
-      passkeyTransactionToken.value = ''
       passkeyList.value = []
+      passkeyListLoading.value = false
+      passkeyListFailed.value = false
     }
   },
   { immediate: true },
 )
+
+onUnmounted(() => {
+  passkeyListGeneration += 1
+  invalidatePasskeyRegistration()
+})
 </script>
 
 <template>
@@ -250,7 +293,21 @@ watch(
         </VCard>
 
         <!-- 已注册的通行密钥列表 -->
-        <div v-if="passkeyList.length > 0" class="mt-6 px-4">
+        <LoadingBanner v-if="passkeyListLoading" class="mt-6" />
+        <VAlert
+          v-else-if="passkeyListFailed"
+          type="error"
+          variant="tonal"
+          :title="t('common.serverConnectionFailed')"
+          class="mt-6"
+        >
+          <template #append>
+            <VBtn color="error" variant="text" :loading="passkeyListLoading" @click="fetchPassKeyList">
+              {{ t('common.retry') }}
+            </VBtn>
+          </template>
+        </VAlert>
+        <div v-else-if="passkeyList.length > 0" class="mt-6 px-4">
           <div
             v-for="passkey in passkeyList"
             :key="passkey.id"

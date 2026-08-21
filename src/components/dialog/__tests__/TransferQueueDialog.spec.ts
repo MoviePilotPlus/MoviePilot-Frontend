@@ -4,7 +4,12 @@ import { screen, waitFor, within } from '@testing-library/vue'
 import { renderWithProviders } from '@tests/support/render'
 import { flushPromises } from '@vue/test-utils'
 import userEvent from '@testing-library/user-event'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { cwd } from 'node:process'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const transferQueueSource = readFileSync(resolve(cwd(), 'src/components/dialog/TransferQueueDialog.vue'), 'utf8')
 
 const mocks = vi.hoisted(() => ({
   apiDelete: vi.fn(),
@@ -82,8 +87,7 @@ function createQueueItem({
       episode_run_time: [],
       origin_country: [],
       media_id: String(id),
-      mediaid_prefix: 'themoviedb',
-      source: 'themoviedb',
+      media_source: 'themoviedb',
       title,
       title_year: titleYear,
       year: '2026',
@@ -198,7 +202,20 @@ describe('TransferQueueDialog', () => {
     expect(screen.queryByText('来源 A.mkv')).not.toBeInTheDocument()
   })
 
-  it('uses canonical built-in and custom identities before falling back to the title', async () => {
+  it('uses fixed medium poster rounding without an active-card accent strip', async () => {
+    mocks.apiGet.mockResolvedValue(createQueue('圆角媒体', '/downloads/rounded.mkv'))
+
+    const { container } = await renderDialog()
+
+    await screen.findByRole('navigation', { name: '媒体队列' })
+    expect(container.querySelector('.media-selector__poster')).toHaveClass('rounded-md')
+    expect(container.querySelector('.active-media__poster')).toHaveClass('rounded-md')
+    expect(transferQueueSource).not.toContain('.media-selector__item::before')
+    expect(transferQueueSource).not.toContain('.media-selector__item--active::before')
+    expect(transferQueueSource).not.toContain('border-radius: var(--app-control-radius)')
+  })
+
+  it('uses canonical built-in identities before falling back to the title', async () => {
     const builtIn = createQueueItem({
       id: 7301,
       path: '/downloads/built-in.mkv',
@@ -211,8 +228,7 @@ describe('TransferQueueDialog', () => {
       title: '自定义来源',
       titleYear: '重复标题 (2026)',
     })
-    custom.media.source = 'custom-source'
-    custom.media.mediaid_prefix = 'custom-source'
+    custom.media.media_source = 'bilibili'
     custom.media.media_id = 'custom-7302'
     const fallback = createQueueItem({
       id: 7399,
@@ -220,8 +236,7 @@ describe('TransferQueueDialog', () => {
       title: '标题回退',
       titleYear: '唯一回退标题 (2026)',
     })
-    fallback.media.source = undefined
-    fallback.media.mediaid_prefix = undefined
+    fallback.media.media_source = undefined
     fallback.media.media_id = undefined
     mocks.apiGet.mockResolvedValue([builtIn, custom, fallback])
 

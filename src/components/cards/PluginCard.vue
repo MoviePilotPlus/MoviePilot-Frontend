@@ -2,14 +2,16 @@
 import { useToast } from 'vue-toastification'
 import { useConfirm } from '@/composables/useConfirm'
 import api from '@/api'
-import type { ApiResponse, Plugin, PluginRating } from '@/api/types'
-import { getLogoUrl } from '@/utils/imageUtils'
+import { getApiBusinessErrorMessage } from '@/api/client'
+import type { Plugin, PluginRating } from '@/api/types'
+import { getLogoUrl, getProxyImageUrl } from '@/utils/imageUtils'
 import { usePluginCardAccent } from '@/composables/usePluginCardAccent'
 import { formatDownloadCount } from '@/@core/utils/formatters'
 import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { openSharedDialog } from '@/composables/useSharedDialog'
 import { usePluginSidebarNavStore } from '@/stores/pluginSidebarNav'
+import { useGlobalSettingsStore } from '@/stores'
 
 // 插件日志面板只有点击“查看日志”时才需要，延后加载可减轻插件列表首屏。
 const PluginConfigDialog = defineAsyncComponent(() => import('../dialog/PluginConfigDialog.vue'))
@@ -32,6 +34,7 @@ const props = defineProps({
     default: false,
   },
 })
+const globalSettingsStore = useGlobalSettingsStore()
 
 // 定义触发的自定义事件
 const emit = defineEmits(['remove', 'save', 'actionDone', 'rating'])
@@ -134,26 +137,17 @@ async function uninstallPlugin() {
 
   showPluginProgress(t('plugin.uninstalling', { name: props.plugin?.plugin_name }))
   try {
-    const result: ApiResponse<unknown> = await api.delete(`plugin/${props.plugin?.id}`)
-    if (result.success) {
-      $toast.success(t('plugin.uninstallSuccess', { name: props.plugin?.plugin_name }))
+    await api.delete(`plugin/${props.plugin?.id}`, { feedback: 'silent' })
+    $toast.success(t('plugin.uninstallSuccess', { name: props.plugin?.plugin_name }))
 
-      emit('remove')
-      // 生命周期成功后刷新动态导航。
-      void pluginSidebarNavStore.ensureSidebarNav(true)
-    } else {
-      $toast.error(
-        t('plugin.uninstallFailed', {
-          name: props.plugin?.plugin_name,
-          message: result.message,
-        }),
-      )
-    }
+    emit('remove')
+    // 生命周期成功后刷新动态导航。
+    void pluginSidebarNavStore.ensureSidebarNav(true)
   } catch (error) {
     $toast.error(
       t('plugin.uninstallFailed', {
         name: props.plugin?.plugin_name,
-        message: t('common.serverConnectionFailed'),
+        message: getApiBusinessErrorMessage(error) || t('common.serverConnectionFailed'),
       }),
     )
     console.error(error)
@@ -192,19 +186,22 @@ const iconPath: Ref<string> = computed(() => {
   if (imageLoadError.value) return getLogoUrl('plugin')
   // 如果是网络图片则使用代理后返回
   if (props.plugin?.plugin_icon?.startsWith('http'))
-    return `${import.meta.env.VITE_API_BASE_URL}system/img/1?imgurl=${encodeURIComponent(
-      props.plugin?.plugin_icon,
-    )}&cache=true`
+    return getProxyImageUrl(props.plugin.plugin_icon, {
+      proxy: true,
+      useCache: globalSettingsStore.globalSettings.GLOBAL_IMAGE_CACHE,
+    })
 
   return `./plugin_icon/${props.plugin?.plugin_icon}`
 })
 
 // 插件作者头像路径
 const authorPath: Ref<string> = computed(() => {
+  if (!props.plugin?.author_url) return ''
   // 网络图片则使用代理后返回
-  return `${import.meta.env.VITE_API_BASE_URL}system/img/1?imgurl=${encodeURIComponent(
-    props.plugin?.author_url + '.png',
-  )}&cache=true`
+  return getProxyImageUrl(`${props.plugin.author_url}.png`, {
+    proxy: true,
+    useCache: globalSettingsStore.globalSettings.GLOBAL_IMAGE_CACHE,
+  })
 })
 
 // 重置插件
@@ -217,25 +214,16 @@ async function resetPlugin() {
   if (!isConfirmed) return
 
   try {
-    const result: ApiResponse<unknown> = await api.get(`plugin/reset/${props.plugin?.id}`)
-    if (result.success) {
-      $toast.success(t('plugin.resetSuccess', { name: props.plugin?.plugin_name }))
-      emit('save')
-      // 生命周期成功后刷新动态导航。
-      void pluginSidebarNavStore.ensureSidebarNav(true)
-    } else {
-      $toast.error(
-        t('plugin.resetFailed', {
-          name: props.plugin?.plugin_name,
-          message: result.message,
-        }),
-      )
-    }
+    await api.get(`plugin/reset/${props.plugin?.id}`, { feedback: 'silent' })
+    $toast.success(t('plugin.resetSuccess', { name: props.plugin?.plugin_name }))
+    emit('save')
+    // 生命周期成功后刷新动态导航。
+    void pluginSidebarNavStore.ensureSidebarNav(true)
   } catch (error) {
     $toast.error(
       t('plugin.resetFailed', {
         name: props.plugin?.plugin_name,
-        message: t('common.serverConnectionFailed'),
+        message: getApiBusinessErrorMessage(error) || t('common.serverConnectionFailed'),
       }),
     )
     console.error(error)
@@ -269,7 +257,8 @@ async function updatePlugin(releaseVersion?: string, repoUrl?: string) {
         : t('plugin.updating', { name: props.plugin?.plugin_name }),
     )
 
-    const result: ApiResponse<unknown> = await api.get(`plugin/install/${props.plugin?.id}`, {
+    await api.get(`plugin/install/${props.plugin?.id}`, {
+      feedback: 'silent',
       params: {
         repo_url: repoUrl || props.plugin?.repo_url,
         release_version: releaseVersion,
@@ -277,27 +266,18 @@ async function updatePlugin(releaseVersion?: string, repoUrl?: string) {
       },
     })
 
-    if (result.success) {
-      $toast.success(t('plugin.updateSuccess', { name: props.plugin?.plugin_name }))
-      versionHistoryDialogController?.close()
-      versionHistoryDialogController = null
+    $toast.success(t('plugin.updateSuccess', { name: props.plugin?.plugin_name }))
+    versionHistoryDialogController?.close()
+    versionHistoryDialogController = null
 
-      emit('save')
-      // 生命周期成功后刷新动态导航。
-      void pluginSidebarNavStore.ensureSidebarNav(true)
-    } else {
-      $toast.error(
-        t('plugin.updateFailed', {
-          name: props.plugin?.plugin_name,
-          message: result.message,
-        }),
-      )
-    }
+    emit('save')
+    // 生命周期成功后刷新动态导航。
+    void pluginSidebarNavStore.ensureSidebarNav(true)
   } catch (error) {
     $toast.error(
       t('plugin.updateFailed', {
         name: props.plugin?.plugin_name,
-        message: t('common.serverConnectionFailed'),
+        message: getApiBusinessErrorMessage(error) || t('common.serverConnectionFailed'),
       }),
     )
     console.error(error)
@@ -474,26 +454,27 @@ async function executePluginClone(cloneForm: {
   try {
     showPluginProgress(t('plugin.cloning', { name: props.plugin?.plugin_name }))
 
-    const result: ApiResponse<unknown> = await api.post(`plugin/clone/${props.plugin?.id}`, {
-      suffix: cloneForm.suffix.trim(),
-      name: cloneForm.name.trim(),
-      description: cloneForm.description.trim(),
-      version: cloneForm.version.trim(),
-      icon: cloneForm.icon.trim(),
-    })
+    await api.post(
+      `plugin/clone/${props.plugin?.id}`,
+      {
+        suffix: cloneForm.suffix.trim(),
+        name: cloneForm.name.trim(),
+        description: cloneForm.description.trim(),
+        version: cloneForm.version.trim(),
+        icon: cloneForm.icon.trim(),
+      },
+      { feedback: 'silent' },
+    )
 
-    if (result.success) {
-      $toast.success(t('plugin.cloneSuccess', { name: cloneForm.name }))
-      cloneDialogController?.close()
-      cloneDialogController = null
-      emit('remove')
-      // 生命周期成功后刷新动态导航。
-      void pluginSidebarNavStore.ensureSidebarNav(true)
-    } else {
-      $toast.error(t('plugin.cloneFailed', { message: result.message }))
-    }
+    $toast.success(t('plugin.cloneSuccess', { name: cloneForm.name }))
+    cloneDialogController?.close()
+    cloneDialogController = null
+    emit('remove')
+    // 生命周期成功后刷新动态导航。
+    void pluginSidebarNavStore.ensureSidebarNav(true)
   } catch (error) {
-    $toast.error(t('plugin.cloneFailedGeneral'))
+    const message = getApiBusinessErrorMessage(error)
+    $toast.error(message ? t('plugin.cloneFailed', { message }) : t('plugin.cloneFailedGeneral'))
     console.error(error)
   } finally {
     closePluginProgress()

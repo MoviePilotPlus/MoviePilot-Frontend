@@ -77,7 +77,7 @@ const stateDict = computed<Record<string, string>>(() => ({
 
 // 队列作业由来源原生媒体 ID 与季号共同标识；缺少媒体 ID 时才退回展示标题。
 function getMediaIdentity(item: TransferQueue) {
-  const source = item.media.mediaid_prefix || item.media.source
+  const source = item.media.media_source
   const mediaIdentity =
     source && item.media.media_id
       ? `${source}:${item.media.media_id}`
@@ -442,6 +442,7 @@ onUnmounted(() => {
                 :src="getPosterUrl(group.media)"
                 :alt="getMediaTitle(group.media, group.season)"
                 cover
+                rounded="md"
               />
               <div class="media-selector__info">
                 <div class="media-selector__title">{{ getMediaTitle(group.media, group.season) }}</div>
@@ -467,6 +468,7 @@ onUnmounted(() => {
                 :src="getPosterUrl(activeMediaGroup?.media)"
                 :alt="getMediaTitle(activeMediaGroup?.media, activeMediaGroup?.season)"
                 cover
+                rounded="md"
               />
               <div class="active-media__info">
                 <h3 class="active-media__title">
@@ -633,20 +635,6 @@ onUnmounted(() => {
   border-block-start: 0;
 }
 
-.media-selector__item::before {
-  position: absolute;
-  border-radius: var(--app-vuetify-rounded-pill);
-  background: rgb(var(--v-theme-primary));
-  block-size: 0;
-  content: '';
-  inline-size: 3px;
-  inset-block-start: 50%;
-  inset-inline-start: 0.25rem;
-  transition:
-    block-size 0.18s ease,
-    inset-block-start 0.18s ease;
-}
-
 .media-selector__item:hover {
   background: rgba(var(--v-theme-on-surface), var(--v-hover-opacity));
 }
@@ -655,14 +643,8 @@ onUnmounted(() => {
   background: rgba(var(--v-theme-primary), 0.08);
 }
 
-.media-selector__item--active::before {
-  block-size: calc(100% - 1rem);
-  inset-block-start: 0.5rem;
-}
-
 .media-selector__poster,
 .active-media__poster {
-  border-radius: var(--app-control-radius);
   background: rgba(var(--v-theme-on-surface), 0.06);
 }
 
@@ -702,7 +684,10 @@ onUnmounted(() => {
 }
 
 .queue-detail {
+  display: flex;
   overflow: hidden;
+  flex-direction: column;
+  min-block-size: 0;
   min-inline-size: 0;
   padding-inline-start: 1.5rem;
 }
@@ -757,7 +742,9 @@ onUnmounted(() => {
 }
 
 .queue-task-list {
-  max-block-size: 23rem;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  max-block-size: none;
   overflow-y: auto;
   scrollbar-width: none;
 }
@@ -944,6 +931,7 @@ onUnmounted(() => {
   }
 
   .queue-task-list {
+    flex: 0 0 auto;
     overflow: visible;
     max-block-size: none;
   }

@@ -7,13 +7,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   api: { get: vi.fn(), post: vi.fn() },
   loadRemoteAppPageComponent: vi.fn(),
+  openSharedDialog: vi.fn(),
   nativeSubscribe: vi.fn(),
+  createConfirm: vi.fn(),
   route: undefined as unknown as { params: { navKey?: string; pluginId?: string } },
   toast: { error: vi.fn(), success: vi.fn() },
 }))
 
 vi.mock('@/api', () => ({
   default: mocks.api,
+  pluginApi: mocks.api,
 }))
 
 vi.mock('@/utils/federationLoader', () => ({
@@ -22,6 +25,14 @@ vi.mock('@/utils/federationLoader', () => ({
 
 vi.mock('@/composables/usePluginNativeSubscribe', () => ({
   usePluginNativeSubscribe: () => mocks.nativeSubscribe,
+}))
+
+vi.mock('@/composables/useConfirm', () => ({
+  useConfirm: () => mocks.createConfirm,
+}))
+
+vi.mock('@/composables/useSharedDialog', () => ({
+  openSharedDialog: mocks.openSharedDialog,
 }))
 
 vi.mock('vue-toastification', () => ({
@@ -69,6 +80,8 @@ function capabilityPage() {
     setup(props, { emit }) {
       const injectedToast = inject('moviepilot:toast')
       const injectedNativeSubscribe = inject('moviepilot:nativeSubscribe')
+      const injectedDialog = inject('moviepilot:dialog')
+      const injectedConfirm = inject('moviepilot:confirm')
       return () =>
         h(
           'button',
@@ -80,6 +93,8 @@ function capabilityPage() {
             props.nativeSubscribe === mocks.nativeSubscribe,
             injectedToast === mocks.toast,
             injectedNativeSubscribe === mocks.nativeSubscribe,
+            injectedDialog === mocks.openSharedDialog,
+            injectedConfirm === mocks.createConfirm,
           ].join(':'),
         )
     },
@@ -89,9 +104,11 @@ function capabilityPage() {
 describe('plugin-app page', () => {
   beforeEach(() => {
     mocks.loadRemoteAppPageComponent.mockReset()
+    mocks.openSharedDialog.mockReset()
     mocks.api.get.mockReset()
     mocks.api.post.mockReset()
     mocks.nativeSubscribe.mockReset()
+    mocks.createConfirm.mockReset()
     mocks.route = reactive({ params: { navKey: 'main', pluginId: 'alpha' } })
     mocks.toast.error.mockReset()
     mocks.toast.success.mockReset()
@@ -108,7 +125,7 @@ describe('plugin-app page', () => {
 
     pageLoad.resolve(capabilityPage())
     const remoteAction = await screen.findByRole('button', {
-      name: 'alpha:settings:true:true:true:true',
+      name: 'alpha:settings:true:true:true:true:true:true',
     })
     await fireEvent.click(remoteAction)
 

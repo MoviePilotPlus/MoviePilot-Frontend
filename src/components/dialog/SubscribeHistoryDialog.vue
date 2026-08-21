@@ -92,17 +92,15 @@ async function loadHistory({ done }: { done: any }) {
 async function reSubscribe(item: Subscribe) {
   if (item.type === '电影') {
     progressText.value = t('dialog.subscribeHistory.resubscribeMovie', { name: item.name })
+  } else if (item.type === '音乐') {
+    progressText.value = t('dialog.subscribeHistory.resubscribeMusic', { name: item.name })
   } else {
     progressText.value = t('dialog.subscribeHistory.resubscribeTv', { name: item.name, season: item.season })
   }
   progressDialog.value = true
   try {
-    const result: { [key: string]: any } = await api.post('subscribe/', item)
-    if (result.success) {
-      emit('save')
-    } else {
-      $toast.error(t('subscribe.requestFailed'))
-    }
+    await api.post('subscribe/', item, { feedback: 'silent' })
+    emit('save')
   } catch (e) {
     console.error(e)
     $toast.error(t('subscribe.requestFailed'))
@@ -113,10 +111,8 @@ async function reSubscribe(item: Subscribe) {
 // 删除记录
 async function deleteHistory(item: Subscribe) {
   try {
-    const result: { [key: string]: any } = await api.delete(`subscribe/history/${item.id}`)
-    if (result.success) {
-      historyList.value = historyList.value.filter(i => i.id !== item.id)
-    }
+    await api.delete(`subscribe/history/${item.id}`, { feedback: 'silent' })
+    historyList.value = historyList.value.filter(i => i.id !== item.id)
   } catch (e) {
     console.error(e)
     $toast.error(t('subscribe.requestFailed'))
@@ -174,22 +170,22 @@ function getMediaTypeText(type: string | undefined) {
             </div>
           </template>
           <template #empty />
-          <VVirtualScroll v-if="historyList.length > 0" renderless :items="historyList" :item-height="104">
-            <template #default="{ item, itemRef }">
-              <div :ref="itemRef">
+          <VVirtualScroll v-if="historyList.length > 0" :renderless="true" :items="historyList" :item-height="104">
+            <template #default="{ item, ...slotProps }">
+              <div :ref="'itemRef' in slotProps ? slotProps.itemRef : undefined">
                 <VListItem>
                   <template #prepend>
                     <VImg
-                      height="75"
-                      width="50"
+                      :height="item.type === '音乐' ? 64 : 75"
+                      :width="item.type === '音乐' ? 64 : 50"
                       :src="item.poster"
-                      aspect-ratio="2/3"
-                      class="object-cover rounded ring-gray-500 me-3"
+                      :aspect-ratio="item.type === '音乐' ? 1 : 2 / 3"
+                      class="subscribe-history-poster object-cover rounded ring-gray-500 me-3"
                       cover
                     >
                       <template #placeholder>
                         <div class="w-full h-full">
-                          <VSkeletonLoader class="object-cover aspect-w-2 aspect-h-3" />
+                          <VSkeletonLoader class="object-cover h-100" />
                         </div>
                       </template>
                     </VImg>

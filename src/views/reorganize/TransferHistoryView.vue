@@ -19,7 +19,7 @@ import { useGlobalSettingsStore, useUserStore } from '@/stores'
 import { openSharedDialog } from '@/composables/useSharedDialog'
 import { buildUserPermissionContext, hasPermission } from '@/utils/permission'
 import { getDisplayImageUrl } from '@/utils/imageUtils'
-import noImage from '@images/no-image.jpeg'
+import { formatMusicAudioSpecs } from '@/utils/music'
 
 const TransferHistoryDeleteDialog = defineAsyncComponent(
   () => import('@/components/dialog/TransferHistoryDeleteDialog.vue'),
@@ -282,9 +282,9 @@ const storages = ref<StorageConf[]>([])
 // 查询存储
 async function loadStorages() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/public/Storages')
+    const result = await api.get<{ value?: StorageConf[] }>('system/setting/public/Storages')
 
-    storages.value = result.data?.value ?? []
+    storages.value = result.value ?? []
   } catch (error) {
     console.log(error)
   }
@@ -463,7 +463,7 @@ async function fetchData(page = currentPage.value, count = itemsPerPage.value, o
   }
 
   try {
-    const result: { [key: string]: any } = await api.get('history/transfer', {
+    const result = await api.get<{ list?: TransferHistory[]; total?: number }>('history/transfer', {
       params: {
         page,
         count,
@@ -472,11 +472,11 @@ async function fetchData(page = currentPage.value, count = itemsPerPage.value, o
     })
     if (requestSeed !== fetchDataRequestSeed) return
 
-    const list: TransferHistory[] = Array.isArray(result.data?.list) ? result.data.list : []
+    const list = Array.isArray(result.list) ? result.list : []
 
     isRefreshed.value = true
     dataList.value = list
-    totalItems.value = ensureNumber(result.data?.total, 0)
+    totalItems.value = ensureNumber(result.total, 0)
     updateSearchHintList(list)
 
     return {
@@ -550,7 +550,7 @@ async function loadMobileHistory({ done }: { done: (status: 'ok' | 'empty' | 'er
 
   try {
     mobileLoading.value = true
-    const result: { [key: string]: any } = await api.get('history/transfer', {
+    const result = await api.get<{ list?: TransferHistory[]; total?: number }>('history/transfer', {
       params: {
         page: mobileCurrentPage.value,
         count: mobilePageSize,
@@ -562,8 +562,8 @@ async function loadMobileHistory({ done }: { done: (status: 'ok' | 'empty' | 'er
       return
     }
 
-    const list: TransferHistory[] = Array.isArray(result.data?.list) ? result.data.list : []
-    const total = ensureNumber(result.data?.total, 0)
+    const list = Array.isArray(result.list) ? result.list : []
+    const total = ensureNumber(result.total, 0)
 
     appendMobileHistory(list, total)
     done(mobileHasMore.value ? 'ok' : 'empty')
@@ -653,13 +653,21 @@ async function refreshDataAfterOperation(mobileSelection: TransferHistory[] = []
 function getIcon(type: string) {
   if (type === '电影') return 'mdi-movie'
   else if (type === '电视剧') return 'mdi-television-classic'
+  else if (type === '音乐') return 'mdi-album'
   else return 'mdi-help-circle'
 }
 
-// 计算移动端卡片海报地址，优先使用后端图片代理并兼顾全局缓存设置。
+// 媒体占位图标：电影/电视剧/音乐各自使用对应图标，缺失封面时统一渲染图标 + 底色占位
+function getPlaceholderIcon(type: string) {
+  if (type === '音乐') return 'mdi-album'
+  else if (type === '电视剧') return 'mdi-television-classic'
+  else return 'mdi-movie-open-outline'
+}
+
+// 计算历史记录海报地址，整理历史的 image 字段由后端写入 Poster 图片。
 function getHistoryPosterUrl(item: TransferHistory) {
   const image = item.image
-  if (!image) return noImage
+  if (!image) return ''
 
   if (!/^https?:\/\//i.test(image)) {
     return `${import.meta.env.VITE_API_BASE_URL}system/img/0?imgurl=${encodeURIComponent(image)}`
@@ -683,18 +691,10 @@ async function removeHistory(item: TransferHistory) {
 async function remove(item: TransferHistory, deleteSrc: boolean, deleteDest: boolean, notifyError = true) {
   try {
     // 调用删除API
-    const result: {
-      [key: string]: any
-    } = await api.delete(`history/transfer?deletesrc=${deleteSrc}&deletedest=${deleteDest}`, {
+    await api.delete<null>(`history/transfer?deletesrc=${deleteSrc}&deletedest=${deleteDest}`, {
       data: item,
+      feedback: 'silent',
     })
-
-    if (!result.success) {
-      if (notifyError) {
-        $toast.error(t('transferHistory.deleteFailed', { message: result.message || '' }))
-      }
-      return false
-    }
     return true
   } catch (error) {
     console.error(error)
@@ -897,13 +897,15 @@ async function triggerAiRedo(item: TransferHistory) {
   aiRedoIds.value = [...aiRedoIds.value, item.id]
   let progressStarted = false
   try {
-    const result: { [key: string]: any } = await api.post(`history/transfer/${item.id}/ai-redo`)
+    const result = await api.post<{ progress_key?: string }>(`history/transfer/${item.id}/ai-redo`, undefined, {
+      feedback: 'silent',
+    })
     if (componentUnmounted) return
 
-    const progressKey = result.data?.progress_key
+    const progressKey = result.progress_key
 
-    if (!result.success || !progressKey) {
-      $toast.error(result.message || t('transferHistory.aiRedoFailed'))
+    if (!progressKey) {
+      $toast.error(t('transferHistory.aiRedoFailed'))
       return
     }
     startAiRedoProgress(item.id, progressKey)
@@ -934,16 +936,20 @@ async function triggerBatchAiRedo() {
   aiRedoIds.value = [...new Set([...aiRedoIds.value, ...historyIds])]
   let progressStarted = false
   try {
-    const result: { [key: string]: any } = await api.post('history/transfer/ai-redo', {
-      history_ids: historyIds,
-    })
+    const result = await api.post<{ history_ids?: number[]; progress_key?: string }>(
+      'history/transfer/ai-redo',
+      {
+        history_ids: historyIds,
+      },
+      { feedback: 'silent' },
+    )
     if (componentUnmounted) return
 
-    const progressKey = result.data?.progress_key
-    const acceptedIds = (result.data?.history_ids as number[] | undefined) ?? historyIds
+    const progressKey = result.progress_key
+    const acceptedIds = result.history_ids ?? historyIds
 
-    if (!result.success || !progressKey) {
-      $toast.error(result.message || t('transferHistory.aiRedoFailed'))
+    if (!progressKey) {
+      $toast.error(t('transferHistory.aiRedoFailed'))
       return
     }
     startAiRedoProgressBatch(acceptedIds, progressKey)
@@ -1084,7 +1090,7 @@ function getHistoryDisplayTitle(item: TransferHistory) {
 
 // 获取移动端卡片副标题，优先展示二级分类和年份。
 function getHistorySubtitle(item: TransferHistory) {
-  return [item.category, item.year].filter(Boolean).join(' / ')
+  return [item.category, item.year, item.type === '音乐' ? formatMusicAudioSpecs(item) : ''].filter(Boolean).join(' / ')
 }
 
 // 获取存储展示名称，配置缺失时回退到原始存储标识。
@@ -1483,11 +1489,26 @@ onUnmounted(() => {
         </tr>
       </template>
       <template #item.title="{ item }">
-        <div class="d-flex align-center">
-          <VAvatar>
-            <VIcon :icon="getIcon(item.type || '')" />
-          </VAvatar>
-          <div class="d-flex flex-column ms-1">
+        <div class="transfer-history-desktop-media-cell">
+          <div class="transfer-history-desktop-poster-frame">
+            <VImg
+              v-if="getHistoryPosterUrl(item)"
+              :src="getHistoryPosterUrl(item)"
+              :alt="item.title"
+              cover
+              class="transfer-history-desktop-poster"
+            >
+              <template #error>
+                <div class="transfer-history-desktop-poster-placeholder">
+                  <VIcon :icon="getPlaceholderIcon(item.type || '')" size="20" color="medium-emphasis" />
+                </div>
+              </template>
+            </VImg>
+            <div v-else class="transfer-history-desktop-poster-placeholder">
+              <VIcon :icon="getPlaceholderIcon(item.type || '')" size="20" color="medium-emphasis" />
+            </div>
+          </div>
+          <div class="d-flex flex-column">
             <span v-if="item.type === '电视剧'" class="d-block text-high-emphasis min-w-20">
               {{ item?.seasons }}{{ item?.episodes }}
             </span>
@@ -1498,13 +1519,17 @@ onUnmounted(() => {
       <template #item.src="{ item }">
         <div>
           <span>
-            <VChip variant="tonal" size="small" label class="my-1"> {{ storageDict[item?.src_storage || ''] }}</VChip>
+            <VChip variant="tonal" size="small" label class="my-1">
+              {{ getHistoryStorageName(item?.src_storage) }}
+            </VChip>
             <small>{{ item?.src }}</small>
           </span>
           <span class="text-high-emphasis text-bold"> => </span>
           <br />
           <span v-if="item?.dest">
-            <VChip variant="tonal" size="small" label class="my-1"> {{ storageDict[item?.dest_storage || ''] }}</VChip>
+            <VChip variant="tonal" size="small" label class="my-1">
+              {{ getHistoryStorageName(item?.dest_storage) }}
+            </VChip>
             <small>{{ item?.dest }}</small>
           </span>
         </div>
@@ -1567,11 +1592,26 @@ onUnmounted(() => {
       :style="{ height: `${availableHeight}px` }"
     >
       <template #item.title="{ item }">
-        <div class="d-flex align-center">
-          <VAvatar>
-            <VIcon :icon="getIcon(item.type || '')" />
-          </VAvatar>
-          <div class="d-flex flex-column ms-1">
+        <div class="transfer-history-desktop-media-cell">
+          <div class="transfer-history-desktop-poster-frame">
+            <VImg
+              v-if="getHistoryPosterUrl(item)"
+              :src="getHistoryPosterUrl(item)"
+              :alt="item.title"
+              cover
+              class="transfer-history-desktop-poster"
+            >
+              <template #error>
+                <div class="transfer-history-desktop-poster-placeholder">
+                  <VIcon :icon="getPlaceholderIcon(item.type || '')" size="20" color="medium-emphasis" />
+                </div>
+              </template>
+            </VImg>
+            <div v-else class="transfer-history-desktop-poster-placeholder">
+              <VIcon :icon="getPlaceholderIcon(item.type || '')" size="20" color="medium-emphasis" />
+            </div>
+          </div>
+          <div class="d-flex flex-column">
             <span v-if="item.type === '电视剧'" class="d-block text-high-emphasis min-w-20">
               {{ item?.title }} {{ item?.seasons }}{{ item?.episodes }}
             </span>
@@ -1585,13 +1625,17 @@ onUnmounted(() => {
       <template #item.src="{ item }">
         <div>
           <span>
-            <VChip variant="tonal" size="small" label class="my-1"> {{ storageDict[item?.src_storage || ''] }}</VChip>
+            <VChip variant="tonal" size="small" label class="my-1">
+              {{ getHistoryStorageName(item?.src_storage) }}
+            </VChip>
             <small>{{ item?.src }}</small>
           </span>
           <span class="text-high-emphasis text-bold"> => </span>
           <br />
           <span v-if="item?.dest">
-            <VChip variant="tonal" size="small" label class="my-1"> {{ storageDict[item?.dest_storage || ''] }}</VChip>
+            <VChip variant="tonal" size="small" label class="my-1">
+              {{ getHistoryStorageName(item?.dest_storage) }}
+            </VChip>
             <small>{{ item?.dest }}</small>
           </span>
         </div>
@@ -1747,6 +1791,7 @@ onUnmounted(() => {
             <header class="transfer-history-mobile-record__header">
               <div class="transfer-history-mobile-record__poster-wrapper">
                 <VImg
+                  v-if="getHistoryPosterUrl(item)"
                   class="transfer-history-mobile-record__poster"
                   :src="getHistoryPosterUrl(item)"
                   :alt="item.title"
@@ -1758,14 +1803,14 @@ onUnmounted(() => {
                     </div>
                   </template>
                   <template #error>
-                    <VImg
-                      :src="noImage"
-                      cover
-                      :alt="item.title"
-                      class="transfer-history-mobile-record__poster-fallback"
-                    />
+                    <div class="transfer-history-mobile-record__poster-placeholder">
+                      <VIcon :icon="getPlaceholderIcon(item.type || '')" size="28" color="medium-emphasis" />
+                    </div>
                   </template>
                 </VImg>
+                <div v-else class="transfer-history-mobile-record__poster-placeholder">
+                  <VIcon :icon="getPlaceholderIcon(item.type || '')" size="28" color="medium-emphasis" />
+                </div>
                 <VIcon class="transfer-history-mobile-record__poster-type" :icon="getIcon(item.type || '')" size="14" />
               </div>
 
@@ -1917,6 +1962,45 @@ onUnmounted(() => {
   border-radius: 0;
 }
 
+.transfer-history-desktop-media-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-block: 6px;
+}
+
+.transfer-history-desktop-poster-frame {
+  flex: 0 0 36px;
+  inline-size: 36px;
+  block-size: 54px;
+  min-inline-size: 36px;
+  min-block-size: 54px;
+  max-inline-size: 36px;
+  max-block-size: 54px;
+  overflow: hidden;
+  border-radius: 4px;
+  aspect-ratio: 2 / 3;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.transfer-history-desktop-poster,
+.transfer-history-desktop-poster-placeholder {
+  inline-size: 100%;
+  block-size: 100%;
+  max-inline-size: 100%;
+  max-block-size: 100%;
+}
+
+.transfer-history-desktop-poster :deep(.v-img__img) {
+  object-fit: cover;
+}
+
+.transfer-history-desktop-poster-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .transfer-history-mobile-page {
   --transfer-history-mobile-surface-opacity: 0.92;
   --transfer-history-mobile-search-bg: rgba(var(--v-theme-on-surface), 0.045);
@@ -2002,7 +2086,7 @@ onUnmounted(() => {
 
 .transfer-history-mobile-record {
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: var(--app-surface-radius);
   backdrop-filter: var(--transfer-history-mobile-surface-blur);
   background: rgba(var(--v-theme-surface), var(--transfer-history-mobile-surface-opacity));
   box-shadow: var(--app-card-rest-shadow);
@@ -2032,7 +2116,7 @@ onUnmounted(() => {
   grid-row: 1 / span 2;
   inline-size: 3.5rem;
   block-size: 5.25rem;
-  border-radius: 8px;
+  border-radius: var(--app-control-radius);
   overflow: hidden;
   background: var(--transfer-history-mobile-muted-bg);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
@@ -2041,7 +2125,7 @@ onUnmounted(() => {
 .transfer-history-mobile-record__poster {
   inline-size: 100%;
   block-size: 100%;
-  border-radius: 8px;
+  border-radius: var(--app-control-radius);
 }
 
 .transfer-history-mobile-record__poster :deep(.v-img__img) {
@@ -2058,9 +2142,13 @@ onUnmounted(() => {
   block-size: 100%;
 }
 
-.transfer-history-mobile-record__poster-fallback {
+.transfer-history-mobile-record__poster-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   inline-size: 100%;
   block-size: 100%;
+  background: rgba(var(--v-theme-on-surface), 0.08);
 }
 
 .transfer-history-mobile-record__poster-type {

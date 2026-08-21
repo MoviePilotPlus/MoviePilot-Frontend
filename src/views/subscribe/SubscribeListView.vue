@@ -99,10 +99,10 @@ const isAllSubscribesSelected = computed(
   () => displayList.value.length > 0 && displayList.value.every(item => selectedSubscribesSet.value.has(item.id)),
 )
 
-// 归一化订阅排序方式，电影订阅不使用缺失集数排序。
+// 归一化订阅排序方式，只有电视剧订阅使用缺失集数排序。
 const normalizedSortBy = computed<SubscribeSortBy | ''>(() => {
   const sortBy = props.sortBy as SubscribeSortBy | ''
-  if (props.type === '电影' && sortBy === 'lack_episode') {
+  if (props.type !== '电视剧' && sortBy === 'lack_episode') {
     return 'date'
   }
 
@@ -151,8 +151,8 @@ function getSubscribeStatus(subscribe: Subscribe) {
     return 'paused' // 暂停
   }
 
-  // 如果是电影，只有洗版和状态
-  if (subscribe.type === '电影') {
+  // 电影、单曲和整专都是原子下载目标；整专曲目总数由订阅卡片单独展示，不映射成分集进度。
+  if (subscribe.type === '电影' || subscribe.type === '音乐') {
     return 'all'
   }
 
@@ -175,7 +175,11 @@ function getSubscribeStatus(subscribe: Subscribe) {
 }
 
 // API请求键值（计算属性）
-const orderRequestKey = computed(() => (props.type === '电影' ? 'SubscribeMovieOrder' : 'SubscribeTvOrder'))
+const orderRequestKey = computed(() => {
+  if (props.type === '电影') return 'SubscribeMovieOrder'
+  if (props.type === '音乐') return 'SubscribeMusicOrder'
+  return 'SubscribeTvOrder'
+})
 
 // 转换订阅时间字段为可排序时间戳。
 function getSubscribeTimeValue(value?: string) {
@@ -281,9 +285,9 @@ watch(
 // 加载顺序
 async function loadSubscribeOrderConfig() {
   try {
-    const response = await api.get(`/user/config/${orderRequestKey.value}`)
-    if (response && response.data && response.data.value) {
-      orderConfig.value = response.data.value
+    const response = await api.get<{ value?: { id: number }[] }>(`/user/config/${orderRequestKey.value}`)
+    if (response.value) {
+      orderConfig.value = response.value
     }
     syncDefaultSortBy()
   } catch (error) {
@@ -422,7 +426,7 @@ async function batchDeleteSubscribes() {
 
   try {
     loading.value = true
-    const promises = selectedSubscribes.value.map(id => api.delete(`subscribe/${id}`))
+    const promises = selectedSubscribes.value.map(id => api.delete<null>(`subscribe/${id}`, { feedback: 'silent' }))
     const results = await Promise.allSettled(promises)
 
     const successCount = results.filter(result => result.status === 'fulfilled').length
@@ -461,14 +465,12 @@ async function batchEnableSubscribes() {
 
   try {
     loading.value = true
-    const promises = selectedSubscribes.value.map(
-      id => api.put(`subscribe/status/${id}?state=R`) as unknown as Promise<{ success: boolean }>,
+    const promises = selectedSubscribes.value.map(id =>
+      api.put<null>(`subscribe/status/${id}?state=R`, undefined, { feedback: 'silent' }),
     )
     const results = await Promise.allSettled(promises)
 
-    const successCount = results.filter(
-      result => result.status === 'fulfilled' && result.value?.success === true,
-    ).length
+    const successCount = results.filter(result => result.status === 'fulfilled').length
     const failedCount = results.length - successCount
 
     if (successCount > 0) {
@@ -504,14 +506,12 @@ async function batchPauseSubscribes() {
 
   try {
     loading.value = true
-    const promises = selectedSubscribes.value.map(
-      id => api.put(`subscribe/status/${id}?state=S`) as unknown as Promise<{ success: boolean }>,
+    const promises = selectedSubscribes.value.map(id =>
+      api.put<null>(`subscribe/status/${id}?state=S`, undefined, { feedback: 'silent' }),
     )
     const results = await Promise.allSettled(promises)
 
-    const successCount = results.filter(
-      result => result.status === 'fulfilled' && result.value?.success === true,
-    ).length
+    const successCount = results.filter(result => result.status === 'fulfilled').length
     const failedCount = results.length - successCount
 
     if (successCount > 0) {
@@ -558,7 +558,6 @@ onMounted(async () => {
       sub.page_open = true
     }
   }
-
 })
 
 useKeepAliveRefresh(fetchData, {

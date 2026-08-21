@@ -24,21 +24,42 @@ const repoText = ref('')
 const newRepoUrl = ref('')
 const editingIndex = ref<number | null>(null)
 const editingUrl = ref('')
+const loadingRepos = ref(true)
+const loadReposFailed = ref(false)
+const saving = ref(false)
 const syncingSources = ref(false)
 
-const emit = defineEmits(['save', 'close'])
+const emit = defineEmits(['save', 'close', 'changed'])
 
 const parsedTextRepos = computed(() => parseRepoInput(repoText.value))
 const activeRepoCount = computed(() =>
   editorMode.value === 'text' ? parsedTextRepos.value.repos.length : repoList.value.length,
 )
 const saveDisabled = computed(
-  () => activeRepoCount.value === 0 || (editorMode.value === 'text' && parsedTextRepos.value.invalidRepos.length > 0),
+  () =>
+    loadingRepos.value ||
+    loadReposFailed.value ||
+    saving.value ||
+    syncingSources.value ||
+    activeRepoCount.value === 0 ||
+    (editorMode.value === 'text' && parsedTextRepos.value.invalidRepos.length > 0),
 )
 
 /** 判断仓库地址是否为可保存的 HTTP URL。 */
 function isValidRepoUrl(url: string) {
-  return /^https?:\/\//i.test(url)
+  if (/\s/.test(url)) return false
+
+  try {
+    const parsedUrl = new URL(url)
+
+    return (
+      ['http:', 'https:'].includes(parsedUrl.protocol) &&
+      Boolean(parsedUrl.hostname) &&
+      !parsedUrl.hostname.includes('%')
+    )
+  } catch {
+    return false
+  }
 }
 
 /** 将粘贴的仓库地址文本解析为有效、无效和重复地址列表。 */
@@ -110,32 +131,42 @@ function switchEditorMode(mode: EditorMode | undefined) {
 
 /** 加载插件市场仓库配置。 */
 async function queryMarketRepoSetting() {
+  loadingRepos.value = true
+  loadReposFailed.value = false
+
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/public/PLUGIN_MARKET')
-    if (result && result.data && result.data.value) {
-      repoList.value = parseRepoInput(result.data.value).repos
-      syncTextFromList()
-    }
+    const result = await api.get<{
+      value?: string
+    }>('system/setting/public/PLUGIN_MARKET')
+
+    repoList.value = parseRepoInput(result.value || '').repos
+    syncTextFromList()
   } catch (error) {
     console.log(error)
+    loadReposFailed.value = true
+  } finally {
+    loadingRepos.value = false
   }
 }
 
 /** 保存插件市场仓库配置。 */
 async function saveHandle() {
+  if (saving.value) return
+
   try {
     const reposToSave = normalizeCurrentRepos()
     if (!reposToSave) return
 
+    saving.value = true
     const repoStringToSave = reposToSave.join(',')
-    const result: { [key: string]: any } = await api.post('system/setting/PLUGIN_MARKET', repoStringToSave)
-
-    if (result.success) {
-      $toast.success(t('dialog.pluginMarketSetting.saveSuccess'))
-      emit('save')
-    } else $toast.error(t('dialog.pluginMarketSetting.saveFailed', { message: result?.message }))
+    await api.post('system/setting/PLUGIN_MARKET', repoStringToSave, { feedback: 'silent' })
+    $toast.success(t('dialog.pluginMarketSetting.saveSuccess'))
+    emit('save')
   } catch (error) {
     console.log(error)
+    $toast.error(t('dialog.pluginMarketSetting.saveFailed', { message: error instanceof Error ? error.message : '' }))
+  } finally {
+    saving.value = false
   }
 }
 
@@ -143,23 +174,23 @@ async function saveHandle() {
 async function syncPluginSources() {
   try {
     syncingSources.value = true
-    const result: { [key: string]: any } = await api.post('system/setting/PLUGIN_MARKET/sync-wiki', {})
+    const result = await api.post<{
+      added_count?: number
+      repos?: string[]
+      total_count?: number
+      value?: string
+    }>('system/setting/PLUGIN_MARKET/sync-wiki', {}, { feedback: 'silent' })
 
-    if (result.success) {
-      const repos = Array.isArray(result.data?.repos)
-        ? result.data.repos
-        : parseRepoInput(result.data?.value || '').repos
-      repoList.value = repos
-      syncTextFromList()
-      $toast.success(
-        t('dialog.pluginMarketSetting.syncSuccess', {
-          added: result.data?.added_count ?? 0,
-          total: result.data?.total_count ?? repos.length,
-        }),
-      )
-    } else {
-      $toast.error(t('dialog.pluginMarketSetting.syncFailed', { message: result?.message }))
-    }
+    const repos = Array.isArray(result.repos) ? result.repos : parseRepoInput(result.value || '').repos
+    repoList.value = repos
+    syncTextFromList()
+    emit('changed')
+    $toast.success(
+      t('dialog.pluginMarketSetting.syncSuccess', {
+        added: result.added_count ?? 0,
+        total: result.total_count ?? repos.length,
+      }),
+    )
   } catch (error) {
     console.log(error)
     $toast.error(t('dialog.pluginMarketSetting.syncFailed', { message: error instanceof Error ? error.message : '' }))
@@ -292,7 +323,21 @@ onMounted(() => {
       </VCardItem>
       <VDivider />
       <VCardText class="plugin-market-dialog-body pt-4">
-        <div class="plugin-market-toolbar">
+        <div v-if="loadingRepos" class="plugin-market-empty text-center text-medium-emphasis">
+          <VProgressCircular indeterminate color="primary" class="mb-2" />
+          <div>{{ t('common.loadingText') }}</div>
+        </div>
+
+        <VAlert v-else-if="loadReposFailed" type="error" variant="tonal" class="plugin-market-load-error">
+          <div class="d-flex flex-wrap align-center justify-space-between ga-2">
+            <span>{{ t('common.serverConnectionFailed') }}</span>
+            <VBtn prepend-icon="mdi-refresh" size="small" variant="tonal" @click="queryMarketRepoSetting">
+              {{ t('common.retry') }}
+            </VBtn>
+          </div>
+        </VAlert>
+
+        <div v-if="!loadingRepos && !loadReposFailed" class="plugin-market-toolbar">
           <div class="plugin-market-toolbar-hint">
             <VIcon icon="mdi-information-outline" size="18" />
             <span>{{ t('dialog.pluginMarketSetting.repoCountHint', { count: activeRepoCount }) }}</span>
@@ -333,7 +378,7 @@ onMounted(() => {
           </div>
         </div>
 
-        <div v-if="editorMode === 'list'" class="plugin-market-list-panel">
+        <div v-if="!loadingRepos && !loadReposFailed && editorMode === 'list'" class="plugin-market-list-panel">
           <div class="plugin-market-input">
             <VTextField
               v-model="newRepoUrl"
@@ -441,7 +486,7 @@ onMounted(() => {
           </div>
         </div>
 
-        <div v-else class="plugin-market-text-panel">
+        <div v-else-if="!loadingRepos && !loadReposFailed" class="plugin-market-text-panel">
           <div class="plugin-market-textarea-field">
             <VIcon icon="mdi-text-box-edit-outline" class="plugin-market-textarea-icon" />
             <textarea
@@ -484,7 +529,7 @@ onMounted(() => {
           variant="tonal"
           prepend-icon="mdi-cloud-sync-outline"
           :loading="syncingSources"
-          :disabled="syncingSources"
+          :disabled="syncingSources || saving || loadingRepos || loadReposFailed"
           @click="syncPluginSources"
         >
           {{ t('dialog.pluginMarketSetting.syncSources') }}
@@ -496,6 +541,7 @@ onMounted(() => {
           @click="saveHandle"
           prepend-icon="mdi-content-save-check"
           class="px-5"
+          :loading="saving"
           :disabled="saveDisabled"
         >
           {{ t('dialog.pluginMarketSetting.save') }}

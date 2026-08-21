@@ -15,11 +15,13 @@ const mocks = vi.hoisted(() => ({
   useDynamicButton: vi.fn(),
 }))
 
+const musicBrainzAlbumId = '695f5ac8-cfd5-4e7b-96a0-6d545f5c9f17'
+
 vi.mock('@/api', () => ({
-  default: {
+  default: createDataApiMock({
     get: (...args: unknown[]) => mocks.apiGet(...args),
     post: (...args: unknown[]) => mocks.apiPost(...args),
-  },
+  }),
 }))
 
 vi.mock('@/composables/useDynamicButton', () => ({
@@ -158,15 +160,21 @@ const TorrentItemStub = defineComponent({
 const SubtitleCardStub = defineComponent({
   props: {
     subtitle: { type: Object, required: true },
+    mediaSource: String,
+    mediaId: String,
   },
-  template: '<article data-testid="subtitle-card">{{ subtitle.title }}</article>',
+  template:
+    '<article data-testid="subtitle-card" :data-media-source="mediaSource || \'\'" :data-media-id="mediaId || \'\'">{{ subtitle.title }}</article>',
 })
 
 const SubtitleItemStub = defineComponent({
   props: {
     subtitle: { type: Object, required: true },
+    mediaSource: String,
+    mediaId: String,
   },
-  template: '<article data-testid="subtitle-row">{{ subtitle.title }}</article>',
+  template:
+    '<article data-testid="subtitle-row" :data-media-source="mediaSource || \'\'" :data-media-id="mediaId || \'\'">{{ subtitle.title }}</article>',
 })
 
 const ProgressiveCardGridStub = defineComponent({
@@ -294,9 +302,10 @@ const searchRouteCases: SearchRouteCase[] = [
     streamParams: { keyword: '普通标题', sites: '1,2' },
   },
   {
-    apiEndpoint: 'search/media/tmdb:42',
+    apiEndpoint: 'search/media/42',
     apiParams: {
       area: 'CN',
+      media_source: 'themoviedb',
       mtype: '电视剧',
       season: '2',
       sites: '1',
@@ -304,10 +313,11 @@ const searchRouteCases: SearchRouteCase[] = [
       year: '2025',
     },
     displayTitle: '媒体资源结果',
-    expectedPath: '/api/v1/search/media/tmdb%3A42/stream',
+    expectedPath: '/api/v1/search/media/42/stream',
     query: {
       area: 'CN',
-      keyword: 'tmdb:42',
+      media_id: '42',
+      media_source: 'themoviedb',
       result_type: 'torrent',
       season: '2',
       sites: '1',
@@ -318,11 +328,53 @@ const searchRouteCases: SearchRouteCase[] = [
     result: createTorrent({ title: '媒体资源结果' }),
     streamParams: {
       area: 'CN',
+      media_source: 'themoviedb',
       mtype: '电视剧',
       season: '2',
       sites: '1',
       title: '媒体标题',
       year: '2025',
+    },
+  },
+  {
+    apiEndpoint: 'search/title',
+    apiParams: { keyword: '周杰伦', mtype: '音乐', sites: '11,22' },
+    displayTitle: '音乐资源结果',
+    expectedPath: '/api/v1/search/title/stream',
+    query: { keyword: '周杰伦', result_type: 'torrent', sites: '11,22', type: '音乐' },
+    result: createTorrent({ title: '音乐资源结果' }),
+    streamParams: { keyword: '周杰伦', mtype: '音乐', sites: '11,22' },
+  },
+  {
+    apiEndpoint: `search/media/${musicBrainzAlbumId}`,
+    apiParams: {
+      area: 'title',
+      media_source: 'musicbrainz',
+      mtype: '音乐',
+      music_type: 'album',
+      title: '叶惠美',
+      year: '2003',
+    },
+    displayTitle: '专辑资源结果',
+    expectedPath: `/api/v1/search/media/${musicBrainzAlbumId}/stream`,
+    query: {
+      area: 'title',
+      media_id: musicBrainzAlbumId,
+      media_source: 'musicbrainz',
+      music_type: 'album',
+      result_type: 'torrent',
+      title: '叶惠美',
+      type: '音乐',
+      year: '2003',
+    },
+    result: createTorrent({ title: '专辑资源结果' }),
+    streamParams: {
+      area: 'title',
+      media_source: 'musicbrainz',
+      mtype: '音乐',
+      music_type: 'album',
+      title: '叶惠美',
+      year: '2003',
     },
   },
   {
@@ -335,9 +387,10 @@ const searchRouteCases: SearchRouteCase[] = [
     streamParams: { keyword: '字幕标题', sites: '2' },
   },
   {
-    apiEndpoint: 'search/subtitle/media/tmdb:84',
+    apiEndpoint: 'search/subtitle/media/84',
     apiParams: {
       episode: '3',
+      media_source: 'themoviedb',
       mtype: '电视剧',
       season: '2',
       sites: '2',
@@ -345,10 +398,11 @@ const searchRouteCases: SearchRouteCase[] = [
       year: '2025',
     },
     displayTitle: '字幕媒体结果',
-    expectedPath: '/api/v1/search/subtitle/media/tmdb%3A84/stream',
+    expectedPath: '/api/v1/search/subtitle/media/84/stream',
     query: {
       episode: '3',
-      keyword: 'tmdb:84',
+      media_id: '84',
+      media_source: 'themoviedb',
       result_type: 'subtitle',
       season: '2',
       sites: '2',
@@ -359,6 +413,7 @@ const searchRouteCases: SearchRouteCase[] = [
     result: createSubtitle('字幕媒体结果'),
     streamParams: {
       episode: '3',
+      media_source: 'themoviedb',
       mtype: '电视剧',
       season: '2',
       sites: '2',
@@ -410,13 +465,20 @@ describe('resource page search flow', () => {
         }),
       )
       expect(await screen.findByText(displayTitle)).toBeInTheDocument()
+      if (query.result_type === 'subtitle') {
+        expect(screen.getByTestId('subtitle-card')).toHaveAttribute('data-media-source', query.media_source ?? '')
+        expect(screen.getByTestId('subtitle-card')).toHaveAttribute('data-media-id', query.media_id ?? '')
+      }
       await waitFor(() => expect(rendered.router.currentRoute.value.query).toEqual({}))
 
       const storedParams = JSON.parse(localStorage.getItem('MP_ResourceSearchParams') || '{}')
       expect(storedParams).toEqual({
         area: query.area ?? '',
         episode: query.episode ?? '',
-        keyword: query.keyword,
+        keyword: query.keyword ?? '',
+        media_id: query.media_id ?? '',
+        media_source: query.media_source ?? '',
+        music_type: query.music_type ?? '',
         result_type: query.result_type === 'subtitle' ? 'subtitle' : 'torrent',
         season: query.season ?? '',
         sites: query.sites ?? '',
@@ -447,6 +509,9 @@ describe('resource page search flow', () => {
       area: '',
       episode: '',
       keyword: '上次关键词',
+      media_id: '',
+      media_source: '',
+      music_type: '',
       result_type: 'torrent',
       season: '',
       sites: '3',
@@ -454,6 +519,45 @@ describe('resource page search flow', () => {
       type: '',
       year: '',
     })
+  })
+
+  it('migrates a legacy composite media keyword only when restoring local search state', async () => {
+    localStorage.setItem(
+      'MP_ResourceSearchParams',
+      JSON.stringify({ keyword: 'tmdb:77', result_type: 'torrent', sites: '6', title: '旧版媒体' }),
+    )
+
+    await renderResource()
+    await waitFor(() => expect(mocks.apiGet).toHaveBeenCalledWith('search/last/context'))
+
+    const refreshPromise = mocks.keepAliveRefresh()
+    const source = await latestEventSource()
+    const streamUrl = new URL(source.url)
+    expect(streamUrl.pathname).toBe('/api/v1/search/media/77/stream')
+    expect(Object.fromEntries(streamUrl.searchParams)).toMatchObject({
+      media_source: 'themoviedb',
+      sites: '6',
+      title: '旧版媒体',
+    })
+
+    finishStream(source, [])
+    await refreshPromise
+    expect(JSON.parse(localStorage.getItem('MP_ResourceSearchParams') || '{}')).toMatchObject({
+      keyword: '',
+      media_id: '77',
+      media_source: 'themoviedb',
+    })
+  })
+
+  it('ignores a zero media ID instead of starting a media identity search', async () => {
+    await renderResource({
+      path: '/resource',
+      query: { media_id: '0', media_source: 'themoviedb', result_type: 'torrent' },
+    })
+
+    await waitFor(() => expect(mocks.apiGet).toHaveBeenCalledWith('search/last/context'))
+    expect(EventSourceFake.instances).toHaveLength(0)
+    expect(localStorage.getItem('MP_ResourceSearchParams')).toBeNull()
   })
 
   it('does not automatically repeat a completed empty search when KeepAlive reactivates', async () => {
@@ -547,6 +651,54 @@ describe('resource page search flow', () => {
 
     expect(await screen.findByTestId('no-data')).toHaveTextContent('未搜索到任何资源')
     expect(screen.queryByText('搜索服务暂不可用')).not.toBeInTheDocument()
+  })
+
+  it('shows a friendly message when all candidate resources are filtered out', async () => {
+    await renderResource({
+      path: '/resource',
+      query: { keyword: '过滤空结果', result_type: 'torrent' },
+    })
+    const source = await latestEventSource()
+
+    // 搜索阶段返回候选资源，最终替换事件为空表示全部被过滤规则淘汰
+    source.message({
+      items: [createTorrent({ title: '候选资源' })],
+      stage: 'searching',
+      total_items: 19,
+      type: 'append',
+    })
+    source.message({
+      candidate_items: 19,
+      items: [],
+      stage: 'filtered',
+      total_items: 0,
+      type: 'replace',
+      value: 100,
+    })
+    source.message({ type: 'done' })
+    source.fail()
+
+    expect(await screen.findByTestId('no-data')).toHaveTextContent('找到 19 个资源，但均不符合过滤规则')
+    expect(screen.queryByText('未搜索到任何资源')).not.toBeInTheDocument()
+  })
+
+  it('shows a friendly message when the done event reports filtered candidates for title search', async () => {
+    await renderResource({
+      path: '/resource',
+      query: { keyword: '标题过滤空结果', result_type: 'torrent' },
+    })
+    const source = await latestEventSource()
+
+    // 标题搜索没有 replace 事件，候选数由 done 事件的 candidate_items 携带
+    source.message({
+      candidate_items: 5,
+      items: [],
+      total_items: 0,
+      type: 'done',
+    })
+    source.fail()
+
+    expect(await screen.findByTestId('no-data')).toHaveTextContent('找到 5 个资源，但均不符合过滤规则')
   })
 
   it('restores the default empty-state message when the fallback request succeeds without results', async () => {
@@ -777,6 +929,74 @@ describe('resource page search flow', () => {
     expect(await screen.findByText('替代结果')).toBeInTheDocument()
     await fireEvent.click(await screen.findByRole('button', { name: '重新搜索' }))
     await latestEventSource(4)
+  })
+
+  it('does not run a background search when another route updates the global query while the page is cached', async () => {
+    const rendered = await renderResource({
+      path: '/resource',
+      query: { keyword: '前台搜索', result_type: 'torrent' },
+    })
+    const source = await latestEventSource()
+    finishStream(source, [createTorrent({ title: '前台结果' })])
+    await screen.findByText('前台结果')
+    expect(EventSourceFake.instances).toHaveLength(1)
+
+    // 模拟 keep-alive 缓存页在后台时，媒体详情路由携带与资源搜索一致的媒体身份参数
+    await rendered.router.push({
+      path: '/media',
+      query: {
+        media_source: 'themoviedb',
+        media_id: '42',
+        title: '媒体标题',
+        year: '2025',
+        type: '电视剧',
+      },
+    })
+    await flushAsyncWork()
+
+    expect(EventSourceFake.instances).toHaveLength(1)
+    expect(mocks.apiGet).not.toHaveBeenCalledWith(
+      'search/media/42',
+      expect.objectContaining({ params: expect.objectContaining({ media_source: 'themoviedb' }) }),
+    )
+  })
+
+  it('keeps the query of other routes when a search finishes after navigating away', async () => {
+    const rendered = await renderResource({
+      path: '/resource',
+      query: { keyword: '待完成搜索', result_type: 'torrent' },
+    })
+    await latestEventSource()
+    const replaceSpy = vi.spyOn(rendered.router, 'replace')
+
+    // 搜索未完成时跳转到媒体详情页，模拟详情页路由携带媒体身份参数
+    await rendered.router.push({
+      path: '/media',
+      query: {
+        media_source: 'themoviedb',
+        media_id: '42',
+        title: '媒体标题',
+        year: '2025',
+        type: '电视剧',
+      },
+    })
+    await flushAsyncWork()
+
+    // 完成此刻仍处于打开状态的全部搜索流（含修复前的隐藏搜索流），
+    // 确保任何残留搜索都不会清理其他页面的查询参数
+    for (const source of EventSourceFake.instances) {
+      finishStream(source, [createTorrent({ title: '后台结果' })])
+    }
+    await flushAsyncWork()
+
+    expect(replaceSpy).not.toHaveBeenCalled()
+    expect(rendered.router.currentRoute.value.query).toEqual({
+      media_source: 'themoviedb',
+      media_id: '42',
+      title: '媒体标题',
+      year: '2025',
+      type: '电视剧',
+    })
   })
 
   it('does not let a late business failure from an old fallback replace the current empty-state message', async () => {

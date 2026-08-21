@@ -3,8 +3,9 @@ import { useToast } from 'vue-toastification'
 import PersonCardSlideView from './PersonCardSlideView.vue'
 import MediaCardSlideView from './MediaCardSlideView.vue'
 import api from '@/api'
+import { getApiBusinessErrorMessage } from '@/api/client'
 import type {
-  ApiResponse,
+  MediaDataSource,
   MediaInfo,
   MediaRelease,
   MediaSeason,
@@ -41,12 +42,13 @@ const { t } = useI18n()
 const $toast = useToast()
 
 // 输入参数
-const mediaProps = defineProps({
-  mediaid: String,
-  title: String,
-  year: String,
-  type: String,
-})
+const mediaProps = defineProps<{
+  mediaSource?: MediaDataSource
+  mediaId?: string
+  title?: string
+  year?: string | number
+  type?: string
+}>()
 
 // 从 provide 中获取全局设置
 // 全局设置
@@ -176,10 +178,11 @@ function openSearchSiteDialog() {
   )
 }
 
-// 查询所有站点
+// 查询与当前媒体类型兼容的站点
 async function querySites() {
   try {
-    const data: Site[] = await api.get('site/')
+    const mediaType = mediaDetail.value.type === '电视剧' ? 'tv' : 'movie'
+    const data: Site[] = await api.get(`site/media/${mediaType}`)
 
     // 过滤站点，只有启用的站点才显示
     allSites.value = data.filter(item => item.is_active)
@@ -191,15 +194,14 @@ async function querySites() {
 // 查询用户选中的站点
 async function querySelectedSites() {
   try {
-    const result: ApiResponse<{ value?: number[] }> = await api.get('system/setting/public/IndexerSites')
-
-    selectedSites.value = result.data?.value ?? []
+    const result = await api.get<{ value?: number[] }>('system/setting/public/IndexerSites')
+    selectedSites.value = result.value ?? []
   } catch (error) {
     console.log(error)
   }
 }
 
-// 获得mediaid
+// 获取当前详情的统一媒体身份缓存键
 function getMediaId() {
   return getMediaSubscribeId(mediaDetail.value)
 }
@@ -216,42 +218,46 @@ function getSubscribeStatusKey(season: number | null = mediaDetail.value?.season
 
 // 调用API查询详情
 async function getMediaDetail() {
-  if (mediaProps.mediaid && mediaProps.type) {
+  if (!mediaProps.mediaSource || !mediaProps.mediaId || !mediaProps.type) {
+    mediaDetail.value = {} as MediaInfo
     detailLoadFailed.value = false
-    isRefreshed.value = false
-    try {
-      mediaDetail.value = await api.get(`media/${mediaProps.mediaid}`, {
-        params: {
-          title: mediaProps.title,
-          year: mediaProps.year,
-          type_name: mediaProps.type,
-        },
-      })
-      if (!hasMediaIdentity()) return
+    isRefreshed.value = true
+    return
+  }
 
-      const supportsEpisodeGroups = getMediaSubscribeIdentity(mediaDetail.value)?.source === 'themoviedb'
-      selectedEpisodeGroup.value = supportsEpisodeGroups ? mediaDetail.value.episode_group || '' : ''
-      if (!supportsEpisodeGroups) {
-        episodeGroups.value = []
-        episodeGroupSeasons.value = []
-      }
-      if (mediaDetail.value.type === '电视剧' && supportsEpisodeGroups && mediaDetail.value.tmdb_id) {
-        getEpisodeGroups()
-        if (selectedEpisodeGroup.value) loadEpisodeGroupSeasons(selectedEpisodeGroup.value)
-      }
+  detailLoadFailed.value = false
+  isRefreshed.value = false
+  try {
+    mediaDetail.value = await api.get(`media/${encodeURIComponent(mediaProps.mediaId)}`, {
+      params: {
+        media_source: mediaProps.mediaSource,
+        type_name: mediaProps.type,
+      },
+    })
+    if (!hasMediaIdentity()) return
 
-      // 检查存在状态
-      checkExists()
-      if (mediaDetail.value.type === '电视剧') checkSeasonsNotExists()
-      // 检查订阅状态
-      if (mediaDetail.value.type === '电影') checkMovieSubscribed()
-      else checkSeasonsSubscribed()
-    } catch (error) {
-      console.error(error)
-      detailLoadFailed.value = true
-    } finally {
-      isRefreshed.value = true
+    const supportsEpisodeGroups = getMediaSubscribeIdentity(mediaDetail.value)?.source === 'themoviedb'
+    selectedEpisodeGroup.value = supportsEpisodeGroups ? mediaDetail.value.episode_group || '' : ''
+    if (!supportsEpisodeGroups) {
+      episodeGroups.value = []
+      episodeGroupSeasons.value = []
     }
+    if (mediaDetail.value.type === '电视剧' && supportsEpisodeGroups && mediaDetail.value.tmdb_id) {
+      getEpisodeGroups()
+      if (selectedEpisodeGroup.value) loadEpisodeGroupSeasons(selectedEpisodeGroup.value)
+    }
+
+    // 检查存在状态
+    checkExists()
+    if (mediaDetail.value.type === '电视剧') checkSeasonsNotExists()
+    // 检查订阅状态
+    if (mediaDetail.value.type === '电影') checkMovieSubscribed()
+    else checkSeasonsSubscribed()
+  } catch (error) {
+    console.error(error)
+    detailLoadFailed.value = true
+  } finally {
+    isRefreshed.value = true
   }
 }
 
@@ -294,9 +300,10 @@ async function loadEpisodeExists() {
 // 查询当前媒体是否已入库（数据库）
 async function checkExists() {
   try {
-    const result: ApiResponse<{ item: { id: string } }> = await api.get('mediaserver/exists', {
+    const result = await api.get<{ item?: { id: string } }>('mediaserver/exists', {
       params: {
-        tmdbid: mediaDetail.value.tmdb_id,
+        media_source: mediaDetail.value.media_source,
+        media_id: mediaDetail.value.media_id,
         title: mediaDetail.value.title,
         year: mediaDetail.value.year,
         season: mediaDetail.value.season,
@@ -304,7 +311,7 @@ async function checkExists() {
       },
     })
 
-    if (result.success) existsItemId.value = result.data.item.id
+    existsItemId.value = result.item?.id || ''
   } catch (error) {
     console.error(error)
   }
@@ -323,19 +330,10 @@ async function checkSubscribe(season: number | null = null) {
 
 // 判断订阅记录是否属于当前媒体
 function isSameSubscribeMedia(subscribe: Subscribe) {
-  const mediaId = getMediaId()
-  if (subscribe.media_source && subscribe.media_id) {
-    const prefix = subscribe.media_source === 'themoviedb' ? 'tmdb' : subscribe.media_source
-    return mediaId === `${prefix}:${subscribe.media_id}`
-  }
-  if (subscribe.mediaid) return mediaId === subscribe.mediaid
-  if (mediaDetail.value?.tmdb_id && subscribe.tmdbid) return mediaDetail.value.tmdb_id === subscribe.tmdbid
-  if (mediaDetail.value?.douban_id && subscribe.doubanid) return mediaDetail.value.douban_id === subscribe.doubanid
-  if (mediaDetail.value?.bangumi_id && subscribe.bangumiid) return mediaDetail.value.bangumi_id === subscribe.bangumiid
-  if (mediaDetail.value?.anilist_id && subscribe.anilistid) {
-    return mediaDetail.value.anilist_id === subscribe.anilistid
-  }
-  return false
+  const identity = getMediaSubscribeIdentity(mediaDetail.value)
+  return Boolean(
+    identity && subscribe.media_source === identity.source && String(subscribe.media_id || '') === identity.mediaId,
+  )
 }
 
 // 检查所有季的缺失状态
@@ -557,7 +555,7 @@ async function handleDoubanClick() {
       mediaDetail.value.douban_id,
       mediaDetail.value.type,
       mediaDetail.value.title,
-      mediaDetail.value.year,
+      mediaDetail.value.year?.toString(),
     )
   }
 }
@@ -567,9 +565,14 @@ function getImdbLink() {
   return `https://www.imdb.com/title/${mediaDetail.value.imdb_id}`
 }
 
-// 拼装TVDB地址
+// 拼装TVDB地址（优先使用 slug，TVDB 已弃用数字 ID 直达 URL）
 function getTvdbLink() {
-  return `https://www.thetvdb.com/series/${mediaDetail.value.tvdb_id}`
+  const slug = mediaDetail.value.tvdb_slug
+  const id = mediaDetail.value.tvdb_id
+  if (slug) {
+    return `https://www.thetvdb.com/series/${slug}`
+  }
+  return `https://www.thetvdb.com/series/${id}`
 }
 
 // 拼装Bangumi地址
@@ -696,13 +699,15 @@ function joinArray(arr: string[]) {
 
 // 开始搜索
 function handleSearch(resultType: 'torrent' | 'subtitle' = 'torrent', options: MediaSearchOptions = {}) {
-  const keyword = getMediaId()
+  const identity = getMediaSubscribeIdentity(mediaDetail.value)
+  if (!identity) return
   const season = options.season ?? mediaDetail.value.season
   const episode = options.episode ?? null
   router.push({
     path: '/resource',
     query: {
-      keyword,
+      media_source: identity.source,
+      media_id: identity.mediaId,
       type: mediaDetail.value.type,
       area: searchType.value,
       title: mediaDetail.value.title,
@@ -719,23 +724,21 @@ function handleSearch(resultType: 'torrent' | 'subtitle' = 'torrent', options: M
 async function handlePlay() {
   // 获取播放链接地址
   try {
-    const result: ApiResponse<{ item_id: string; server_id: string; server_type: string; url: string }> = await api.get(
+    const result = await api.get<{ item_id: string; server_id: string; server_type: string; url: string }>(
       `mediaserver/play/${existsItemId.value}`,
+      { feedback: 'silent' },
     )
-    if (result?.success) {
-      // 使用深度链接工具，优先跳转到APP，失败后跳转到网页
-      await openMediaServerItem({
-        link: result.data.url,
-        item_id: result.data.item_id,
-        server_id: result.data.server_id,
-        server_type: result.data.server_type,
-      })
-    } else {
-      $toast.error(`获取播放链接失败：${result.message}！`)
-    }
+    // 使用深度链接工具，优先跳转到APP，失败后跳转到网页
+    await openMediaServerItem({
+      link: result.url,
+      item_id: result.item_id,
+      server_id: result.server_id,
+      server_type: result.server_type,
+    })
   } catch (error) {
     console.error(error)
-    $toast.error('获取播放链接失败！')
+    const message = getApiBusinessErrorMessage(error)
+    $toast.error(message ? `获取播放链接失败：${message}！` : '获取播放链接失败！')
   }
 }
 
@@ -1080,7 +1083,11 @@ onUnmounted(() => {
                         {{ t('media.episodeCount', { count: season.episode_count }) }}
                       </VChip>
                       <div class="absolute right-12">
-                        <VChip v-if="seasonsNotExisted" :color="getExistColor(season.season_number || 0)" flat>
+                        <VChip
+                          v-if="seasonsNotExisted && (season.episode_count ?? 0) > 0"
+                          :color="getExistColor(season.season_number || 0)"
+                          flat
+                        >
                           {{ getExistText(season.season_number || 0) }}
                         </VChip>
                         <IconBtn

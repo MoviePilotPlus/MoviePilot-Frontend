@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import api from '@/api'
+import { manageStorage } from '@/api/manage'
 import { useI18n } from 'vue-i18n'
 import { useDisplay } from 'vuetify'
 import { configureAceEditorPadding } from '@/utils/aceEditor'
@@ -38,7 +38,7 @@ async function handleDone() {
 // 保存rclone设置
 async function savaRcloneConfig() {
   try {
-    await api.post(`storage/save/rclone`, props.conf)
+    await manageStorage('rclone', 'save_config', { conf: props.conf })
   } catch (e) {
     console.error(e)
   }
@@ -47,10 +47,8 @@ async function savaRcloneConfig() {
 // 重置配置
 async function handleReset() {
   try {
-    const result: { [key: string]: any } = await api.get('/storage/reset/rclone')
-    if (result.success) {
-      handleDone()
-    }
+    await manageStorage('rclone', 'reset_config')
+    handleDone()
   } catch (e) {
     console.error(e)
   }

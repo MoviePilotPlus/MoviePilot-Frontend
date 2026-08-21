@@ -1,5 +1,5 @@
 import { computed, onBeforeUnmount, ref, type Ref } from 'vue'
-import api from '@/api'
+import { manageLlmProvider } from '@/api/manage'
 
 export interface LlmProviderAuthMethod {
   id: string
@@ -248,12 +248,8 @@ export function useLlmProviderDirectory(options: UseLlmProviderDirectoryOptions)
   async function loadProviders(preserveBaseUrl = true) {
     loadingProviders.value = true
     try {
-      const result: { [key: string]: any } = await api.get('llm/providers')
-      if (!result.success) {
-        throw new Error(result.message || 'Load LLM providers failed')
-      }
-
-      providers.value = Array.isArray(result.data) ? result.data : []
+      const result = await manageLlmProvider<LlmProvider[]>('', 'list_providers')
+      providers.value = Array.isArray(result) ? result : []
       if (!selectedProvider.value && providers.value.length > 0) {
         options.provider.value = providers.value[0].id
       }
@@ -270,9 +266,10 @@ export function useLlmProviderDirectory(options: UseLlmProviderDirectoryOptions)
 
     loadingModels.value = true
     try {
-      const result: { [key: string]: any } = await api.get('llm/models', {
-        params: {
-          provider: normalizeValue(options.provider.value),
+      const payload = await manageLlmProvider<{ auth_status?: LlmProviderAuthStatus; models?: LlmModel[] }>(
+        normalizeValue(options.provider.value),
+        'list_models',
+        {
           api_key: normalizeValue(options.apiKey.value) || undefined,
           base_url: normalizeValue(options.baseUrl.value) || undefined,
           base_url_preset: normalizeValue(options.baseUrlPreset?.value) || undefined,
@@ -280,12 +277,7 @@ export function useLlmProviderDirectory(options: UseLlmProviderDirectoryOptions)
           user_agent: normalizeValue(options.userAgent?.value) || undefined,
           force_refresh: forceRefresh,
         },
-      })
-      if (!result.success) {
-        throw new Error(result.message || 'Load LLM models failed')
-      }
-
-      const payload = result.data || {}
+      )
       models.value = Array.isArray(payload.models) ? payload.models : []
       updateProviderAuthStatus(normalizeValue(options.provider.value), payload.auth_status)
 
@@ -320,14 +312,16 @@ export function useLlmProviderDirectory(options: UseLlmProviderDirectoryOptions)
     authPolling.value = true
     clearPollTimer()
     try {
-      const result: { [key: string]: any } = await api.post(`llm/provider-auth/${authSession.value.session_id}/poll`)
-      if (!result.success) {
-        throw new Error(result.message || 'Poll LLM auth failed')
-      }
+      const result = await manageLlmProvider<Partial<LlmProviderAuthSession>>(
+        normalizeValue(options.provider.value),
+        'poll_auth',
+        { session_id: authSession.value.session_id },
+        { feedback: 'silent' },
+      )
 
       authSession.value = {
         ...authSession.value,
-        ...result.data,
+        ...result,
       }
       const nextSession = authSession.value
       if (!nextSession) return null
@@ -355,19 +349,13 @@ export function useLlmProviderDirectory(options: UseLlmProviderDirectoryOptions)
       throw new Error('LLM provider is required')
     }
 
-    const result: { [key: string]: any } = await api.post('llm/provider-auth/start', {
-      provider: normalizeValue(options.provider.value),
-      method: methodId,
-    })
-    if (!result.success) {
-      throw new Error(result.message || 'Start LLM auth failed')
-    }
+    const result = await manageLlmProvider<LlmProviderAuthSession>(
+      normalizeValue(options.provider.value),
+      'start_auth',
+      { method: methodId },
+    )
 
-    authSession.value = {
-      status: 'pending',
-      provider_id: normalizeValue(options.provider.value),
-      ...result.data,
-    }
+    authSession.value = result
     authDialogVisible.value = true
     authPopupBlocked.value = false
     openAuthPage()
@@ -378,12 +366,7 @@ export function useLlmProviderDirectory(options: UseLlmProviderDirectoryOptions)
   async function disconnectAuth() {
     if (!selectedProvider.value) return false
 
-    const result: { [key: string]: any } = await api.delete(
-      `llm/provider-auth/${normalizeValue(options.provider.value)}`,
-    )
-    if (!result.success) {
-      throw new Error(result.message || 'Disconnect LLM auth failed')
-    }
+    await manageLlmProvider(normalizeValue(options.provider.value), 'disconnect')
 
     await loadProviders()
     return true

@@ -3,9 +3,9 @@ import CryptoJS from 'crypto-js'
 import { useToast } from 'vue-toastification'
 import { numberValidator } from '@/@validators'
 import api from '@/api'
+import { getApiBusinessErrorMessage, isApiBusinessFailure } from '@/api/client'
 import { transferTypeOptions } from '@/api/constants'
 import {
-  ApiResponse,
   FileItem,
   ManualTransferHistoryInfo,
   ManualTransferPayload,
@@ -23,6 +23,8 @@ import ProgressDialog from './ProgressDialog.vue'
 import { useI18n } from 'vue-i18n'
 import { useDisplay } from 'vuetify'
 import { useGlobalSettingsStore } from '@/stores'
+import { isMusicMediaSource, isValidMediaSourceId } from '@/utils/mediaId'
+import { useMediaSources } from '@/composables/useMediaSources'
 
 // 国际化
 const { t } = useI18n()
@@ -43,14 +45,24 @@ const props = defineProps({
 const globalSettingsStore = useGlobalSettingsStore()
 const globalSettings = globalSettingsStore.globalSettings
 
-const mediaSourceItems = computed<{ title: string; value: MediaDataSource }[]>(() => [
+const { mediaSourceItems: getMediaSourceItems } = useMediaSources()
+const customMediaSourceItems = getMediaSourceItems('media')
+const customMusicSourceItems = getMediaSourceItems('music')
+
+const mediaSourceItems = computed<{ title: string; value: MediaDataSource | null }[]>(() => [
+  { title: t('dialog.reorganize.auto'), value: null },
   { title: t('setting.cache.recognitionSource.themoviedb'), value: 'themoviedb' },
   { title: t('setting.cache.recognitionSource.douban'), value: 'douban' },
   { title: t('setting.cache.recognitionSource.bangumi'), value: 'bangumi' },
   { title: t('setting.cache.recognitionSource.anilist'), value: 'anilist' },
+  { title: t('setting.cache.recognitionSource.musicbrainz'), value: 'musicbrainz' },
+  { title: t('setting.cache.recognitionSource.theaudiodb'), value: 'theaudiodb' },
+  { title: t('setting.cache.recognitionSource.doubanmusic'), value: 'doubanmusic' },
+  ...customMediaSourceItems.value,
+  ...customMusicSourceItems.value,
 ])
 
-// 获取后台设置中的默认识别数据源，未知值兼容回退到TheMovieDb。
+/** 获取后台设置中的默认识别数据源，未知值兼容回退到 TheMovieDb。 */
 function getDefaultMediaSource(): MediaDataSource {
   const configuredSource = globalSettings.RECOGNIZE_SOURCE as MediaDataSource
   return mediaSourceItems.value.some(item => item.value === configuredSource) ? configuredSource : 'themoviedb'
@@ -153,6 +165,9 @@ function resolveTransferMediaType(type?: string) {
   const tvTypes = ['电视剧', 'tv', 'series']
   if (tvTypes.includes(normalizedType)) return '电视剧'
 
+  const musicTypes = ['音乐', 'music']
+  if (musicTypes.includes(normalizedType)) return '音乐'
+
   return undefined
 }
 
@@ -201,7 +216,7 @@ async function loadStorages() {
   try {
     const result: { [key: string]: any } = await api.get('system/setting/public/Storages')
 
-    storages.value = result.data?.value ?? []
+    storages.value = result.value ?? []
   } catch (error) {
     console.log(error)
   }
@@ -271,8 +286,8 @@ const episodeGroupOptions = computed<EpisodeGroupOption[]>(() => {
 })
 
 // 查询指定 TMDB 剧集的所有剧集组。
-async function getEpisodeGroups(tmdbid?: number | string) {
-  const normalizedTmdbId = Number(tmdbid)
+async function getEpisodeGroups(tmdbId?: number | string) {
+  const normalizedTmdbId = Number(tmdbId)
   if (!Number.isInteger(normalizedTmdbId) || normalizedTmdbId <= 0) {
     episodeGroups.value = []
     return
@@ -322,8 +337,10 @@ const transferForm = reactive<TransferForm>({
   logid: 0,
   target_storage: initialTargetPath ? (props.target_storage ?? 'local') : null,
   target_path: initialTargetPath,
-  media_source: getDefaultMediaSource(),
+  type_name: '',
+  media_source: null,
   media_id: null,
+  music_type: null,
   transfer_type: null,
   min_filesize: 0,
   scrape: initialTargetPath ? false : null,
@@ -337,26 +354,35 @@ const transferForm = reactive<TransferForm>({
 // 历史记录入口和文件浏览器命中的成功历史都属于重新整理。
 const isReorganize = computed(() => Boolean(props.logids?.length || transferForm.reorganize))
 
-// 当前手动识别与刮削数据源。
-const mediaSource = computed(() => transferForm.media_source ?? 'themoviedb')
+// 当前手动识别与刮削数据源；自动模式按媒体类型解析实际来源。
+const mediaSource = computed(() => {
+  if (transferForm.media_source) return transferForm.media_source
+  return transferForm.type_name === '音乐' ? 'musicbrainz' : getDefaultMediaSource()
+})
 
 // 当前数据源对应的原生ID标签。
 const mediaIdLabel = computed(() => {
-  const labels: Record<MediaDataSource, string> = {
+  const labels: Partial<Record<MediaDataSource, string>> = {
     themoviedb: t('dialog.reorganize.tmdbId'),
     douban: t('dialog.reorganize.doubanId'),
     bangumi: t('dialog.reorganize.bangumiId'),
     anilist: t('dialog.reorganize.anilistId'),
+    musicbrainz: 'MusicBrainz ID',
+    theaudiodb: 'TheAudioDB ID',
+    doubanmusic: t('dialog.reorganize.doubanId'),
   }
-  return labels[mediaSource.value]
+  return labels[mediaSource.value] ?? t('dialog.reorganize.mediaId')
 })
 
 // 处理媒体搜索结果选择，同步搜索结果中已识别的媒体类型。
-function handleMediaSelected(item: Pick<MediaInfo, 'type'>) {
+function handleMediaSelected(item: Pick<MediaInfo, 'type' | 'music_type'>) {
   const typeName = resolveTransferMediaType(item.type)
   if (!typeName) return
 
   transferForm.type_name = typeName
+  if (item.music_type === 'recording' || item.music_type === 'album') {
+    transferForm.music_type = item.music_type
+  }
 }
 
 // 所有媒体库目录
@@ -366,7 +392,7 @@ const directories = ref<TransferDirectoryConf[]>([])
 async function loadDirectories() {
   try {
     const result: { [key: string]: any } = await api.get('system/setting/public/Directories')
-    directories.value = result.data?.value ?? []
+    directories.value = result.value ?? []
   } catch (error) {
     console.log(error)
   }
@@ -463,16 +489,38 @@ watch([() => transferForm.type_name, () => mediaSource.value], ([typeName, sourc
   episodeGroups.value = []
 })
 
+// 切换媒体类型时，若当前数据源与新类型不兼容则回退到自动，
+// 避免音乐源在影视整理中残留；音乐类型未显式选择来源时由 mediaSource 兜底为 MusicBrainz。
+watch(
+  () => transferForm.type_name,
+  typeName => {
+    const isMusicType = typeName === '音乐'
+    const sourceIsMusic = isMusicMediaSource(transferForm.media_source ?? undefined)
+    if (isMusicType !== sourceIsMusic) {
+      transferForm.media_source = null
+    }
+    transferForm.music_type = isMusicType ? (transferForm.music_type ?? 'recording') : null
+  },
+)
+
 // 切换数据源时清空上一来源的原生ID，避免把同一数字误传给新来源。
 watch(
   () => transferForm.media_source,
   (source, previousSource) => {
-    if (previousSource && source !== previousSource) {
+    if (source !== previousSource) {
       transferForm.media_id = null
       mediaSelectorDialog.value = false
     }
+    if (isMusicMediaSource(source ?? undefined) && transferForm.type_name !== '音乐') {
+      transferForm.type_name = '音乐'
+    }
   },
 )
+
+/** 按当前来源校验手动整理使用的原生媒体 ID。 */
+function validateMediaId(value?: string | number | null) {
+  return isValidMediaSourceId(value, mediaSource.value) || t('dialog.reorganize.mediaIdInvalid')
+}
 
 watch(
   () => transferForm.episode_group,
@@ -901,6 +949,7 @@ function getBatchItemsLabel(items: FileItem[]) {
 // 构造整理请求
 function createTransferPayload(options: { item?: FileItem; items?: FileItem[]; logid?: number; preview?: boolean }) {
   const sourceItem = options.item ?? (options.items?.length ? options.items[0] : ({} as FileItem))
+  const normalizedMediaId = normalizeOptionalText(transferForm.media_id)
   const payload: ManualTransferPayload = {
     ...transferForm,
     fileitem: sourceItem,
@@ -908,9 +957,14 @@ function createTransferPayload(options: { item?: FileItem; items?: FileItem[]; l
     target_storage: normalizeOptionalText(transferForm.target_storage),
     target_path: normalizeTargetPath(transferForm.target_path),
     transfer_type: normalizeOptionalText(transferForm.transfer_type),
-    media_source: mediaSource.value,
-    media_id: normalizeOptionalText(transferForm.media_id),
+    media_source: undefined,
+    media_id: undefined,
     episode_group: normalizeEpisodeGroup(transferForm.episode_group),
+  }
+
+  if (normalizedMediaId) {
+    payload.media_source = mediaSource.value
+    payload.media_id = normalizedMediaId
   }
 
   if (options.items?.length) {
@@ -928,8 +982,16 @@ function createTransferPayload(options: { item?: FileItem; items?: FileItem[]; l
 async function requestManualTransfer<T = unknown>(
   payload: ManualTransferPayload,
   background: boolean = false,
-): Promise<ApiResponse<T>> {
-  return await api.post<ApiResponse<T>, ApiResponse<T>>(`transfer/manual?background=${background}`, payload)
+): Promise<T> {
+  return await api.post<T>(`transfer/manual?background=${background}`, payload, { feedback: 'silent' })
+}
+
+/** 保留业务失败详情，并在空消息时使用当前操作的本地提示。 */
+function getManualTransferErrorMessage(error: unknown, fallback: string) {
+  const businessMessage = getApiBusinessErrorMessage(error)
+  if (businessMessage) return businessMessage
+  if (isApiBusinessFailure(error)) return fallback
+  return error instanceof Error && error.message ? error.message : fallback
 }
 
 // 查询当前文件或目录是否存在成功整理历史，决定是否展示重新整理语义。
@@ -940,14 +1002,12 @@ async function loadManualTransferHistory() {
   try {
     const payload =
       normalizedItems.value.length === 1 ? { fileitem: normalizedItems.value[0] } : { fileitems: normalizedItems.value }
-    const result = await api.post<ApiResponse<ManualTransferHistoryInfo>, ApiResponse<ManualTransferHistoryInfo>>(
-      'transfer/manual/history',
-      payload,
-    )
-    if (!result.success) return
+    const result = await api.post<ManualTransferHistoryInfo>('transfer/manual/history', payload, {
+      feedback: 'silent',
+    })
 
-    manualHistoryCount.value = result.data?.history_count ?? 0
-    transferForm.reorganize = Boolean(result.data?.reorganize)
+    manualHistoryCount.value = result.history_count ?? 0
+    transferForm.reorganize = Boolean(result.reorganize)
   } catch (error) {
     console.error(error)
   } finally {
@@ -958,8 +1018,8 @@ async function loadManualTransferHistory() {
 // 加载剧集格式规则配置状态，用于决定是否允许自动推荐。
 async function loadEpisodeFormatRuleConfiguration() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/public/EpisodeFormatRuleTable')
-    episodeFormatRuleConfigured.value = Boolean(result.data?.value?.length)
+    const result = await api.get<{ value?: unknown[] }>('system/setting/public/EpisodeFormatRuleTable')
+    episodeFormatRuleConfigured.value = Boolean(result.value?.length)
   } catch (error) {
     console.log(error)
     episodeFormatRuleConfigured.value = undefined
@@ -989,7 +1049,7 @@ async function handleRecommendEpisodeFormat() {
 
   try {
     const hasExistingEpisodeFormat = Boolean(transferForm.episode_format?.trim())
-    const result = await api.post<ApiResponse<EpisodeFormatRecommendData>, ApiResponse<EpisodeFormatRecommendData>>(
+    const data = await api.post<EpisodeFormatRecommendData>(
       'transfer/episode-format/recommend',
       hasValidSelectedFiles
         ? {
@@ -998,14 +1058,9 @@ async function handleRecommendEpisodeFormat() {
         : {
             fileitem: sourceItem,
           },
+      { feedback: 'silent' },
     )
 
-    if (!result.success) {
-      $toast.error(result.message || t('dialog.reorganize.episodeFormatRecommendFailed'))
-      return
-    }
-
-    const data = result.data ?? {}
     if (!data.episode_format) {
       $toast.error(t('dialog.reorganize.episodeFormatRecommendFailed'))
       return
@@ -1116,19 +1171,6 @@ function mergePreviewData(target: ManualTransferPreviewData, incoming?: ManualTr
   }
 }
 
-// 从标准响应中提取可展示的整理预览数据，优先保留顶层本地化消息。
-function resolvePreviewResponseData(result: ApiResponse<ManualTransferPreviewData>) {
-  if (!result.data) return result.data
-
-  const message = result.message_i18n || result.message || result.data.message
-  if (!message || message === result.data.message) return result.data
-
-  return {
-    ...result.data,
-    message,
-  }
-}
-
 // 预览整理结果
 async function previewTransfer() {
   if (!props.logids?.length && !normalizedItems.value.length) return
@@ -1147,24 +1189,15 @@ async function previewTransfer() {
           const result = await requestManualTransfer<ManualTransferPreviewData>(
             createTransferPayload({ items: normalizedItems.value, preview: true }),
           )
-          if (!result.success) {
-            mergePreviewData(
-              mergedPreviewData,
-              createFailedPreviewData({
-                source: getBatchItemsLabel(normalizedItems.value),
-                message: result.message || t('dialog.reorganize.previewRequestFailed'),
-              }),
-            )
-          } else {
-            mergePreviewData(mergedPreviewData, resolvePreviewResponseData(result))
-          }
-        } catch (err: any) {
-          console.warn(`预览请求异常: ${err?.message}`)
+          mergePreviewData(mergedPreviewData, result)
+        } catch (err: unknown) {
+          const errorMessage = getManualTransferErrorMessage(err, t('dialog.reorganize.previewRequestFailed'))
+          console.warn(`预览请求异常: ${errorMessage}`)
           mergePreviewData(
             mergedPreviewData,
             createFailedPreviewData({
               source: getBatchItemsLabel(normalizedItems.value),
-              message: `${getBatchItemsLabel(normalizedItems.value)}: ${err?.message || t('dialog.reorganize.previewRequestFailed')}`,
+              message: errorMessage,
             }),
           )
         }
@@ -1175,29 +1208,17 @@ async function previewTransfer() {
               const result = await requestManualTransfer<ManualTransferPreviewData>(
                 createTransferPayload({ item, preview: true }),
               )
-              if (!result.success) {
-                mergePreviewData(
-                  mergedPreviewData,
-                  createFailedPreviewData({
-                    source: item.path || item.name,
-                    type: item.type,
-                    title: item.name,
-                    message: result.message || t('dialog.reorganize.previewRequestFailed'),
-                  }),
-                )
-                return
-              }
-
-              mergePreviewData(mergedPreviewData, resolvePreviewResponseData(result))
-            } catch (err: any) {
-              console.warn(`预览请求异常: ${err?.message}`)
+              mergePreviewData(mergedPreviewData, result)
+            } catch (err: unknown) {
+              const errorMessage = getManualTransferErrorMessage(err, t('dialog.reorganize.previewRequestFailed'))
+              console.warn(`预览请求异常: ${errorMessage}`)
               mergePreviewData(
                 mergedPreviewData,
                 createFailedPreviewData({
                   source: item.path || item.name,
                   type: item.type,
                   title: item.name,
-                  message: `${item.name || item.path}: ${err?.message || t('dialog.reorganize.previewRequestFailed')}`,
+                  message: errorMessage,
                 }),
               )
             }
@@ -1213,25 +1234,15 @@ async function previewTransfer() {
             const result = await requestManualTransfer<ManualTransferPreviewData>(
               createTransferPayload({ logid, preview: true }),
             )
-            if (!result.success) {
-              mergePreviewData(
-                mergedPreviewData,
-                createFailedPreviewData({
-                  source: `历史记录 ${logid}`,
-                  message: result.message || t('dialog.reorganize.previewRequestFailed'),
-                }),
-              )
-              return
-            }
-
-            mergePreviewData(mergedPreviewData, resolvePreviewResponseData(result))
-          } catch (err: any) {
-            console.warn(`预览请求异常: ${err?.message}`)
+            mergePreviewData(mergedPreviewData, result)
+          } catch (err: unknown) {
+            const errorMessage = getManualTransferErrorMessage(err, t('dialog.reorganize.previewRequestFailed'))
+            console.warn(`预览请求异常: ${errorMessage}`)
             mergePreviewData(
               mergedPreviewData,
               createFailedPreviewData({
                 source: `历史记录 ${logid}`,
-                message: `历史记录 ${logid}: ${err?.message || t('dialog.reorganize.previewRequestFailed')}`,
+                message: errorMessage,
               }),
             )
           }
@@ -1247,10 +1258,10 @@ async function previewTransfer() {
     if (previewHasFailures(mergedPreviewData)) {
       $toast.warning(getPreviewResultSummaryMessage(mergedPreviewData))
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     previewVisible.value = false
     resetPreviewState()
-    $toast.error(error?.message || t('dialog.reorganize.previewRequestFailed'))
+    $toast.error(getManualTransferErrorMessage(error, t('dialog.reorganize.previewRequestFailed')))
   } finally {
     previewLoading.value = false
   }
@@ -1272,16 +1283,12 @@ async function togglePreview() {
 // 整理文件
 async function handleTransfer(item: FileItem, background: boolean = false) {
   try {
-    const result = await requestManualTransfer(createTransferPayload({ item }), background)
-    if (!result.success) {
-      $toast.error(result.message || t('dialog.reorganize.transferRequestFailed'))
-      return false
-    }
+    await requestManualTransfer<null>(createTransferPayload({ item }), background)
     if (background) $toast.success(t('dialog.reorganize.successMessage', { name: item.name }))
     return true
   } catch (error: unknown) {
     console.log(error)
-    if (error instanceof Error) $toast.error(error.message)
+    $toast.error(getManualTransferErrorMessage(error, t('dialog.reorganize.transferRequestFailed')))
     return false
   }
 }
@@ -1289,16 +1296,12 @@ async function handleTransfer(item: FileItem, background: boolean = false) {
 // 批量整理文件并按后台模式决定是否提示入队成功。
 async function handleTransferBatch(items: FileItem[], background: boolean = false) {
   try {
-    const result = await requestManualTransfer(createTransferPayload({ items }), background)
-    if (!result.success) {
-      $toast.error(result.message || t('dialog.reorganize.transferRequestFailed'))
-      return false
-    }
+    await requestManualTransfer<null>(createTransferPayload({ items }), background)
     if (background) $toast.success(t('dialog.reorganize.successMessage', { name: getBatchItemsLabel(items) }))
     return true
   } catch (error: unknown) {
     console.log(error)
-    if (error instanceof Error) $toast.error(error.message)
+    $toast.error(getManualTransferErrorMessage(error, t('dialog.reorganize.transferRequestFailed')))
     return false
   }
 }
@@ -1306,16 +1309,12 @@ async function handleTransferBatch(items: FileItem[], background: boolean = fals
 // 整理日志
 async function handleTransferLog(logid: number, background: boolean = false) {
   try {
-    const result = await requestManualTransfer(createTransferPayload({ logid }), background)
-    if (!result.success) {
-      $toast.error(result.message || t('dialog.reorganize.transferRequestFailed'))
-      return false
-    }
+    await requestManualTransfer<null>(createTransferPayload({ logid }), background)
     if (background) $toast.success(`历史记录 ${logid} 已加入整理队列！`)
     return true
   } catch (error: unknown) {
     console.log(error)
-    if (error instanceof Error) $toast.error(error.message)
+    $toast.error(getManualTransferErrorMessage(error, t('dialog.reorganize.transferRequestFailed')))
     return false
   }
 }
@@ -1487,7 +1486,7 @@ onUnmounted(() => {
                   </VCol>
                 </VRow>
                 <VRow>
-                  <VCol cols="12" md="4">
+                  <VCol cols="12" :md="transferForm.type_name === '音乐' ? 3 : 4">
                     <VSelect
                       v-model="transferForm.type_name"
                       :label="t('dialog.reorganize.mediaType')"
@@ -1495,13 +1494,14 @@ onUnmounted(() => {
                         { title: t('dialog.reorganize.auto'), value: '' },
                         { title: t('dialog.reorganize.movie'), value: '电影' },
                         { title: t('dialog.reorganize.tv'), value: '电视剧' },
+                        { title: t('mediaType.music'), value: '音乐' },
                       ]"
                       :hint="t('dialog.reorganize.mediaTypeHint')"
                       persistent-hint
                       prepend-inner-icon="mdi-movie-open"
                     />
                   </VCol>
-                  <VCol cols="12" md="4">
+                  <VCol cols="12" :md="transferForm.type_name === '音乐' ? 3 : 4">
                     <VSelect
                       v-model="transferForm.media_source"
                       :items="mediaSourceItems"
@@ -1511,13 +1511,27 @@ onUnmounted(() => {
                       prepend-inner-icon="mdi-database-search"
                     />
                   </VCol>
-                  <VCol cols="12" md="4">
+                  <VCol v-if="transferForm.type_name === '音乐'" cols="12" md="3">
+                    <VSelect
+                      v-model="transferForm.music_type"
+                      :label="t('dialog.reorganize.musicEntity')"
+                      :items="[
+                        { title: t('music.entityRecording'), value: 'recording' },
+                        { title: t('music.entityAlbum'), value: 'album' },
+                      ]"
+                      prepend-inner-icon="mdi-music-box-multiple"
+                    />
+                  </VCol>
+                  <VCol
+                    v-if="transferForm.type_name !== ''"
+                    cols="12"
+                    :md="transferForm.type_name === '音乐' ? 3 : 4"
+                  >
                     <VTextField
                       v-model="transferForm.media_id"
-                      :disabled="transferForm.type_name === ''"
                       :label="mediaIdLabel"
                       :placeholder="t('dialog.reorganize.mediaIdPlaceholder')"
-                      :rules="[numberValidator]"
+                      :rules="[validateMediaId]"
                       append-inner-icon="mdi-magnify"
                       :hint="t('dialog.reorganize.mediaIdHint')"
                       persistent-hint
@@ -1853,6 +1867,7 @@ onUnmounted(() => {
         @close="mediaSelectorDialog = false"
         @select="handleMediaSelected"
         :type="mediaSource"
+        :music-types="['recording', 'album']"
       />
     </VDialog>
   </VDialog>

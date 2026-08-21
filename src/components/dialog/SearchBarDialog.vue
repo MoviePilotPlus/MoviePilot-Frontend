@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import api from '@/api'
-import type { Site, Plugin, Subscribe } from '@/api/types'
+import type { MediaDataSource, Site, Plugin, Subscribe } from '@/api/types'
 import { getNavMenus, getSettingTabs } from '@/router/i18n-menu'
 import { NavMenu } from '@/@layouts/types'
-import { useUserStore } from '@/stores'
+import { useUserStore, useGlobalSettingsStore } from '@/stores'
 import SearchSiteDialog from '@/components/dialog/SearchSiteDialog.vue'
 import { useI18n } from 'vue-i18n'
 import { useDisplay } from 'vuetify'
 import { VDialog, VMenu } from 'vuetify/components'
 import { buildUserPermissionContext, hasPermission, filterMenusByPermission } from '@/utils/permission'
+import { useMediaSources } from '@/composables/useMediaSources'
 
 // 显示器宽度
 const display = useDisplay()
@@ -32,6 +33,9 @@ const router = useRouter()
 
 // 用户 Store
 const userStore = useUserStore()
+
+// 全局设置 Store
+const globalSettingsStore = useGlobalSettingsStore()
 
 // 当前用户名
 const userName = userStore.userName
@@ -65,7 +69,7 @@ const SubscribeItems = ref<Subscribe[]>([])
 const chooseSiteDialog = ref(false)
 const selectedSites = ref<number[]>([])
 const allSites = ref<Site[]>([])
-const siteSearchType = ref<'torrent' | 'subtitle'>('torrent')
+const siteSearchType = ref<'torrent' | 'subtitle' | 'music'>('torrent')
 
 // 定义事件
 const emit = defineEmits(['close', 'update:modelValue'])
@@ -96,8 +100,8 @@ const searchOverlayProps = computed(() =>
 // 搜索词
 const searchWord = ref<string | null>(null)
 
-type MediaSearchSource = 'themoviedb' | 'douban' | 'bangumi' | 'anilist'
-type MediaSearchType = 'media' | 'collection' | 'person'
+type MediaSearchSource = MediaDataSource
+type MediaSearchType = 'media' | 'music' | 'collection' | 'person'
 
 interface MediaSearchSourceOption {
   label: string
@@ -112,12 +116,75 @@ interface MediaSearchAction {
   description: string
 }
 
-// 三类搜索各自维护来源选择，首次使用均默认 TheMovieDB。
-const selectedMediaSearchSources = reactive<Record<MediaSearchType, MediaSearchSource>>({
-  media: 'themoviedb',
-  collection: 'themoviedb',
-  person: 'themoviedb',
+// 三类搜索的媒体数据源可多选，为空数组时由后端按“基础设置-媒体搜索数据源”全局配置执行。
+const selectedMediaSearchSources = reactive<Record<MediaSearchType, MediaSearchSource[]>>({
+  media: [],
+  music: ['musicbrainz'],
+  collection: [],
+  person: [],
 })
+
+const { mediaSourceItems } = useMediaSources()
+const customMediaSources = mediaSourceItems('media')
+const customMusicSources = mediaSourceItems('music')
+/** 将来源目录项转换为搜索来源选项，保持展示名与请求值分离。 */
+const customSearchSourceOptions = (sources: typeof customMediaSources) =>
+  computed<MediaSearchSourceOption[]>(() =>
+    sources.value.map(source => ({
+      label: source.title,
+      name: source.title,
+      value: source.value,
+    })),
+  )
+const customMediaSearchSources = customSearchSourceOptions(customMediaSources)
+const customMusicSearchSources = customSearchSourceOptions(customMusicSources)
+
+// 全局“媒体搜索数据源”配置（SEARCH_SOURCE），用于搜索框默认勾选，保证基础设置生效。
+const configuredMediaSearchSources = computed((): MediaSearchSource[] => {
+  const raw = globalSettingsStore.get('SEARCH_SOURCE')
+  if (!raw) return []
+  return String(raw)
+    .split(',')
+    .map(item => item.trim() as MediaSearchSource)
+    .filter(Boolean)
+})
+
+// 标记用户是否已手动调整过来源，手动调整后不再被全局配置覆盖。
+let sourcesTouched = false
+// 标记是否为默认勾选初始化引起的变更，避免误判为用户操作。
+let isInitializingSources = false
+
+/**
+ * 依据全局媒体搜索数据源配置初始化各类搜索的来源勾选；
+ * 配置项不包含该类型可用来源时回退到 TheMovieDB，保证至少一个来源被选中。
+ */
+function initializeMediaSearchSources() {
+  isInitializingSources = true
+  try {
+    ;(['media', 'collection', 'person'] as const).forEach(searchType => {
+      const configured = configuredMediaSearchSources.value.filter(source =>
+        mediaSearchSourceOptions.value[searchType].some(option => option.value === source),
+      )
+      selectedMediaSearchSources[searchType] = configured.length > 0 ? configured : ['themoviedb']
+    })
+  } finally {
+    isInitializingSources = false
+  }
+}
+
+// 全局配置异步加载完成后，若用户尚未手动调整，则按配置补充一次默认勾选。
+watch(configuredMediaSearchSources, () => {
+  if (!sourcesTouched) initializeMediaSearchSources()
+})
+
+// 用户手动改动来源后记录标记，后续全局配置再变化也不覆盖用户选择。
+watch(
+  selectedMediaSearchSources,
+  () => {
+    if (!isInitializingSources) sourcesTouched = true
+  },
+  { deep: true },
+)
 
 // 按后端实际能力限定每类搜索可选的数据源。
 const mediaSearchSourceOptions = computed<Record<MediaSearchType, MediaSearchSourceOption[]>>(() => {
@@ -141,9 +208,25 @@ const mediaSearchSourceOptions = computed<Record<MediaSearchType, MediaSearchSou
     name: t('discoverTabs.anilist'),
     value: 'anilist' as const,
   }
+  const musicbrainz = {
+    label: 'MusicBrainz',
+    name: 'MusicBrainz',
+    value: 'musicbrainz' as const,
+  }
+  const theaudiodb = {
+    label: 'TheAudioDB',
+    name: 'TheAudioDB',
+    value: 'theaudiodb' as const,
+  }
+  const doubanmusic = {
+    label: t('setting.cache.recognitionSource.doubanmusic'),
+    name: t('setting.cache.recognitionSource.doubanmusic'),
+    value: 'doubanmusic' as const,
+  }
 
   return {
-    media: [themoviedb, douban, bangumi, anilist],
+    media: [themoviedb, douban, bangumi, anilist, ...customMediaSearchSources.value],
+    music: [musicbrainz, theaudiodb, doubanmusic, ...customMusicSearchSources.value],
     collection: [themoviedb],
     person: [themoviedb, douban],
   }
@@ -157,6 +240,12 @@ const mediaSearchActions = computed(() => {
       icon: 'mdi-movie-search',
       title: `${t('recommend.categoryMovie')}、${t('recommend.categoryTV')}`,
       description: t('resource.title'),
+    },
+    {
+      type: 'music',
+      icon: 'mdi-music-note-outline',
+      title: t('mediaType.music'),
+      description: t('music.searchDescription'),
     },
     {
       type: 'collection',
@@ -299,11 +388,8 @@ async function fetchSubscribes() {
 /** 从接口加载用户的站点搜索偏好。 */
 const loadUserSitePreferences = async () => {
   try {
-    const result = await api.get('system/setting/public/IndexerSites')
-    if (result && result.data && result.data.value) {
-      selectedSites.value = result.data.value
-      return
-    }
+    const result = await api.get<{ value?: number[] }>('system/setting/public/IndexerSites')
+    selectedSites.value = result.value ?? []
   } catch (err) {
     console.error(err)
   }
@@ -315,6 +401,8 @@ async function queryAllSites() {
     const data: Site[] = await api.get('site/')
     // 过滤站点，只有启用的站点才显示
     allSites.value = data.filter(item => item.is_active)
+    const availableIds = new Set(allSites.value.map(site => site.id))
+    selectedSites.value = selectedSites.value.filter(siteId => availableIds.has(siteId))
     // 如果没有选择任何站点并且有可用站点，才默认选择全部
     if (selectedSites.value.length === 0 && allSites.value.length > 0) {
       selectedSites.value = allSites.value.map((site: Site) => site.id)
@@ -324,10 +412,42 @@ async function queryAllSites() {
   }
 }
 
+/** 查询支持音乐分类的启用站点，并将默认选择收敛到可用范围。 */
+async function queryMusicSites() {
+  try {
+    const data: Site[] = await api.get('site/media/music')
+    allSites.value = data.filter(item => item.is_active)
+    const availableIds = new Set(allSites.value.map(site => site.id))
+    selectedSites.value = selectedSites.value.filter(siteId => availableIds.has(siteId))
+    if (selectedSites.value.length === 0) {
+      selectedSites.value = allSites.value.map(site => site.id)
+    }
+  } catch (error) {
+    console.error(error)
+    allSites.value = []
+    selectedSites.value = []
+  }
+}
+
 /** 打开指定资源类型的站点选择对话框。 */
-const openSiteDialog = (type: 'torrent' | 'subtitle' = 'torrent') => {
+async function openSiteDialog(type: 'torrent' | 'subtitle' | 'music' = 'torrent') {
   siteSearchType.value = type
+  await loadUserSitePreferences()
+  if (type === 'music') {
+    await queryMusicSites()
+  } else {
+    await queryAllSites()
+  }
   chooseSiteDialog.value = true
+}
+
+/** 按当前搜索类型刷新站点选择列表。 */
+async function reloadSearchSites() {
+  if (siteSearchType.value === 'music') {
+    await queryMusicSites()
+    return
+  }
+  await queryAllSites()
 }
 
 // 匹配的订阅列表
@@ -346,6 +466,10 @@ function searchSites(sites: number[]) {
   selectedSites.value = sites
   if (siteSearchType.value === 'subtitle') {
     searchSubtitle()
+    return
+  }
+  if (siteSearchType.value === 'music') {
+    searchMusicTorrent()
     return
   }
   searchTorrent()
@@ -385,17 +509,49 @@ function searchSubtitle() {
   closeSearch()
 }
 
-/** 跳转到指定类型的媒体搜索结果页。 */
+/** 使用当前关键词直接搜索站点音乐资源，不经过媒体信息识别。 */
+function searchMusicTorrent() {
+  if (!searchWord.value || !hasSearchPermission.value) return
+  saveRecentSearches(searchWord.value)
+  router.push({
+    path: '/resource',
+    query: {
+      keyword: searchWord.value,
+      type: '音乐',
+      area: 'title',
+      result_type: 'torrent',
+      sites: selectedSites.value.join(','),
+    },
+  })
+  closeSearch()
+}
+
+/** 使用当前关键词搜索指定类型的媒体信息。 */
 function searchMedia(searchType: MediaSearchType) {
   if (!searchWord.value || !hasDiscoveryPermission.value) return
   saveRecentSearches(searchWord.value)
+  if (searchType === 'music') {
+    const sources = selectedMediaSearchSources.music
+    router.push({
+      path: '/music',
+      query: {
+        query: searchWord.value,
+        ...(sources.length > 0 ? { media_source: sources.join(',') } : {}),
+      },
+    })
+    closeSearch()
+    return
+  }
+  const query: Record<string, string> = {
+    title: searchWord.value,
+    type: searchType,
+  }
+  // 多个来源以逗号分隔传给后端，未勾选任何来源时不传，由后端按全局配置搜索。
+  const sources = selectedMediaSearchSources[searchType]
+  if (sources.length > 0) query.media_source = sources.join(',')
   router.push({
     path: '/browse/media/search',
-    query: {
-      title: searchWord.value,
-      type: searchType,
-      source: selectedMediaSearchSources[searchType],
-    },
+    query,
   })
   closeSearch()
 }
@@ -453,6 +609,13 @@ function goSubscribe(subscribe: Subscribe) {
         id: subscribe.id,
       },
     })
+  } else if (subscribe.type === '音乐') {
+    router.push({
+      path: '/subscribe/music',
+      query: {
+        id: subscribe.id,
+      },
+    })
   } else {
     router.push({
       path: '/subscribe/tv',
@@ -484,6 +647,8 @@ watch(dialog, async isOpen => {
 defineExpose({ focusSearchInput })
 
 onMounted(() => {
+  // 搜索来源默认跟随全局媒体搜索数据源配置，保证基础设置生效
+  initializeMediaSearchSources()
   // 根据权限加载不同的数据
   if (hasAdminPermission.value) {
     fetchInstalledPlugins()
@@ -590,6 +755,7 @@ onMounted(() => {
                   v-model="selectedMediaSearchSources[action.type]"
                   class="search-item-source-toggle"
                   density="compact"
+                  multiple
                   mandatory
                   role="group"
                   selected-class="media-source-button--active"
@@ -669,7 +835,13 @@ onMounted(() => {
               <template #prepend>
                 <div class="result-icon-wrapper">
                   <VIcon
-                    :icon="subscribe.type === '电影' ? 'mdi-movie-roll' : 'mdi-television-classic'"
+                    :icon="
+                      subscribe.type === '电影'
+                        ? 'mdi-movie-roll'
+                        : subscribe.type === '音乐'
+                          ? 'mdi-music-note'
+                          : 'mdi-television-classic'
+                    "
                     size="small"
                     color="medium-emphasis"
                   />
@@ -777,6 +949,33 @@ onMounted(() => {
               </template>
             </VListItem>
 
+            <VListItem density="comfortable" link @click="searchMusicTorrent" class="search-result-item mx-2 my-1">
+              <template #prepend>
+                <div class="result-icon-wrapper">
+                  <VIcon icon="mdi-music-box-multiple-outline" size="small" color="medium-emphasis" />
+                </div>
+              </template>
+              <VListItemTitle class="font-weight-medium text-body-2">{{
+                t('dialog.searchBar.searchMusicInSites')
+              }}</VListItemTitle>
+              <VListItemSubtitle class="text-caption text-medium-emphasis">
+                {{ t('common.search') }} <span class="primary-text font-weight-medium">{{ searchWord }}</span>
+                {{ t('dialog.searchBar.relatedMusicResources') }}
+              </VListItemSubtitle>
+              <template #append>
+                <VBtn
+                  v-if="hasManagePermission"
+                  size="x-small"
+                  variant="tonal"
+                  color="primary"
+                  rounded="pill"
+                  @click.stop="openSiteDialog('music')"
+                >
+                  {{ t('dialog.searchBar.selectSites') }}
+                </VBtn>
+              </template>
+            </VListItem>
+
             <VListItem density="comfortable" link @click="searchSubtitle" class="search-result-item mx-2 my-1">
               <template #prepend>
                 <div class="result-icon-wrapper">
@@ -852,7 +1051,7 @@ onMounted(() => {
     :selected="selectedSites"
     @search="searchSites"
     @close="chooseSiteDialog = false"
-    @reload="queryAllSites"
+    @reload="reloadSearchSites"
   />
 </template>
 

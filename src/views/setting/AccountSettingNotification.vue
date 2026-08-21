@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { useToast } from 'vue-toastification'
 import api from '@/api'
+import { manageNotificationChannel } from '@/api/manage'
 import type { NotificationConf, NotificationSwitchConf } from '@/api/types'
 import NotificationChannelCard from '@/components/cards/NotificationChannelCard.vue'
 import { useI18n } from 'vue-i18n'
@@ -206,14 +207,15 @@ function trackWechatClawBotRename(oldName: string, newName: string) {
     return
   }
   const renameMap = { ...wechatClawBotRenameMap.value }
+  let chainedRename = false
+  // 连续改名只保留原始缓存名到当前渠道名，避免为不存在的中间名发起迁移。
   for (const [source, target] of Object.entries(renameMap)) {
     if (target === oldName) {
       renameMap[source] = newName
+      chainedRename = true
     }
   }
-  if (renameMap[oldName]) {
-    renameMap[oldName] = newName
-  } else {
+  if (!chainedRename) {
     renameMap[oldName] = newName
   }
   wechatClawBotRenameMap.value = Object.fromEntries(
@@ -229,23 +231,23 @@ async function migrateWechatClawBotRenames() {
     ([oldName, newName]) => oldName && newName && oldName !== newName && activeWechatClawBotNames.has(newName),
   )
   for (const [oldName, newName] of renameEntries) {
-    const result: { [key: string]: any } = await api.post('notification/wechatclawbot/migrate', null, {
-      params: {
-        old_source: oldName,
-        new_source: newName,
+    await manageNotificationChannel(
+      'WechatClawBot',
+      'migrate_cache',
+      {
+        old_name: oldName,
+        new_name: newName,
       },
-    })
-    if (!result.success) {
-      throw new Error(result.message || `failed to migrate ${oldName} -> ${newName}`)
-    }
+      { feedback: 'silent' },
+    )
   }
 }
 
 // 调用API查询通知渠道设置
 async function loadNotificationSetting() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/Notifications')
-    notifications.value = result.data?.value ?? []
+    const result = await api.get<{ value?: NotificationConf[] }>('system/setting/Notifications')
+    notifications.value = result.value ?? []
     wechatClawBotRenameMap.value = {}
   } catch (error) {
     console.log(error)
@@ -255,8 +257,10 @@ async function loadNotificationSetting() {
 async function openEditor(type: NotificationTemplateType) {
   try {
     currentTemplate.value = type
-    const result: { [key: string]: any } = await api.get('system/setting/NotificationTemplates')
-    templateConfigs.value = result.data?.value || {}
+    const result = await api.get<{ value?: Record<string, string> }>('system/setting/NotificationTemplates', {
+      feedback: 'silent',
+    })
+    templateConfigs.value = result.value || {}
     editorContent.value = templateConfigs.value[type] || '{}'
     openTemplateEditorDialog(type)
   } catch (error) {
@@ -267,10 +271,14 @@ async function openEditor(type: NotificationTemplateType) {
 
 async function saveTemplate(value = editorContent.value) {
   try {
-    await api.post('system/setting/NotificationTemplates', {
-      ...templateConfigs.value,
-      [currentTemplate.value]: value,
-    })
+    await api.post(
+      'system/setting/NotificationTemplates',
+      {
+        ...templateConfigs.value,
+        [currentTemplate.value]: value,
+      },
+      { feedback: 'silent' },
+    )
     $toast.success(t('setting.notification.templateSaveSuccess'))
     closeTemplateEditorDialog()
   } catch (error) {
@@ -281,8 +289,10 @@ async function saveTemplate(value = editorContent.value) {
 
 async function loadTemplateConfigs() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/NotificationTemplates')
-    templateConfigs.value = result.data?.value || {}
+    const result = await api.get<{ value?: Record<string, string> }>('system/setting/NotificationTemplates', {
+      feedback: 'silent',
+    })
+    templateConfigs.value = result.value || {}
   } catch (error) {
     console.error(error)
     $toast.error(t('setting.notification.templateLoadFailed'))
@@ -292,8 +302,8 @@ async function loadTemplateConfigs() {
 // 调用API查询通知发送时间设置
 async function loadNotificationTime() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/NotificationSendTime')
-    notificationTime.value = result.data?.value ?? { start: '00:00', end: '23:59' }
+    const result = await api.get<{ value?: { start: string; end: string } }>('system/setting/NotificationSendTime')
+    notificationTime.value = result.value ?? { start: '00:00', end: '23:59' }
   } catch (error) {
     console.log(error)
   }
@@ -303,11 +313,9 @@ async function loadNotificationTime() {
 async function saveNotificationSetting() {
   try {
     await migrateWechatClawBotRenames()
-    const result: { [key: string]: any } = await api.post('system/setting/Notifications', notifications.value)
-    if (result.success) {
-      wechatClawBotRenameMap.value = {}
-      $toast.success(t('setting.notification.saveSuccess'))
-    } else $toast.error(t('setting.notification.saveFailed'))
+    await api.post('system/setting/Notifications', notifications.value, { feedback: 'silent' })
+    wechatClawBotRenameMap.value = {}
+    $toast.success(t('setting.notification.saveSuccess'))
   } catch (error) {
     console.log(error)
     $toast.error(t('setting.notification.saveFailed'))
@@ -317,12 +325,11 @@ async function saveNotificationSetting() {
 // 调用API保存通知发送时间设置
 async function saveNotificationTime() {
   try {
-    const result: { [key: string]: any } = await api.post('system/setting/NotificationSendTime', notificationTime.value)
-    if (result.success) {
-      $toast.success(t('setting.notification.timeSaveSuccess'))
-    } else $toast.error(t('setting.notification.timeSaveFailed'))
+    await api.post('system/setting/NotificationSendTime', notificationTime.value, { feedback: 'silent' })
+    $toast.success(t('setting.notification.timeSaveSuccess'))
   } catch (error) {
     console.log(error)
+    $toast.error(t('setting.notification.timeSaveFailed'))
   }
 }
 
@@ -341,9 +348,9 @@ function changNotificationSetting(notification: NotificationConf, name: string) 
 // 加载消息类型开关
 async function loadNotificationSwitchs() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/NotificationSwitchs')
-    if (result.data?.value && result.data?.value.length > 0) {
-      const savedSwitchs: NotificationSwitchConf[] = result.data.value
+    const result = await api.get<{ value?: NotificationSwitchConf[] }>('system/setting/NotificationSwitchs')
+    if (result.value && result.value.length > 0) {
+      const savedSwitchs = result.value
       // 合并默认值中存在但后端数据中缺失的类型（如新增的类型）
       const defaults = notificationSwitchs.value
       for (const def of defaults) {
@@ -361,14 +368,11 @@ async function loadNotificationSwitchs() {
 // 保存消息类型开关
 async function saveNotificationSwitchs() {
   try {
-    const result: { [key: string]: any } = await api.post(
-      'system/setting/NotificationSwitchs',
-      notificationSwitchs.value,
-    )
-    if (result.success) $toast.success(t('setting.notification.switchSaveSuccess'))
-    else $toast.error(t('setting.notification.switchSaveFailed'))
+    await api.post('system/setting/NotificationSwitchs', notificationSwitchs.value, { feedback: 'silent' })
+    $toast.success(t('setting.notification.switchSaveSuccess'))
   } catch (error) {
     console.log(error)
+    $toast.error(t('setting.notification.switchSaveFailed'))
   }
 }
 

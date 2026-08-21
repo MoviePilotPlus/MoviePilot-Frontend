@@ -2,13 +2,15 @@
 import { useDisplay } from 'vuetify'
 import type { Plugin, RenderProps } from '@/api/types'
 import { isNullOrEmptyObject } from '@/@core/utils'
-import api from '@/api'
+import api, { pluginApi } from '@/api'
 import { useToast } from 'vue-toastification'
 import FormRender from '../render/FormRender.vue'
 import ProgressDialog from '../dialog/ProgressDialog.vue'
 import { useI18n } from 'vue-i18n'
 import { loadRemoteComponent } from '@/utils/federationLoader'
 import { usePluginNativeSubscribe } from '@/composables/usePluginNativeSubscribe'
+import { useConfirm } from '@/composables/useConfirm'
+import { openSharedDialog } from '@/composables/useSharedDialog'
 import { usePluginSidebarNavStore } from '@/stores/pluginSidebarNav'
 import RemoteComponentError from '@/components/misc/RemoteComponentError.vue'
 import RemoteComponentLoading from '@/components/misc/RemoteComponentLoading.vue'
@@ -46,6 +48,13 @@ const $toast = useToast()
 
 // 向联邦插件提供主应用 Toast，避免远程组件自行创建通知容器。
 provide('moviepilot:toast', $toast)
+
+// 向联邦插件提供主应用公共弹窗，内容由 App 的 SharedDialogHost 统一承载。
+provide('moviepilot:dialog', openSharedDialog)
+
+// 确认弹窗单独提供，保持简单确认调用的兼容性。
+const createConfirm = useConfirm()
+provide('moviepilot:confirm', createConfirm)
 
 // 配置联邦组件沿用与其它插件宿主一致的原生订阅能力。
 const nativeSubscribe = usePluginNativeSubscribe()
@@ -163,19 +172,12 @@ async function savePluginConf() {
   progressDialog.value = true
   progressText.value = t('dialog.pluginConfig.saving', { name: props.plugin?.plugin_name })
   try {
-    const result = (await api.put(`plugin/${props.plugin?.id}`, pluginConfigForm.value)) as {
-      message?: string
-      success: boolean
-    }
-    if (result.success) {
-      $toast.success(t('dialog.pluginConfig.saveSuccess', { name: props.plugin?.plugin_name }))
-      // 通知父组件刷新
-      emit('save')
-      // 导航声明可能由插件配置控制；刷新失败不改变已经成功的配置保存结果。
-      void pluginSidebarNavStore.ensureSidebarNav(true).catch(error => console.error(error))
-    } else {
-      $toast.error(t('dialog.pluginConfig.saveFailed', { name: props.plugin?.plugin_name, message: result.message }))
-    }
+    await api.put(`plugin/${props.plugin?.id}`, pluginConfigForm.value, { feedback: 'silent' })
+    $toast.success(t('dialog.pluginConfig.saveSuccess', { name: props.plugin?.plugin_name }))
+    // 通知父组件刷新
+    emit('save')
+    // 导航声明可能由插件配置控制；刷新失败不改变已经成功的配置保存结果。
+    void pluginSidebarNavStore.ensureSidebarNav(true).catch(error => console.error(error))
   } catch (error) {
     console.error(error)
     const message = error instanceof Error ? error.message : String(error)
@@ -238,7 +240,7 @@ onBeforeMount(async () => {
         <component
           :is="dynamicComponent"
           :initial-config="pluginConfigForm"
-          :api="api"
+          :api="pluginApi"
           :native-subscribe="nativeSubscribe"
           @save="handleVueComponentSave"
           @layout="handleVueComponentLayout"

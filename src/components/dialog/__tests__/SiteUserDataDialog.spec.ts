@@ -1,5 +1,6 @@
 import SiteUserDataDialog from '@/components/dialog/SiteUserDataDialog.vue'
-import type { ApiResponse, SiteUserData } from '@/api/types'
+import type { SiteUserData } from '@/api/types'
+import vuetify from '@/plugins/vuetify'
 import { fireEvent, screen, waitFor } from '@testing-library/vue'
 import { createSite, createSiteUserData } from '@tests/support/factories/site'
 import { refreshSiteUserDataHandler, siteUserDataHandler } from '@tests/support/msw/handlers/site'
@@ -55,7 +56,7 @@ function deferred<T>() {
 }
 
 async function renderDialog(
-  initialResult: Pick<ApiResponse<SiteUserData[]>, 'data' | 'message' | 'success'> = { data: [], success: false },
+  initialResult: { data: SiteUserData[]; message?: string; success: boolean } = { data: [], success: true },
   status = 200,
   onRequest: () => void | Promise<void> = () => {},
 ) {
@@ -97,6 +98,8 @@ function getRetryButton() {
 describe('SiteUserDataDialog projections', () => {
   beforeEach(() => {
     chartInputs.length = 0
+    // 图表明暗断言基于浅色环境，显式固定主题避免受应用默认主题影响。
+    vuetify.theme.global.name.value = 'light'
     vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.spyOn(console, 'log').mockImplementation(() => {})
   })
@@ -390,7 +393,7 @@ describe('SiteUserDataDialog refresh and recovery', () => {
   it('clears an initial HTTP error when retry returns the legal empty state', async () => {
     const { site } = await renderDialog({ data: [], success: false }, 500)
     expect(await screen.findByText(/加载站点数据失败/)).toBeInTheDocument()
-    server.use(siteUserDataHandler(site.id, { data: [], success: false }))
+    server.use(siteUserDataHandler(site.id, { data: [], success: true }))
 
     await fireEvent.click(getRetryButton())
 

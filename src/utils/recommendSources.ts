@@ -43,6 +43,18 @@ export function createBuiltInRecommendSources(t: Translate): RecommendViewSource
       type: t('recommend.categoryAnime'),
     },
     {
+      apipath: 'recommend/music_weekly',
+      linkurl: '/browse/recommend/music_weekly?title=' + t('recommend.listenBrainzWeekly'),
+      title: t('recommend.listenBrainzWeekly'),
+      type: t('recommend.categoryMusic'),
+    },
+    {
+      apipath: 'recommend/music_douban',
+      linkurl: '/browse/recommend/music_douban?title=' + t('recommend.doubanMusic'),
+      title: t('recommend.doubanMusic'),
+      type: t('recommend.categoryMusic'),
+    },
+    {
       apipath: 'recommend/tmdb_movies',
       linkurl: '/browse/recommend/tmdb_movies?title=' + t('recommend.tmdbHotMovies'),
       title: t('recommend.tmdbHotMovies'),

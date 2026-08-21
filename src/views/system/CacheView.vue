@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { useToast } from 'vue-toastification'
 import api from '@/api'
-import type { TorrentCacheData, TorrentCacheItem } from '@/api/types'
+import type { MediaDataSource, MusicEntityType, TorrentCacheData, TorrentCacheItem } from '@/api/types'
 import { useI18n } from 'vue-i18n'
 import { formatFileSize, formatDateDifference } from '@core/utils/formatters'
 import { useConfirm } from '@/composables/useConfirm'
@@ -73,7 +73,7 @@ const filteredData = computed(() => {
 })
 
 // 选中的缓存项
-const selectedItems = ref<string[]>([])
+const selectedItems = ref<TorrentCacheItem[]>([])
 
 // 加载状态
 const loading = ref(false)
@@ -86,7 +86,7 @@ const mobileVisibleCount = ref(MOBILE_CACHE_PAGE_SIZE)
 let reidentifyDialogController: ReturnType<typeof openSharedDialog> | null = null
 
 const tableStyle = computed(() => {
-  return appMode ? '' : 'height: calc(100vh - 21rem - env(safe-area-inset-bottom)'
+  return appMode ? '' : 'height: calc(100vh - 21rem - env(safe-area-inset-bottom))'
 })
 
 // 移动端虚拟列表数据
@@ -108,8 +108,8 @@ function resetMobilePagination() {
 async function loadCacheData() {
   try {
     loading.value = true
-    const res: any = await api.get('torrent/cache')
-    cacheData.value = res.data
+    const data = await api.get<TorrentCacheData | null>('torrent/cache', { feedback: 'silent' })
+    if (data) cacheData.value = data
     resetMobilePagination()
   } catch (e) {
     console.log(e)
@@ -146,7 +146,7 @@ async function clearAllCache() {
   if (!isConfirmed) return
   try {
     loading.value = true
-    await api.delete('torrent/cache')
+    await api.delete<null>('torrent/cache', { feedback: 'silent' })
     $toast.success(t('setting.cache.clearSuccess'))
     await loadCacheData()
     selectedItems.value = []
@@ -162,8 +162,8 @@ async function clearAllCache() {
 async function refreshCache() {
   try {
     loading.value = true
-    const res: any = await api.post('torrent/cache/refresh')
-    $toast.success(res.message || t('setting.cache.refreshSuccess'))
+    await api.post<null>('torrent/cache/refresh', undefined, { feedback: 'silent' })
+    $toast.success(t('setting.cache.refreshSuccess'))
     await loadCacheData()
   } catch (e) {
     console.log(e)
@@ -182,13 +182,9 @@ async function deleteSelectedItems() {
 
   try {
     loading.value = true
-    const deletePromises = selectedItems.value.map(hash => {
-      const item = cacheData.value.data.find(d => d.hash === hash)
-      if (item) {
-        return api.delete(`torrent/cache/${item.domain}/${hash}`)
-      }
-      return Promise.resolve()
-    })
+    const deletePromises = selectedItems.value.map(item =>
+      api.delete<null>(`torrent/cache/${item.domain}/${item.hash}`, { feedback: 'silent' }),
+    )
 
     await Promise.all(deletePromises)
     $toast.success(t('setting.cache.deleteSelectedSuccess', { count: selectedItems.value.length }))
@@ -206,11 +202,11 @@ async function deleteSelectedItems() {
 async function deleteSingleItem(item: TorrentCacheItem) {
   try {
     loading.value = true
-    await api.delete(`torrent/cache/${item.domain}/${item.hash}`)
+    await api.delete<null>(`torrent/cache/${item.domain}/${item.hash}`, { feedback: 'silent' })
     $toast.success(t('setting.cache.deleteSuccess'))
     await loadCacheData()
-    // 从选中列表中移除
-    const index = selectedItems.value.indexOf(item.hash)
+    const itemIdentity = getCacheItemIdentity(item)
+    const index = selectedItems.value.findIndex(selectedItem => getCacheItemIdentity(selectedItem) === itemIdentity)
     if (index > -1) {
       selectedItems.value.splice(index, 1)
     }
@@ -222,6 +218,11 @@ async function deleteSingleItem(item: TorrentCacheItem) {
   }
 }
 
+/** 组合站点和内容哈希，确保跨站点相同资源仍可独立选择。 */
+function getCacheItemIdentity(item: TorrentCacheItem): string {
+  return JSON.stringify([item.domain, item.hash])
+}
+
 /** 打开重新识别对话框。 */
 function openReidentifyDialog(item: TorrentCacheItem) {
   currentReidentifyItem.value = item
@@ -231,7 +232,8 @@ function openReidentifyDialog(item: TorrentCacheItem) {
     {
       itemTitle: item.title,
       loading: loading.value,
-      recognizeSource: globalSettings.RECOGNIZE_SOURCE,
+      recognizeSource: item.media_source || globalSettings.RECOGNIZE_SOURCE,
+      musicType: item.music_type === 'album' ? 'album' : 'recording',
     },
     {
       close: () => {
@@ -247,25 +249,35 @@ function openReidentifyDialog(item: TorrentCacheItem) {
 }
 
 /** 执行缓存项重新识别。 */
-async function performReidentify(payload: { mediaSource?: string; mediaId?: string } = {}) {
+async function performReidentify(
+  payload: {
+    mediaSource?: MediaDataSource
+    mediaId?: string
+    musicType?: Exclude<MusicEntityType, 'artist'>
+  } = {},
+) {
   if (!currentReidentifyItem.value) return
 
   try {
     loading.value = true
     reidentifyDialogController?.updateProps({ loading: true })
     const params: any = {}
-    if (payload.mediaSource) params.media_source = payload.mediaSource
-    if (payload.mediaId) params.media_id = payload.mediaId
+    if (payload.mediaSource && payload.mediaId) {
+      params.media_source = payload.mediaSource
+      params.media_id = payload.mediaId
+    }
+    if (payload.musicType) params.music_type = payload.musicType
 
-    const res: any = await api.post(
+    await api.post(
       `torrent/cache/reidentify/${currentReidentifyItem.value.domain}/${currentReidentifyItem.value.hash}`,
       null,
       {
         params,
+        feedback: 'silent',
       },
     )
 
-    $toast.success(res.message || t('setting.cache.reidentifySuccess'))
+    $toast.success(t('setting.cache.reidentifySuccess'))
     await loadCacheData()
     reidentifyDialogController?.close()
     reidentifyDialogController = null
@@ -308,7 +320,7 @@ function getMobileMediaTypeChipClass(type: string): string {
 
 /** 生成移动端缓存卡片的稳定渲染键。 */
 function getMobileCacheItemKey(item: TorrentCacheItem, index: number): string {
-  return item.hash || [item.domain, item.title, index].join('-')
+  return item.hash ? getCacheItemIdentity(item) : [item.domain, item.title, index].join('-')
 }
 
 /** 获取移动端缓存卡片使用的媒体标题。 */
@@ -644,7 +656,8 @@ watch([titleFilter, siteFilter], () => {
             ]"
             :items="filteredData"
             :loading="loading"
-            item-value="hash"
+            :item-value="getCacheItemIdentity"
+            return-object
             show-select
             hover
             fixed-header

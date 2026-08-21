@@ -2,7 +2,7 @@
 <script lang="ts" setup>
 import { useToast } from 'vue-toastification'
 import api from '@/api'
-import type { ApiResponse, StorageConf, TransferDirectoryConf } from '@/api/types'
+import type { StorageConf, TransferDirectoryConf } from '@/api/types'
 import DirectoryCard from '@/components/cards/DirectoryCard.vue'
 import StorageCard from '@/components/cards/StorageCard.vue'
 import { useI18n } from 'vue-i18n'
@@ -39,12 +39,15 @@ const mediaCategories = ref<{ [key: string]: any }>({})
 const $toast = useToast()
 
 // 数据源
-const sourceItems = [
-  { 'title': 'TheMovieDb', 'value': 'themoviedb' },
-  { 'title': '豆瓣', 'value': 'douban' },
-  { 'title': 'Bangumi', 'value': 'bangumi' },
-  { 'title': 'AniList', 'value': 'anilist' },
-]
+const sourceItems = computed(() => [
+  { title: t('setting.cache.recognitionSource.themoviedb'), value: 'themoviedb' },
+  { title: t('setting.cache.recognitionSource.douban'), value: 'douban' },
+  { title: t('setting.cache.recognitionSource.bangumi'), value: 'bangumi' },
+  { title: t('setting.cache.recognitionSource.anilist'), value: 'anilist' },
+  { title: t('setting.cache.recognitionSource.musicbrainz'), value: 'musicbrainz' },
+  { title: t('setting.cache.recognitionSource.theaudiodb'), value: 'theaudiodb' },
+  { title: t('setting.cache.recognitionSource.doubanmusic'), value: 'doubanmusic' },
+])
 
 // 存储选项（排除已添加的）
 const storageOptions = computed(() => {
@@ -63,6 +66,7 @@ const SystemSettings = ref<any>({
     SCRAP_SOURCE: 'themoviedb',
     MOVIE_RENAME_FORMAT: null,
     TV_RENAME_FORMAT: null,
+    MUSIC_RENAME_FORMAT: null,
   },
 })
 
@@ -107,17 +111,24 @@ const tvRenameFormat = computed({
   },
 })
 
+const musicRenameFormat = computed({
+  get: () => SystemSettings.value.Basic.MUSIC_RENAME_FORMAT ?? '',
+  set: value => {
+    SystemSettings.value.Basic.MUSIC_RENAME_FORMAT = value || null
+  },
+})
+
 // 加载系统设置
 async function loadSystemSettings() {
   try {
     const result: { [key: string]: any } = await api.get('system/env')
-    if (result.success) {
-      // 将API返回的值赋值给SystemSettings
-      for (const sectionKey of Object.keys(SystemSettings.value) as Array<keyof typeof SystemSettings.value>) {
-        Object.keys(SystemSettings.value[sectionKey]).forEach((key: string) => {
-          if (result.data.hasOwnProperty(key)) (SystemSettings.value[sectionKey] as any)[key] = result.data[key]
-        })
-      }
+    // 将API返回的值赋值给SystemSettings
+    for (const sectionKey of Object.keys(SystemSettings.value) as Array<keyof typeof SystemSettings.value>) {
+      Object.keys(SystemSettings.value[sectionKey]).forEach((key: string) => {
+        if (Object.prototype.hasOwnProperty.call(result, key)) {
+          Reflect.set(SystemSettings.value[sectionKey], key, result[key])
+        }
+      })
     }
   } catch (error) {
     console.log(error)
@@ -127,10 +138,8 @@ async function loadSystemSettings() {
 // 加载挂载盘空目录清理设置
 async function loadMountedLocalDiskDeleteEmptyDirs() {
   try {
-    const result: { data?: { value?: boolean | null } } = await api.get(
-      `system/setting/${mountedLocalDiskDeleteEmptyDirsKey}`,
-    )
-    mountedLocalDiskDeleteEmptyDirs.value = result.data?.value ?? true
+    const result = await api.get<{ value?: boolean | null }>(`system/setting/${mountedLocalDiskDeleteEmptyDirsKey}`)
+    mountedLocalDiskDeleteEmptyDirs.value = result.value ?? true
   } catch (error) {
     console.log(error)
   }
@@ -147,9 +156,8 @@ function orderDirectoryCards() {
 // 查询存储
 async function loadStorages() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/public/Storages')
-
-    storages.value = result.data?.value ?? []
+    const result = await api.get<{ value?: StorageConf[] }>('system/setting/public/Storages')
+    storages.value = result.value ?? []
   } catch (error) {
     console.log(error)
   }
@@ -158,19 +166,19 @@ async function loadStorages() {
 // 保存存储
 async function saveStorages() {
   try {
-    const result: { [key: string]: any } = await api.post('system/setting/Storages', storages.value)
-    if (result.success) $toast.success(t('setting.directory.storageSaveSuccess'))
-    else $toast.error(t('setting.directory.storageSaveFailed'))
+    await api.post('system/setting/Storages', storages.value, { feedback: 'silent' })
+    $toast.success(t('setting.directory.storageSaveSuccess'))
   } catch (error) {
     console.log(error)
+    $toast.error(t('setting.directory.storageSaveFailed'))
   }
 }
 
 // 查询目录
 async function loadDirectories() {
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/public/Directories')
-    directories.value = result.data?.value ?? []
+    const result = await api.get<{ value?: TransferDirectoryConf[] }>('system/setting/public/Directories')
+    directories.value = result.value ?? []
   } catch (error) {
     console.log(error)
   }
@@ -185,12 +193,11 @@ async function saveDirectories() {
       $toast.error(t('setting.directory.duplicateDirectoryName'))
       return
     }
-    const result: { [key: string]: any } = await api.post('system/setting/Directories', directories.value)
-    if (result.success) {
-      $toast.success(t('setting.directory.directorySaveSuccess'))
-    } else $toast.error(t('setting.directory.directorySaveFailed'))
+    await api.post('system/setting/Directories', directories.value, { feedback: 'silent' })
+    $toast.success(t('setting.directory.directorySaveSuccess'))
   } catch (error) {
     console.log(error)
+    $toast.error(t('setting.directory.directorySaveFailed'))
   }
 }
 
@@ -272,19 +279,16 @@ function removeStorage(storage: StorageConf) {
 // 保存设置
 async function saveSystemSettings(value: any) {
   try {
-    // 响应拦截器返回业务响应体，并行组合前需收窄 Axios 的静态返回类型。
-    const [envResult, mountedDiskResult] = await Promise.all([
-      api.post('system/env', value) as unknown as Promise<ApiResponse>,
-      api.post(
-        `system/setting/${mountedLocalDiskDeleteEmptyDirsKey}`,
-        mountedLocalDiskDeleteEmptyDirs.value,
-      ) as unknown as Promise<ApiResponse>,
+    await Promise.all([
+      api.post('system/env', value, { feedback: 'silent' }),
+      api.post(`system/setting/${mountedLocalDiskDeleteEmptyDirsKey}`, mountedLocalDiskDeleteEmptyDirs.value, {
+        feedback: 'silent',
+      }),
     ])
-    if (envResult.success && mountedDiskResult.success) {
-      $toast.success(t('setting.directory.organizeSaveSuccess'))
-    } else $toast.error(t('setting.directory.organizeSaveFailed'))
+    $toast.success(t('setting.directory.organizeSaveSuccess'))
   } catch (error) {
     console.log(error)
+    $toast.error(t('setting.directory.organizeSaveFailed'))
   }
 }
 
@@ -454,6 +458,29 @@ useSilentSettingRefresh(loadPageData, {
                 />
                 <div class="rename-format-editor__hint">
                   {{ t('setting.directory.movieRenameFormatHint') }}
+                </div>
+              </div>
+            </VCol>
+            <VCol cols="12">
+              <div class="rename-format-editor">
+                <div class="rename-format-editor__label">
+                  <VIcon icon="mdi-music-note" size="20" class="me-2" />
+                  <span>{{ t('setting.directory.musicRenameFormat') }}</span>
+                </div>
+                <VAceEditor
+                  v-model:value="musicRenameFormat"
+                  lang="jinja2"
+                  :theme="editorTheme"
+                  :options="renameEditorOptions"
+                  :print-margin="false"
+                  :min-lines="4"
+                  :max-lines="12"
+                  wrap
+                  class="rename-format-editor__ace"
+                  @init="configureAceEditorPadding"
+                />
+                <div class="rename-format-editor__hint">
+                  {{ t('setting.directory.musicRenameFormatHint') }}
                 </div>
               </div>
             </VCol>

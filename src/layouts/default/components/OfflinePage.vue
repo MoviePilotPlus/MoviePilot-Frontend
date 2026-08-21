@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { useGlobalOfflineStatus } from '@/composables/useOfflineStatus'
+import { useSystemRestartStatus } from '@/composables/useSystemRestart'
 import { useToast } from 'vue-toastification'
 
 const { t } = useI18n()
 const toast = useToast()
 const { connectionStatus, connectionReason } = useGlobalOfflineStatus()
+const { isRestarting } = useSystemRestartStatus()
 const shownConnectionPromptKeys = new Set<string>()
 
 const isChecking = computed(() => connectionStatus.value === 'checking')
@@ -42,6 +44,9 @@ function handleConnectionStatusChange() {
     shownConnectionPromptKeys.clear()
     return
   }
+
+  // 重启期间由重启进度弹窗承载反馈，避免离线提示与进度提示叠加。
+  if (isRestarting.value) return
 
   const promptKey =
     connectionStatus.value === 'checking'

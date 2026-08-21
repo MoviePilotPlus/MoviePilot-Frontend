@@ -23,6 +23,7 @@ import {
   THEME_CUSTOMIZER_OPEN_EVENT,
   type ThemeCustomizerSettings,
 } from '@/composables/useThemeCustomizer'
+import { useSystemRestartStatus } from '@/composables/useSystemRestart'
 import { buildUserPermissionContext, hasPermission } from '@/utils/permission'
 
 const AboutDialog = defineAsyncComponent(() => import('@/components/dialog/AboutDialog.vue'))
@@ -68,7 +69,7 @@ const isGlassTheme = computed(() => currentThemeName.value === 'glass')
 
 // 重启轮询控制标识
 const restartPollingId = ref<number | null>(null)
-const isRestarting = ref(false)
+const { isRestarting, startSystemRestart, finishSystemRestart } = useSystemRestartStatus()
 let progressDialogController: ReturnType<typeof openSharedDialog> | null = null
 let siteAuthDialogController: ReturnType<typeof openSharedDialog> | null = null
 let customCssDialogController: ReturnType<typeof openSharedDialog> | null = null
@@ -79,7 +80,7 @@ const { createConfirm } = useConfirm()
 // 执行注销操作
 function logout() {
   // 清理重启相关状态
-  isRestarting.value = false
+  finishSystemRestart()
   if (restartPollingId.value) {
     clearTimeout(restartPollingId.value)
     restartPollingId.value = null
@@ -107,8 +108,8 @@ function closeRestartProgress() {
 // 检测服务状态
 async function checkServiceStatus(): Promise<boolean> {
   try {
-    const result: { [key: string]: any } = await api.get('system/ping', { timeout: 3000 })
-    return result?.success === true
+    await api.get<null>('system/ping', { timeout: 3000, feedback: 'silent' })
+    return true
   } catch (error) {
     return false
   }
@@ -137,7 +138,7 @@ async function pollServiceStatus() {
 
     if (isServiceUp) {
       // 服务已恢复，清理状态并执行注销
-      isRestarting.value = false
+      finishSystemRestart()
       closeRestartProgress()
       restartPollingId.value = null
 
@@ -149,7 +150,7 @@ async function pollServiceStatus() {
 
     if (retryCount >= maxRetries) {
       // 超时未恢复，清理状态并提示用户
-      isRestarting.value = false
+      finishSystemRestart()
       closeRestartProgress()
       restartPollingId.value = null
       $toast.error(t('app.restartTimeout'))
@@ -168,25 +169,19 @@ async function pollServiceStatus() {
 async function restart() {
   if (!canAdmin.value) return
 
-  // 设置重启状态
-  isRestarting.value = true
+  // 设置重启状态（全局共享，供离线探测和连接提示抑制）
+  startSystemRestart()
 
   // 调用API重启
   try {
     // 显示等待框
     showRestartProgress()
-    const result: { [key: string]: any } = await api.get('system/restart')
-    if (!result?.success) {
-      // 重启失败，清理状态
-      isRestarting.value = false
-      closeRestartProgress()
-      $toast.error(result.message)
-      return
-    }
+    await api.get<null>('system/restart')
   } catch (error) {
     // 重启失败，清理状态
-    isRestarting.value = false
+    finishSystemRestart()
     closeRestartProgress()
+    $toast.error(t('app.restartFailed'))
     console.error(error)
     return
   }
@@ -287,7 +282,7 @@ const getUIModeIcon = computed(() => {
 
 // 主题相关功能
 const { name: themeName, global: globalTheme } = useTheme()
-const savedTheme = ref(localStorage.getItem('theme') ?? 'auto')
+const savedTheme = ref(localStorage.getItem('theme') ?? 'purple')
 const currentThemeName = ref(savedTheme.value)
 const themeCustomizerSettings = ref(readThemeCustomizerSettings())
 
@@ -337,7 +332,7 @@ function getThemeLayoutTitle(layout: ThemeCustomizerSettings['layout']) {
 }
 
 const currentThemeSummary = computed(() => {
-  const themeTitle = themes.find(theme => theme.name === currentThemeName.value)?.title || t('theme.auto')
+  const themeTitle = themes.find(theme => theme.name === currentThemeName.value)?.title || t('theme.purple')
   const layoutTitle = appMode.value ? '' : getThemeLayoutTitle(themeCustomizerSettings.value.layout)
 
   if (layoutTitle) return `${themeTitle} · ${layoutTitle}`
@@ -405,12 +400,12 @@ async function getCustomCSS() {
   if (!canAdmin.value) return
 
   try {
-    const result: { [key: string]: any } = await api.get('system/setting/UserCustomCSS')
-    if (result && result.success && result.data?.value) {
-      customCSS.value = result.data?.value ?? ''
+    const result = await api.get<{ value?: string }>('system/setting/UserCustomCSS')
+    if (result.value) {
+      customCSS.value = result.value
       if (customCSS.value) {
         const style = document.createElement('style')
-        style.innerHTML = result.data?.value ?? ''
+        style.innerHTML = result.value
         document.head.appendChild(style)
       }
     }
@@ -467,17 +462,15 @@ async function saveCustomCSS(css: string) {
 
   customCSS.value = css
   try {
-    const result: { [key: string]: any } = await api.post('system/setting/UserCustomCSS', css, {
+    await api.post<null>('system/setting/UserCustomCSS', css, {
       headers: {
         'Content-Type': 'text/plain',
       },
     })
 
-    if (result.success) {
-      customCssDialogController?.close()
-      customCssDialogController = null
-      $toast.success(t('theme.customCssSaveSuccess'))
-    }
+    customCssDialogController?.close()
+    customCssDialogController = null
+    $toast.success(t('theme.customCssSaveSuccess'))
   } catch (e) {
     console.error(t('theme.customCssSaveFailed'))
   }
@@ -560,7 +553,7 @@ onUnmounted(() => {
     clearTimeout(restartPollingId.value)
     restartPollingId.value = null
   }
-  isRestarting.value = false
+  finishSystemRestart()
   closeRestartProgress()
   siteAuthDialogController?.close()
   customCssDialogController?.close()
