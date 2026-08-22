@@ -4,7 +4,7 @@
 import { useToast } from 'vue-toastification'
 import { VRow, VSelect } from 'vuetify/lib/components/index.mjs'
 import draggable from 'vuedraggable'
-import { pluginApi as api } from '@/api'
+import api from '@/api'
 import { MediaServerConf, Site } from '@/api/types'
 import SiteSchemaCard from '@/components/cards/SiteSchemaCard.vue'
 import ProgressDialog from '@/components/dialog/ProgressDialog.vue'
@@ -53,8 +53,7 @@ const tplPreviewLarge = ref(false)
 const systemFonts = ref<string[]>([])
 async function loadSystemFonts() {
   try {
-    const result: any = await api.get('collect/screenshot-fonts')
-    if (result?.success) systemFonts.value = result.data || []
+    systemFonts.value = await api.get('collect/screenshot-fonts')
   } catch (e) { console.error('load fonts error', e) }
 }
 function getContrastColor(hex: string): string {
@@ -84,7 +83,7 @@ async function renderTplPreview() {
     const result: any = await api.post('collect/screenshot-preview', {
       config: JSON.stringify(tplConfig.value), task_id: 335,
     })
-    if (result?.success) tplPreviewSrc.value = result.data.image
+    tplPreviewSrc.value = result?.image
   } catch (e) { console.error('preview error', e) } finally { previewLoading.value = false }
 }
 async function saveScreenshotConfig() {
@@ -192,7 +191,7 @@ const bilibiliCookie = ref('')
 async function queryTencentCookie() {
   try {
     const result: { [key: string]: any } = await api.get('system/setting/TencentCookie')
-    if (result && result.data && result.data.value) tencentCookie.value = result.data.value
+    if (result && result.value) tencentCookie.value = result.value
   } catch (error) {
     console.log(error)
   }
@@ -200,7 +199,7 @@ async function queryTencentCookie() {
 async function queryTvAppTicket() {
   try {
     const result: { [key: string]: any } = await api.get('system/setting/MgTvTicket')
-    if (result && result.data && result.data.value) mgTvTicket.value = result.data.value
+    if (result && result.value) mgTvTicket.value = result.value
   } catch (error) {
     console.log(error)
   }
@@ -209,7 +208,7 @@ async function queryTvAppTicket() {
 async function queryMgAppTicket() {
   try {
     const result: { [key: string]: any } = await api.get('system/setting/MgAppTicket')
-    if (result && result.data && result.data.value) mgAppTicket.value = result.data.value
+    if (result && result.value) mgAppTicket.value = result.value
   } catch (error) {
     console.log(error)
   }
@@ -219,7 +218,7 @@ async function queryMgAppTicket() {
 async function queryIqiyiCookie() {
   try {
     const result: { [key: string]: any } = await api.get('system/setting/IQiyiCookie')
-    if (result && result.data && result.data.value) iqiyiCookie.value = result.data.value
+    if (result && result.value) iqiyiCookie.value = result.value
   } catch (error) {
     console.log(error)
   }
@@ -229,7 +228,7 @@ async function queryIqiyiCookie() {
 async function queryYoukuCookie() {
   try {
     const result: { [key: string]: any } = await api.get('system/setting/YoukuCookie')
-    if (result && result.data && result.data.value) youkuCookie.value = result.data.value
+    if (result && result.value) youkuCookie.value = result.value
   } catch (error) {
     console.log(error)
   }
@@ -237,7 +236,7 @@ async function queryYoukuCookie() {
 async function queryYoukuStoken() {
   try {
     const result: { [key: string]: any } = await api.get('system/setting/YoukuStoken')
-    if (result && result.data && result.data.value) youkuStoken.value = result.data.value
+    if (result && result.value) youkuStoken.value = result.value
   } catch (error) {
     console.log(error)
   }
@@ -247,7 +246,7 @@ async function queryYoukuStoken() {
 async function queryBilibiliCookie() {
   try {
     const result: { [key: string]: any } = await api.get('system/setting/BilibiliCookie')
-    if (result && result.data && result.data.value) bilibiliCookie.value = result.data.value
+    if (result && result.value) bilibiliCookie.value = result.value
   } catch (error) {
     console.log(error)
   }
@@ -255,9 +254,8 @@ async function queryBilibiliCookie() {
 // 重载系统生效配置
 async function reloadSystem() {
   try {
-    const result: { [key: string]: any } = await api.get('system/reload')
-    if (result.success) $toast.success('系统配置已生效')
-    else $toast.error('重载系统失败！')
+    await api.get('system/reload')
+    $toast.success('系统配置已生效')
   } catch (error) {
     console.log(error)
   }
@@ -269,10 +267,8 @@ async function saveTencentCookie() {
     // 用户名密码
     const result: { [key: string]: any } = await api.post('system/setting/TencentCookie', tencentCookie.value)
 
-    if (result.success) {
-      $toast.success('腾讯视频Cookie保存成功')
+          $toast.success('腾讯视频Cookie保存成功')
       await reloadSystem()
-    } else $toast.error('腾讯视频Cookie保存失败！')
   } catch (error) {
     console.log(error)
   }
@@ -282,10 +278,8 @@ async function saveMgTvTicket() {
     // 用户名密码
     const result: { [key: string]: any } = await api.post('system/setting/MgTvTicket', mgTvTicket.value)
 
-    if (result.success) {
-      $toast.success('芒果TV 电视端Ticket保存成功')
+          $toast.success('芒果TV 电视端Ticket保存成功')
       await reloadSystem()
-    } else $toast.error('芒果TV 电视端Ticket保存失败！')
   } catch (error) {
     console.log(error)
   }
@@ -296,10 +290,8 @@ async function saveMgAppTicket() {
     // 用户名密码
     const result: { [key: string]: any } = await api.post('system/setting/MgAppTicket', mgAppTicket.value)
 
-    if (result.success) {
-      $toast.success('芒果TV App端Ticket保存成功')
+          $toast.success('芒果TV App端Ticket保存成功')
       await reloadSystem()
-    } else $toast.error('芒果TV App端Ticket保存失败！')
   } catch (error) {
     console.log(error)
   }
@@ -310,10 +302,8 @@ async function saveIqiyiCookie() {
   try {
     const result: { [key: string]: any } = await api.post('system/setting/IQiyiCookie', iqiyiCookie.value)
 
-    if (result.success) {
-      $toast.success('爱奇艺Cookie保存成功')
+          $toast.success('爱奇艺Cookie保存成功')
       await reloadSystem()
-    } else $toast.error('爱奇艺Cookie保存失败！')
   } catch (error) {
     console.log(error)
   }
@@ -324,10 +314,8 @@ async function saveYoukuCookie() {
   try {
     const result: { [key: string]: any } = await api.post('system/setting/YoukuCookie', youkuCookie.value)
 
-    if (result.success) {
-      $toast.success('优酷Cookie保存成功')
+          $toast.success('优酷Cookie保存成功')
       await reloadSystem()
-    } else $toast.error('优酷Cookie保存失败！')
   } catch (error) {
     console.log(error)
   }
@@ -335,12 +323,10 @@ async function saveYoukuCookie() {
 // 保存用户设置的优酷Stoken
 async function saveYoukuStoken() {
   try {
-    const result: { [key: string]: any } = await api.post('system/setting/YoukuStoken', youkuStoken.value)
+    await api.post('system/setting/YoukuStoken', youkuStoken.value)
 
-    if (result.success) {
-      $toast.success('优酷Stoken保存成功')
+          $toast.success('优酷Stoken保存成功')
       await reloadSystem()
-    } else $toast.error('优酷Stoken保存失败！')
   } catch (error) {
     console.log(error)
   }
@@ -350,10 +336,8 @@ async function saveBilibiliCookie() {
   try {
     const result: { [key: string]: any } = await api.post('system/setting/BilibiliCookie', bilibiliCookie.value)
 
-    if (result.success) {
-      $toast.success('哔哩哔哩Cookie保存成功')
+          $toast.success('哔哩哔哩Cookie保存成功')
       await reloadSystem()
-    } else $toast.error('哔哩哔哩Cookie保存失败！')
   } catch (error) {
     console.log(error)
   }
@@ -385,7 +369,7 @@ async function loadImageHostingSetting() {
   try {
     const result: { [key: string]: any } = await api.get('system/setting/ImageHostingParams')
     CollectSettings.value.ImageHosting =
-      Object.keys(result.data?.value || {}).length === 0 ? defaultImageHostingSettings : result.data?.value
+      Object.keys(result || {}).length === 0 ? defaultImageHostingSettings : result
   } catch (error) {
     console.log(error)
   }
@@ -443,9 +427,8 @@ async function saveImageHostingSetting() {
   try {
     const imageHostingParam = CollectSettings.value.ImageHosting
     console.warn('imageHostingParam', imageHostingParam)
-    const result: { [key: string]: any } = await api.post('system/setting/ImageHostingParams', imageHostingParam)
-    if (result.success) $toast.success(t('setting.collect.imageHostingSaveSuccess'))
-    else $toast.error(t('setting.collect.imageHostingSaveFailed'))
+    await api.post('system/setting/ImageHostingParams', imageHostingParam)
+    $toast.success(t('setting.collect.imageHostingSaveSuccess'))
     await loadImageHostingSetting()
   } catch (error) {
     console.log(error)
@@ -472,7 +455,7 @@ function handleDefaultImageHostings(enabledImageHostings: any[], imageHostings: 
 async function loadMediaServerSetting() {
   try {
     const result: { [key: string]: any } = await api.get('system/setting/MediaServers')
-    mediaServers.value = result.data?.value ?? []
+    mediaServers.value = result ?? []
   } catch (error) {
     console.log(error)
   }
@@ -482,11 +465,11 @@ async function loadMediaServerSetting() {
 async function loadSystemSettings() {
   try {
     const result: { [key: string]: any } = await api.get('system/env')
-    if (result.success) {
+    {
       // 将API返回的值赋值给SystemSettings
       for (const sectionKey of Object.keys(CollectSettings.value) as Array<keyof typeof CollectSettings.value>) {
         Object.keys(CollectSettings.value[sectionKey]).forEach((key: string) => {
-          if (result.data.hasOwnProperty(key)) (CollectSettings.value[sectionKey] as any)[key] = result.data[key]
+          if (result.hasOwnProperty(key)) (CollectSettings.value[sectionKey] as any)[key] = result[key]
         })
       }
       // 解析截图模板配置：优先用 JSON 配置，否则用预设名加载
@@ -512,13 +495,8 @@ async function loadSystemSettings() {
 // 调用API保存设置
 async function saveSystemSetting(value: { [key: string]: any }) {
   try {
-    const result: { [key: string]: any } = await api.post('system/env', value)
-    if (result.success) {
-      return true
-    } else {
-      $toast.error(result?.message || t('setting.collect.basicSaveFailed'))
-      return false
-    }
+    await api.post('system/env', value)
+    return true
   } catch (error) {
     console.log(error)
   }
@@ -612,9 +590,9 @@ async function queryTeamConfigs() {
   try {
     isTeamLoading.value = true
     const result: { [key: string]: any } = await api.get('system/setting/TEAM_PARAMS')
-    if (result && result.data && result.data.value) {
+    if (result && result.value) {
       // 根据order字段排序
-      teamConfigs.value = result.data.value
+      teamConfigs.value = result.value
         .sort((a: any, b: any) => a.order - b.order)
         .map((item: any, index: number) => ({
           ...item,
@@ -673,18 +651,14 @@ async function saveTeamConfigs() {
       order: index + 1,
     }))
 
-    const result: { [key: string]: any } = await api.post('system/setting/TEAM_PARAMS', JSON.stringify(configsToSave), {
+    await api.post('system/setting/TEAM_PARAMS', JSON.stringify(configsToSave), {
       headers: {
         'Content-Type': 'text/plain',
       },
     })
 
-    if (result.success) {
-      $toast.success('制作组配置保存成功')
-      await reloadSystem()
-    } else {
-      $toast.error('制作组配置保存失败！')
-    }
+    $toast.success('制作组配置保存成功')
+    await reloadSystem()
   } catch (error) {
     console.log(error)
     $toast.error('保存失败，请重试')

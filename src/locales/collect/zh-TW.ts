@@ -1,5 +1,8 @@
 // 视频采集功能词条（从 MoviePilot-Frontend_v3 locales 提取，独立维护以减少上游合并冲突）
 const zhTW = {
+  common: {
+    declare: '聲明',
+  },
   navItems: {
     collect: '採集',
     task: '任務',
@@ -1048,6 +1051,52 @@ const zhTW = {
       backToCollect: '返回採集',
       loadFailed: '載入媒體詳情失敗。',
       invalidCid: '缺少媒體ID，無法載入詳情。',
+    },
+  },
+  siteshema: {
+    noSites: '沒有站點',
+    sitesWillBeShownHere: '已添加並支持的站點將會在這裡顯示。',
+    noFilterData: '沒有符合條件的站點',
+    title: '站點',
+    status: {
+      enabled: '啟用',
+      disabled: '停用',
+    },
+    fields: {
+      name: '站點名稱',
+      domain: '站點域名',
+      download_page: '下載地址',
+      upload_page: '上傳頁面',
+      upload_api: '上傳接口',
+      update_api: '更新接口',
+      tracker_api: 'Tracker地址',
+      detail_page: '詳情地址',
+      is_https: '是否Https',
+      cookie_required: '是否需要Cookie',
+      template: '模版',
+    },
+    hints: {
+      name: '站點名稱，根據站點域名自動生成',
+      domain: '站點域名',
+      download_page: '種子下載地址，如：https://examples.com/download.php',
+      upload_page: '上傳頁面地址，如：https://examples.com/download.php',
+      upload_api: '上傳接口，如：https://examples.com/takeupload.php',
+      update_api: '更新接口，如：https://examples.com/takeedit.php',
+      tracker_api: 'Tracker地址，如：https://examples.com/announce.php',
+      detail_page: '詳情地址，如：https://examples.com/detail.php',
+      is_https: '如果站點是https協議就開啟',
+      cookie_required: '站點接口是否需要 cookie,有些站點如：饅頭是通過 apikey 訪問接口',
+      template: '配置站點分類、來源、分辨率、視頻編碼、音頻編碼、地區、制作組、標簽等字典與系統標準字典的映射關係',
+    },
+    actions: {
+      add: '新增站點模板',
+      edit: '編輯站點模板',
+    },
+    messages: {
+      addSuccess: '新增站點模板成功',
+      addFailed: '新增站點模板失敗',
+      updateSuccess: '更新成功',
+      updateFailed: '更新失敗',
     },
   },
 }

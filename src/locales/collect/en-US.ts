@@ -1,5 +1,8 @@
 // 视频采集功能词条（从 MoviePilot-Frontend_v3 locales 提取，独立维护以减少上游合并冲突）
 const enUS = {
+  common: {
+    declare: 'Declaration',
+  },
   navItems: {
     collect: 'Collect',
     task: 'Tasks',
@@ -1098,6 +1101,52 @@ const enUS = {
       backToCollect: 'Back to Collect',
       loadFailed: 'Failed to load media details.',
       invalidCid: 'Missing media id, unable to load details.',
+    },
+  },
+  siteshema: {
+    noSites: 'No sites',
+    sitesWillBeShownHere: 'Added and supported sites will be displayed here.',
+    noFilterData: 'No matching sites',
+    title: 'Sites',
+    status: {
+      enabled: 'Enabled',
+      disabled: 'Disabled',
+    },
+    fields: {
+      name: 'Site Name',
+      domain: 'Domain',
+      download_page: 'Download URL',
+      upload_page: 'Upload Page',
+      upload_api: 'Upload API',
+      update_api: 'Update API',
+      tracker_api: 'Tracker URL',
+      detail_page: 'Detail Page',
+      is_https: 'HTTPS',
+      cookie_required: 'Cookie Required',
+      template: 'Template',
+    },
+    hints: {
+      name: 'Site name (auto-generated from domain)',
+      domain: 'Site domain',
+      download_page: 'Torrent download URL template, e.g.: https://examples.com/download.php',
+      upload_page: 'Upload page URL, e.g.: https://examples.com/upload.php',
+      upload_api: 'Upload API endpoint, e.g.: https://examples.com/api/upload',
+      update_api: 'Update API endpoint, e.g.: https://examples.com/api/update',
+      tracker_api: 'Tracker announce URL, e.g.: https://tracker.example.com/announce',
+      detail_page: 'Torrent detail page URL, e.g.: https://examples.com/torrent/{id}',
+      is_https: 'Enable for HTTPS sites',
+      cookie_required: 'Requires cookie authentication (e.g.: M-Team uses API keys)',
+      template: 'Configure mappings between site-specific categories/encodings/regions and system standards',
+    },
+    actions: {
+      add: 'Add Site Template',
+      edit: 'Edit Site Template',
+    },
+    messages: {
+      addSuccess: 'Site template added successfully',
+      addFailed: 'Failed to add site template',
+      updateSuccess: 'Update successful',
+      updateFailed: 'Update failed',
     },
   },
 }

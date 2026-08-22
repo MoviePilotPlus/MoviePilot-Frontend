@@ -201,7 +201,7 @@
       "count": 1
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2
@@ -296,9 +296,6 @@
   },
   "src/components/dialog/DownloadTaskInfoDialog.vue": {
     "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
@@ -1253,13 +1250,16 @@
       "count": 1
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 39
+      "count": 33
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
+      "count": 11
     },
     "no-prototype-builtins": {
       "count": 1
+    },
+    "sonarjs/no-dead-store": {
+      "count": 6
     },
     "sonarjs/no-ignored-exceptions": {
       "count": 1

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // @ts-nocheck
 
-import { pluginApi as api } from '@/api'
+import api from '@/api'
 import { CollectProgress, DownloadTask } from '@/api/types'
 import { getIcon } from '@iconify/vue'
 import { useToast } from 'vue-toastification'
@@ -133,15 +133,9 @@ async function handleSubmit(action: string) {
       if (!api_url) {
         throw new Error('API URL not found')
       }
-      const result: { [key: string]: any } = await api.get(api_url?.replace('{id}', props?.id?.toString() || ''))
-      // 添加采集任务状态
-      if (result.success) {
-        // 成功
-        $toast.success(actionName + '事件提交成功！')
-
-      } else {
-        $toast.error(actionName + '事件提交失败')
-      }
+      await api.get(api_url?.replace('{id}', props?.id?.toString() || ''))
+      // 事件提交成功
+      $toast.success(actionName + '事件提交成功！')
     }
   } catch (error) {
     console.error(error)

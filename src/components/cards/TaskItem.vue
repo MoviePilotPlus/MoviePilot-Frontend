@@ -4,7 +4,7 @@ import type { PropType } from 'vue'
 import { useConfirm } from '@/composables/useConfirm'
 import router from '@/router'
 import type { Collect, SiteSeed, Site } from '@/api/types'
-import { pluginApi } from '@/api'
+import api, { pluginApi } from '@/api'
 import { seedStatus, collectStatus, tagOptions, categoryOptions } from '@/api/constants'
 import { formatFileSize } from '@/@core/utils/formatters'
 import { useToast } from 'vue-toastification'
@@ -143,14 +143,10 @@ async function removeIgnore() {
     return
   }
   try {
-    const result: { [key: string]: any } = await api.delete(endpoint)
+    await api.delete(endpoint)
     const title = task.value?.cn_title || task.value?.title || task.value?.name || '该媒体'
-    if (result.success) {
-      isIgnore.value = false
-      $toast.success(`${title} 已取消忽略！`)
-    } else {
-      $toast.error(`${title} 取消忽略失败：${result.message}！`)
-    }
+    isIgnore.value = false
+    $toast.success(`${title} 已取消忽略！`)
   } catch (error) {
     console.error(error)
   }
@@ -162,14 +158,10 @@ async function addIgnore() {
     return
   }
   try {
-    const result: { [key: string]: any } = await api.post(endpoint)
+    await api.post(endpoint)
     const title = task.value?.cn_title || task.value?.title || task.value?.name || '该媒体'
-    if (result.success) {
-      isIgnore.value = true
-      $toast.success(`${title} 已忽略！`)
-    } else {
-      $toast.error(`${title} 忽略失败：${result.message}！`)
-    }
+    isIgnore.value = true
+    $toast.success(`${title} 已忽略！`)
   } catch (error) {
     console.error(error)
   }

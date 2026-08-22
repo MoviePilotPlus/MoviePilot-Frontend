@@ -193,3 +193,96 @@ undefined），模板 `v-model="accountInfo.settings.xxx"` 一写就崩。采集
 - typecheck / lint 全绿（清理了改动引入的死变量，suppressions prune 后无告警）
 - 浏览器实测：`/#/collect` 腾讯首屏 42 条数据、21 个卡片操作按钮可见，截图确认海报网格正常，
   空态消失
+
+## 8. 2026-08-22 追加：设置页采集标签崩溃修复（draggable 非数组）
+
+### 现象
+
+`/#/setting` 切到采集标签约 5 秒后页面崩溃，控制台报
+`TypeError: normalizedList.flatMap is not a function at computeNodes (vuedraggable)`。
+
+### 根因
+
+第 7 节适配时把 `AccountSettingCollect.vue` 的 import 整体改成了
+`import { pluginApi as api }`（为保留 envelope 字段），但该文件里 **`loadSiteList()`
+是直接要裸数组的**：pluginApi 不解包，`allSites.value` 拿到的是 envelope 对象而非数组。
+站点列表接口返回后 `<draggable v-model="allSites">` 渲染，vuedraggable 对非数组调
+`.flatMap` 抛错 → 组件反复重渲染 → 页面崩溃。这也解释了"5 秒后崩"（等接口返回才触发）。
+
+### 修复
+
+恢复默认 `import api from '@/api'`（自动解包），把依赖 envelope 字段的调用逐一改为直用数据：
+
+- cookie/ticket 读取 ×7：`result.data.value` → `result.value`
+- `system/env`：`result.data[key]` → `result[key]`
+- `TEAM_PARAMS`：`result.data.value` → `result.value`
+- `ImageHostingParams`/`MediaServers`：同上
+- 截图字体：`result.data || []` → 直接返回值；预览图：`result.data.image` → `result.image`
+- 保存类调用 ×10：删除 `if (result.success) ... else toast.error(...)` 包裹
+  （失败自动抛错并 toast），清理未使用的 `const result` 声明
+- 补词条 `common.declare`（制作组"版权信息"标签引用，三语言 collect 词条文件）
+
+### 验证（2026-08-22）
+
+| 项目 | 结果 |
+|------|------|
+| typecheck / lint | 全绿 |
+| 站点模板区块 | 正常渲染真实站点数据（zima/财神/馒头等） |
+| 崩溃复测 | 停留 30s + 切走再切回均存活，无 flatMap 报错 |
+| common.declare | 正常渲染"声明"，无原始 key 残留 |
+
+### 经验补充
+
+`pluginApi` 只用于**确实需要读 envelope 字段**（success/message 或以 success 为数据）的调用；
+"拿完数据直接渲染/赋值"的调用一律走默认 `api`。改 import 时必须逐个核对文件内所有调用点的
+消费方式，不能整文件一刀切。
+
+## 9. 2026-08-22 追加：站点模板弹窗词条缺失修复
+
+### 现象
+
+站点模板编辑弹窗全部显示原始 key（`siteshema.actions.add`、`siteshema.fields.*`、`siteschema.hints.*`）。
+
+### 根因
+
+第 4 步提取采集词条时只搬了 navItems / settingTabs.collect / resource / setting.collect / collect
+五个块，漏掉了 v3 顶层的 **`siteshema`** 块（注意 v3 里键名就是拼写少一个 c 的 `siteshema`），
+而 `SiteSchemaEditDialog.vue` / `SiteSchemaImportDialog.vue` / `AccountSettingCollect.vue` 都在用
+`t('siteshema.*')`。
+
+### 修复与验证
+
+- 从 v3 三语言文件提取 `siteshema` 块（46 行×3）追加进 `src/locales/collect/*.ts`；
+- 用「v3 locale 顶层键 ∩ 采集文件实际 t() 前缀」做精确扫描，确认**无其他漏提前缀**；
+- 浏览器实测编辑弹窗：标题 "Add Site Template"、字段/hints 全部正常渲染，残留原始 key 数 0；
+- typecheck / lint 全绿。
+
+### 排查方法备忘
+
+判断词条缺失用精确扫描而非肉眼：正则 `(?:i18n\.global\.)?t\('([a-zA-Z][\w]*)\.` 抽出采集文件
+用到的顶层前缀，对照「新主 locale 顶层键 + collect 词条顶层键」差集即为缺口。
+
+## 10. 2026-08-22 追加：TaskItem 删除报 `api is not defined` 修复
+
+### 现象
+
+`/#/task` 打开删除确认（confirmDelete）时控制台报
+`ReferenceError: api is not defined at confirmDelete (TaskItem.vue:239)`。
+
+### 根因
+
+第 7 节适配 TaskItem.vue 时把 import 换成了 `import { pluginApi } from '@/api'`（给忽略状态
+查询用），但文件里其余 5 处裸 `api.get/delete/post`（loadSiteList、取消忽略、忽略、
+confirmDelete、做种列表）没有跟着改，默认导入被删后全部 ReferenceError。
+
+### 修复
+
+- import 改回 `import api, { pluginApi } from '@/api'`（两者并存）；
+- 取消忽略/忽略两处的 `if (result.success) ... else ...` 包裹删除（新契约失败自动抛错）；
+- 全仓精确扫描「导入了 pluginApi 却无默认 api 导入、代码又用裸 api.」的文件——除 TaskItem
+  外无漏网（9 个对话框是 `pluginApi as api` 别名形式，语义正确不受影响）。
+
+### 验证（2026-08-22）
+
+typecheck / lint 全绿；`/#/task` 正常加载；confirmDelete 的 `api.delete(collect/{id})`
+在新契约下失败自动 toast、成功走 emit 刷新。
