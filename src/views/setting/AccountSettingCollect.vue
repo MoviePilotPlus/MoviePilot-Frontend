@@ -251,15 +251,6 @@ async function queryBilibiliCookie() {
     console.log(error)
   }
 }
-// 重载系统生效配置
-async function reloadSystem() {
-  try {
-    await api.get('system/reload')
-    $toast.success('系统配置已生效')
-  } catch (error) {
-    console.log(error)
-  }
-}
 
 // 保存用户设置的腾讯视频Cookie
 async function saveTencentCookie() {
@@ -268,7 +259,6 @@ async function saveTencentCookie() {
     const result: { [key: string]: any } = await api.post('system/setting/TencentCookie', tencentCookie.value)
 
           $toast.success('腾讯视频Cookie保存成功')
-      await reloadSystem()
   } catch (error) {
     console.log(error)
   }
@@ -279,7 +269,6 @@ async function saveMgTvTicket() {
     const result: { [key: string]: any } = await api.post('system/setting/MgTvTicket', mgTvTicket.value)
 
           $toast.success('芒果TV 电视端Ticket保存成功')
-      await reloadSystem()
   } catch (error) {
     console.log(error)
   }
@@ -291,7 +280,6 @@ async function saveMgAppTicket() {
     const result: { [key: string]: any } = await api.post('system/setting/MgAppTicket', mgAppTicket.value)
 
           $toast.success('芒果TV App端Ticket保存成功')
-      await reloadSystem()
   } catch (error) {
     console.log(error)
   }
@@ -303,7 +291,6 @@ async function saveIqiyiCookie() {
     const result: { [key: string]: any } = await api.post('system/setting/IQiyiCookie', iqiyiCookie.value)
 
           $toast.success('爱奇艺Cookie保存成功')
-      await reloadSystem()
   } catch (error) {
     console.log(error)
   }
@@ -315,7 +302,6 @@ async function saveYoukuCookie() {
     const result: { [key: string]: any } = await api.post('system/setting/YoukuCookie', youkuCookie.value)
 
           $toast.success('优酷Cookie保存成功')
-      await reloadSystem()
   } catch (error) {
     console.log(error)
   }
@@ -326,7 +312,6 @@ async function saveYoukuStoken() {
     await api.post('system/setting/YoukuStoken', youkuStoken.value)
 
           $toast.success('优酷Stoken保存成功')
-      await reloadSystem()
   } catch (error) {
     console.log(error)
   }
@@ -337,7 +322,6 @@ async function saveBilibiliCookie() {
     const result: { [key: string]: any } = await api.post('system/setting/BilibiliCookie', bilibiliCookie.value)
 
           $toast.success('哔哩哔哩Cookie保存成功')
-      await reloadSystem()
   } catch (error) {
     console.log(error)
   }
@@ -658,7 +642,6 @@ async function saveTeamConfigs() {
     })
 
     $toast.success('制作组配置保存成功')
-    await reloadSystem()
   } catch (error) {
     console.log(error)
     $toast.error('保存失败，请重试')
