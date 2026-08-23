@@ -77,7 +77,8 @@ const parsedContent = computed(() => {
 
 <style scoped>
 .bbcode-content {
-  color: #000;
+  /* 跟随 Vuetify 主题（深浅模式自适应），勿硬编码颜色 */
+  color: rgb(var(--v-theme-on-surface));
   font-size: 12px;
   line-height: 1.6;
 }
@@ -100,7 +101,7 @@ const parsedContent = computed(() => {
 }
 
 .bbcode-content :deep(a) {
-  color: #1976d2;
+  color: rgb(var(--v-theme-primary));
   text-decoration: none;
   word-break: break-all;
 }

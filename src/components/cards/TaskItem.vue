@@ -404,7 +404,7 @@ onUnmounted(() => {
           </VChip>
         </div>
 
-        <div class="text-subtitle-2 font-weight-bold text-black mb-2 font-title" :title="task?.title || task?.name">
+        <div class="text-subtitle-2 font-weight-bold mb-2 font-title" :title="task?.title || task?.name">
           {{ task?.title || task?.name }}
         </div>
 
