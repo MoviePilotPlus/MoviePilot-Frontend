@@ -545,7 +545,7 @@ export default {
     notification: {
       title: 'Notifications',
       description:
-        'Notification channels (WeChat Work, WeChat ClawBot, Telegram, Slack, SynologyChat, VoceChat, WebPush), message scope',
+        'Notification channels (WeChat Work, WeChat ClawBot, Telegram, Slack, DingTalk, SynologyChat, VoceChat, WebPush), message scope',
     },
     about: {
       title: 'About',
@@ -784,6 +784,15 @@ export default {
       admins: 'Admin Whitelist',
       adminsHint: 'User IDs that can use admin menu and commands, separated by commas',
       adminsPlaceholder: 'User IDs list, separated by commas',
+    },
+    dingtalk: {
+      name: 'DingTalk',
+      webhook: 'Custom Robot Webhook',
+      webhookHint: 'Full webhook URL of the DingTalk group custom robot',
+      webhookRequired: 'Webhook URL cannot be empty',
+      secret: 'Signing Secret',
+      secretHint:
+        'Enter the SEC-prefixed secret when signature security is enabled; leave empty for keyword or IP allowlist security',
     },
     synologychat: {
       name: 'Synology Chat',
@@ -2276,6 +2285,9 @@ export default {
       transferMaxFailedRetries: 'Transfer Retries on Failure',
       transferMaxFailedRetriesHint:
         'Maximum automatic retries after a failed transfer, so a transient network or recognition glitch cannot permanently skip a file. Once exhausted, transfer it manually or delete the transfer history. Range 1-10; the counter resets on a successful transfer or when the record is deleted. Takes effect immediately after saving.',
+      transferFailureNotificationAggregation: 'Aggregate Transfer Failure Notifications by Media',
+      transferFailureNotificationAggregationHint:
+        'Combine transfer failures for the same media and season within a short window, including the failure count, reason summary, and a batch-processing link. Disable to send one notification per file.',
       fsProxyEnabled: 'Isolate Local File Operations',
       fsProxyEnabledHint:
         'Run local file reads, copies, moves and deletes in a separate subprocess. When a FUSE mount such as CloudDrive2 stops responding, these calls hang forever and cannot be interrupted, which in turn stalls the transfer queue and directory monitoring. Isolated, they can be force-reclaimed after a timeout and surface as ordinary errors that the existing retry logic handles. Disable to fall back to direct calls, matching the previous behaviour.',
@@ -2479,6 +2491,7 @@ export default {
       other: 'Other',
       telegram: 'Telegram',
       slack: 'Slack',
+      dingTalk: 'DingTalk',
       synologyChat: 'SynologyChat',
       voceChat: 'VoceChat',
       webPush: 'WebPush',
@@ -3721,6 +3734,14 @@ export default {
     installingPlugin: 'Installing plugin...',
     installing: 'Installing {name} v{version} ...',
     installSuccess: 'Plugin {name} installed successfully!',
+    sourceRestoring: 'Restoring plugin files',
+    dependencyInstalling: 'Installing plugin dependencies',
+    runtimeLoading: 'Loading plugin',
+    sourceMissing: 'Plugin files are missing',
+    dependencyPending: 'Plugin dependencies are not ready',
+    runtimeReady: 'Plugin is waiting to load',
+    blockedByPolicy: 'User authentication failed. Check the logs.',
+    runtimeLoadFailed: 'Plugin failed to load. Check the logs.',
     installFailed: 'Plugin {name} installation failed: {message}',
     filterPlugins: 'Filter Plugins',
     name: 'Name',

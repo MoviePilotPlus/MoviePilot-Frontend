@@ -955,6 +955,8 @@ export interface Plugin {
   installed?: boolean
   // 运行状态
   state?: boolean
+  // 插件源码、依赖和运行时加载状态
+  runtime_status?: 'source_missing' | 'dependency_pending' | 'ready' | 'active' | 'blocked_by_policy' | 'load_failed'
   // 是否有详情页面
   has_page?: boolean
   // 是否有新版本
@@ -983,6 +985,23 @@ export interface Plugin {
   rating_count?: number
   // 当前安装实例评分
   user_rating?: number | null
+  // 共享代码和联邦资源的源插件 ID
+  source_plugin_id?: string
+  // 是否为共享源码的虚拟实例
+  is_instance?: boolean
+  // 实例实现模式
+  instance_mode?: 'virtual'
+}
+
+export interface PluginRuntimeSummary {
+  // 本轮插件源码、依赖和加载是否已收敛
+  ready: boolean
+  // 插件运行状态变化代次
+  generation: number
+  // 仍处于准备阶段的插件数量
+  pending_count: number
+  // 加载失败或被策略阻止的插件数量
+  failed_count: number
 }
 
 // 插件评分结果
@@ -1065,6 +1084,8 @@ export interface DashboardItem {
   elements: RenderProps[]
   // 渲染方式
   render_mode?: string
+  // 共享联邦资源的源插件 ID
+  source_plugin_id?: string
 }
 
 // 种子信息

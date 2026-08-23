@@ -536,7 +536,8 @@ export default {
     },
     notification: {
       title: '通知',
-      description: '通知渠道（企业微信、微信 ClawBot、Telegram、Slack、SynologyChat、VoceChat、WebPush）、消息发送范围',
+      description:
+        '通知渠道（企业微信、微信 ClawBot、Telegram、Slack、钉钉、SynologyChat、VoceChat、WebPush）、消息发送范围',
     },
     about: {
       title: '关于',
@@ -773,6 +774,14 @@ export default {
       admins: '管理员白名单',
       adminsHint: '可使用管理菜单及命令的用户ID列表，多个ID使用,分隔',
       adminsPlaceholder: '用户ID列表，多个ID使用,分隔',
+    },
+    dingtalk: {
+      name: '钉钉',
+      webhook: '自定义机器人 Webhook',
+      webhookHint: '钉钉群自定义机器人的完整 Webhook 地址',
+      webhookRequired: 'Webhook 地址不能为空',
+      secret: '加签密钥',
+      secretHint: '机器人安全设置启用“加签”时填写，以 SEC 开头；使用关键词或 IP 白名单时可留空',
     },
     synologychat: {
       name: 'Synology Chat',
@@ -2237,6 +2246,9 @@ export default {
       transferMaxFailedRetries: '整理失败重试次数',
       transferMaxFailedRetriesHint:
         '自动整理失败后允许重试的最大次数，避免一次网络或识别抖动让文件永久漏整理；次数用尽后需手动整理或删除整理记录。取值 1-10，整理成功或删除记录时计数清零，保存后即时生效',
+      transferFailureNotificationAggregation: '按媒体聚合整理失败通知',
+      transferFailureNotificationAggregationHint:
+        '开启后，同一媒体同一季在短时间内产生的整理失败会合并发送，并展示失败数量、原因统计和批量处理入口；关闭时逐条发送',
       fsProxyEnabled: '本地文件操作隔离',
       fsProxyEnabledHint:
         '在独立子进程中执行本地文件的读取、复制、移动与删除。CloudDrive2 等 FUSE 挂载失去响应时，这类操作会永久卡住且无法中断，进而拖死整理队列与目录监控；隔离后可在超时后强制回收并转为普通错误，由既有的重试机制接管。关闭后退回直接调用，行为与旧版一致',
@@ -2434,6 +2446,7 @@ export default {
       other: '其它',
       telegram: 'Telegram',
       slack: 'Slack',
+      dingTalk: '钉钉',
       synologyChat: 'SynologyChat',
       voceChat: 'VoceChat',
       webPush: 'WebPush',
@@ -3660,6 +3673,14 @@ export default {
     installingPlugin: '正在安装插件...',
     installing: '正在安装 {name} v{version} ...',
     installSuccess: '插件 {name} 安装成功！',
+    sourceRestoring: '正在恢复插件文件',
+    dependencyInstalling: '正在安装插件依赖',
+    runtimeLoading: '正在加载插件',
+    sourceMissing: '插件文件缺失',
+    dependencyPending: '插件依赖未就绪',
+    runtimeReady: '插件等待加载',
+    blockedByPolicy: '未通过用户认证，请查看日志',
+    runtimeLoadFailed: '插件加载失败，请查看日志',
     installFailed: '插件 {name} 安装失败：{message}',
     filterPlugins: '过滤插件',
     name: '名称',
