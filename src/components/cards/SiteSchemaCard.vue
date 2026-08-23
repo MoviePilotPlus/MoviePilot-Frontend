@@ -7,6 +7,8 @@ import SiteSchemaEditDialog from '@/components/dialog/SiteSchemaEditDialog.vue'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
 import { useDisplay } from 'vuetify'
+import { getCachedSiteIcon } from '@/utils/siteIconCache'
+import { getDisplayImageUrl } from '@/utils/imageUtils'
 
 // 获取i18n实例
 const { t } = useI18n()
@@ -27,14 +29,21 @@ const emit = defineEmits(['close', 'done', 'change'])
 
 // 媒体服务器详情弹窗
 const siteSchemeInfoDialog = ref(false)
-// 查询站点图标
+// 查询站点图标（默认 api 自动拆信封，响应即 data；与 SiteCard 同范式走缓存）
 async function getSiteIcon() {
+  const siteId = cardProps.site?.id
+  if (!siteId) {
+    siteIcon.value = noImage
+    return
+  }
   try {
-    siteIcon.value = (await api.get(`site/icon/${cardProps.site?.id}`)).data.icon
-    if (!siteIcon.value) {
-      siteIcon.value = noImage
-    }
+    const icon = await getCachedSiteIcon(siteId, async () => {
+      const response = await api.get<{ icon?: string }>(`site/icon/${siteId}`)
+      return response?.icon || noImage
+    })
+    siteIcon.value = icon || noImage
   } catch (error) {
+    siteIcon.value = noImage
     console.error(error)
   }
 }
