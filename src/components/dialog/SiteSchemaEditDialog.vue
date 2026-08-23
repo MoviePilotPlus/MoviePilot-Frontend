@@ -304,9 +304,9 @@ async function fetchSiteInfo() {
   try {
     const response = await api.get(`siteschema/${props.site.domain}`)
     console.log('获取站点信息响应:', response)
-    // 安全地访问和处理API响应
+    // 安全地访问和处理API响应（pluginApi 原样返回三键信封，站点模板在 data 中）
     if (response) {
-      const apiData = response as Partial<SiteSchema>
+      const apiData = (response.data || {}) as Partial<SiteSchema>
       // 逐个属性赋值以确保类型安全
       siteForm.value.id = apiData.id || 0
       siteForm.value.name = apiData.name || ''

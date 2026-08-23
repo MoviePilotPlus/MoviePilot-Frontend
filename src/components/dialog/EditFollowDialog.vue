@@ -232,7 +232,9 @@ const formData = ref<FormData>({
 
 async function getSites() {
   try {
-    siteList.value = await api.get('site/')
+    const response = await api.get('site/')
+    // pluginApi 原样返回三键信封，站点列表在 data 中
+    siteList.value = response?.data ?? []
   } catch (error) {
     console.error('获取站点列表失败:', error)
   }

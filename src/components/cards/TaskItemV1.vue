@@ -92,7 +92,8 @@ function getTags() {
   let tagList: string[] = []
   tags.forEach((t: string) => {
     const tag = tagOptions[t as keyof typeof tagOptions]
-    tagList.push(tag)
+    // 未映射的标签跳过，避免渲染出空芯片
+    if (tag) tagList.push(tag)
   })
   return tagList
 }

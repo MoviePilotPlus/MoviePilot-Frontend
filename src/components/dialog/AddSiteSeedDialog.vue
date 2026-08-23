@@ -28,7 +28,9 @@ const autoPublish = ref(true)
 const loading = ref(false)
 async function querySites() {
   try {
-    const data: Site[] = await api.get('site/')
+    const response = await api.get('site/')
+    // pluginApi 原样返回三键信封，站点列表在 data 中
+    const data: Site[] = response?.data ?? []
     allSites.value = data
     // 过滤站点，只有不在已添加列表中的才显示
     allSites.value = data.filter(item => {

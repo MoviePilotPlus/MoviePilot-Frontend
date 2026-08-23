@@ -94,7 +94,9 @@ function hasStateChanged(before: ReturnType<typeof getSeedSnapshot>, after: Retu
 
 async function getProgressInfo() {
   try {
-    progress.value = await api.get(`collect/progress/seed/${props?.seed.id}`)
+    const response = await api.get(`collect/progress/seed/${props?.seed.id}`)
+    // pluginApi 原样返回三键信封，进度列表在 data 中
+    progress.value = response?.data ?? []
   } catch (error) {
     console.error(error)
   }
@@ -102,7 +104,8 @@ async function getProgressInfo() {
 
 async function getSeedInfo() {
   try {
-    siteSeed.value = await api.get(`collect/seed/detail/${props?.seed.id}`)
+    const response = await api.get(`collect/seed/detail/${props?.seed.id}`)
+    siteSeed.value = response?.data
   } catch (error) {
     console.error(error)
   }
