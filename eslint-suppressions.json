@@ -853,11 +853,6 @@
       "count": 1
     }
   },
-  "src/pages/dashboard.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
   "src/pages/downloadtask.vue": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 1
