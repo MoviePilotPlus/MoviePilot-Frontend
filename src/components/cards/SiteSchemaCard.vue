@@ -2,16 +2,9 @@
 // @ts-nocheck
 import noImage from '@images/logos/site.webp'
 import { Site } from '@/api/types'
-import { useToast } from 'vue-toastification'
 import SiteSchemaEditDialog from '@/components/dialog/SiteSchemaEditDialog.vue'
 import api from '@/api'
-import { useI18n } from 'vue-i18n'
-import { useDisplay } from 'vuetify'
 import { getCachedSiteIcon } from '@/utils/siteIconCache'
-import { getDisplayImageUrl } from '@/utils/imageUtils'
-
-// 获取i18n实例
-const { t } = useI18n()
 
 // 定义输入
 const cardProps = defineProps({
