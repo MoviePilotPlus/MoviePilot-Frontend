@@ -124,7 +124,6 @@ const zhTW = {
       username: '賬號',
       password: '密碼',
       ipic: 'iPic',
-      smms: 'SM.MS',
       imgbb: 'ImgBB',
       panda: '熊貓高清',
       imgbox: 'Imgbox',

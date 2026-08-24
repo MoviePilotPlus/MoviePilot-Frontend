@@ -128,7 +128,6 @@ const enUS = {
       username: 'Username',
       password: 'Password',
       ipic: 'iPic',
-      smms: 'SM.MS',
       imgbb: 'ImgBB',
       panda: 'Panda HD',
       imgbox: 'Imgbox',

@@ -138,10 +138,6 @@ const CollectSettings = ref<any>({
     ipic: {
       active: true,
     },
-    smms: {
-      apikey: '',
-      active: true,
-    },
     imgbb: {
       apikey: '',
       active: true,
@@ -332,10 +328,6 @@ async function loadImageHostingSetting() {
     'ipic': {
       'active': true,
     },
-    'smms': {
-      'apikey': '',
-      'active': true,
-    },
     'imgbb': {
       'apikey': '',
       'active': true,
@@ -352,8 +344,16 @@ async function loadImageHostingSetting() {
   }
   try {
     const result: { [key: string]: any } = await api.get('system/setting/ImageHostingParams')
-    CollectSettings.value.ImageHosting =
-      Object.keys(result || {}).length === 0 ? defaultImageHostingSettings : result
+    // 接口 data 是 {value: 配置对象} 信封；未配置为 null、历史脏数据可能是非对象，
+    // 且存量配置可能缺新增图床的子键——一律与默认值合并后使用，保证表单可编辑
+    const stored = result?.value
+    // smms 图床已停服下线：存量配置残留的 smms 子键丢弃，不参与合并
+    const { smms: _dropped, ...storedRest } = (typeof stored === 'object' && stored !== null && !Array.isArray(stored))
+      ? stored as Record<string, any>
+      : {}
+    CollectSettings.value.ImageHosting = typeof stored === 'object' && stored !== null
+      ? { ...defaultImageHostingSettings, ...storedRest }
+      : defaultImageHostingSettings
   } catch (error) {
     console.log(error)
   }
@@ -439,7 +439,8 @@ function handleDefaultImageHostings(enabledImageHostings: any[], imageHostings: 
 async function loadMediaServerSetting() {
   try {
     const result: { [key: string]: any } = await api.get('system/setting/MediaServers')
-    mediaServers.value = result ?? []
+    // 同 system/setting/{key} 信封：data 是 {value: 配置}，未配置为 null
+    mediaServers.value = result?.value ?? []
   } catch (error) {
     console.log(error)
   }
@@ -1109,20 +1110,6 @@ onDeactivated(() => {
                   :label="t('setting.collect.active')"
                   persistent-hint
                 />
-              </VCol>
-              <!-- smms -->
-              <VCol cols="12" class="pb-2">
-                <VListSubheader class="text-lg font-bold">{{ t('setting.collect.smms') }}</VListSubheader>
-              </VCol>
-              <VCol cols="12" md="6">
-                <VTextField
-                  v-model="CollectSettings.ImageHosting.smms.apikey"
-                  :label="t('setting.collect.apikey')"
-                  prepend-inner-icon="mdi-key"
-                />
-              </VCol>
-              <VCol cols="12" md="6">
-                <VSwitch v-model="CollectSettings.ImageHosting.smms.active" :label="t('setting.collect.active')" />
               </VCol>
               <!-- imgbb -->
               <VCol cols="12" class="pb-2">

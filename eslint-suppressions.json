@@ -1242,10 +1242,10 @@
       "count": 1
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 33
+      "count": 34
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 11
+      "count": 12
     },
     "no-prototype-builtins": {
       "count": 1

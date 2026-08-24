@@ -124,7 +124,6 @@ const zhCN = {
       username: '账号',
       password: '密码',
       ipic: 'iPic',
-      smms: 'SM.MS',
       imgbb: 'ImgBB',
       panda: '熊猫高清',
       imgbox: 'Imgbox',
