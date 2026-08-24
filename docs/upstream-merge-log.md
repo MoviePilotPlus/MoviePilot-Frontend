@@ -89,3 +89,37 @@ fork 的采集域视图（`src/views/collect/` 等）均为独有文件，本次
    "onTaskUpdate"`）：验证闸门串行跑。
 4. **合并前先查「潜在冲突面」**：`comm -12 <(上游改文件) <(本方改文件)` 提前列出
    交集，本次交集仅 2 文件，实际冲突也仅这 2 文件，预估准确。
+
+## 2026-08-24 合并（第 2 次记录，定时任务执行）
+
+### 范围
+
+| 项 | 值 |
+|---|---|
+| merge-base | `30b5c644` |
+| 上游区间 | `30b5c644..7c02bf7c`，共 **1 个提交** |
+| 改动规模 | 5 文件，+541 / −16 行 |
+| 合并提交 | `8e06cb4c`（Merge branch 'v3' into v3_plus） |
+
+### 上游改动内容与用途
+
+- `fix(workflow): align share response contracts (#708)`：工作流分享响应契约对齐——
+  ForkWorkflowDialog 契约修正、WorkflowShareDialog/ForkWorkflowDialog/
+  WorkflowShareCard 三个 spec 新增或补强、vite.config.ts 配套调整。
+
+### 冲突清单与解决方法
+
+无冲突（潜在冲突面预判为空，与实际一致）。
+
+### 验证结果
+
+- **ESLint** ✅
+- **单元测试**：1403/1409 通过；6 个失败全部命中本文档第 1 条记录的
+  「Windows 已知环境性失败」清单（frontend-workflow CRLF×2、format-changed
+  symlink/换行文件名×4、TransferHistoryView CRLF×1），非回归。
+- 依赖无变化，未触发重装。
+
+### 备注
+
+本次为定时任务首次自动执行。流程要点：先枚举潜在冲突面（为空）再合并，
+验证只跑了 lint+单测（依赖未变）。
