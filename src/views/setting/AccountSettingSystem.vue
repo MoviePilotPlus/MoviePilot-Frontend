@@ -7,6 +7,7 @@ import { useGlobalSettingsStore } from '@/stores'
 import { DownloaderConf, MediaServerConf } from '@/api/types'
 import DownloaderCard from '@/components/cards/DownloaderCard.vue'
 import MediaServerCard from '@/components/cards/MediaServerCard.vue'
+import DatabaseBackupPanel from '@/components/system/DatabaseBackupPanel.vue'
 import { copyToClipboard } from '@/@core/utils/navigator'
 import { useI18n } from 'vue-i18n'
 import { downloaderOptions, mediaServerOptions } from '@/api/constants'
@@ -113,6 +114,12 @@ const SystemSettings = ref<any>({
     TMDB_API_DOMAIN: null,
     TMDB_API_KEY: null,
     ACOUSTID_API_KEY: null,
+    THEAUDIODB_API_KEY: '123',
+    LRCLIB_BASE_URL: 'https://lrclib.net',
+    MUSIXMATCH_API_KEY: null,
+    MUSIXMATCH_BASE_URL: 'https://api.musixmatch.com/ws/1.1',
+    LYRICS_BATCH_TIMEOUT: 120,
+    LYRICS_PROVIDER_RETRY_MAX_WAIT: 5,
     MUSIC_METADATA_TO_SIMPLIFIED: true,
     TMDB_IMAGE_DOMAIN: null,
     MUSIC_COVER_PROXY: null,
@@ -211,10 +218,14 @@ const scrapingConfig = [
 ]
 
 // 刮削策略设置
-type ScrapingPolicy = 'skip' | 'missingOnly' | 'overwrite'
+type ScrapingPolicy = 'skip' | 'missingOnly' | 'overwrite' | 'upgrade'
 
 const ScrapingPolicies = ref<Record<string, ScrapingPolicy>>(
-  Object.fromEntries(scrapingConfig.flatMap(section => section.items.map(item => [item.key, 'missingOnly']))),
+  Object.fromEntries(
+    scrapingConfig.flatMap(section =>
+      section.items.map(item => [item.key, item.key === 'music_lyrics' ? 'upgrade' : 'missingOnly']),
+    ),
+  ),
 )
 
 // 是否发送请求的总开关
@@ -2132,6 +2143,67 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                   />
                 </VCol>
                 <VCol cols="12" md="6">
+                  <VTextField
+                    v-model="SystemSettings.Advanced.THEAUDIODB_API_KEY"
+                    :label="t('setting.system.theAudioDbApiKey')"
+                    :hint="t('setting.system.theAudioDbApiKeyHint')"
+                    persistent-hint
+                    prepend-inner-icon="mdi-key-variant"
+                  />
+                </VCol>
+                <VCol cols="12" md="6">
+                  <VTextField
+                    v-model="SystemSettings.Advanced.LRCLIB_BASE_URL"
+                    :label="t('setting.system.lrclibBaseUrl')"
+                    :hint="t('setting.system.lrclibBaseUrlHint')"
+                    persistent-hint
+                    prepend-inner-icon="mdi-music-note-plus"
+                  />
+                </VCol>
+                <VCol cols="12" md="6">
+                  <VTextField
+                    v-model="SystemSettings.Advanced.MUSIXMATCH_API_KEY"
+                    :label="t('setting.system.musixmatchApiKey')"
+                    :hint="t('setting.system.musixmatchApiKeyHint')"
+                    persistent-hint
+                    type="password"
+                    prepend-inner-icon="mdi-key-variant"
+                  />
+                </VCol>
+                <VCol cols="12" md="6">
+                  <VTextField
+                    v-model="SystemSettings.Advanced.MUSIXMATCH_BASE_URL"
+                    :label="t('setting.system.musixmatchBaseUrl')"
+                    :hint="t('setting.system.musixmatchBaseUrlHint')"
+                    persistent-hint
+                    prepend-inner-icon="mdi-api"
+                  />
+                </VCol>
+                <VCol cols="12" md="6">
+                  <VTextField
+                    v-model.number="SystemSettings.Advanced.LYRICS_BATCH_TIMEOUT"
+                    :label="t('setting.system.lyricsBatchTimeout')"
+                    :hint="t('setting.system.lyricsBatchTimeoutHint')"
+                    persistent-hint
+                    min="0"
+                    type="number"
+                    :suffix="t('setting.system.secondUnit')"
+                    prepend-inner-icon="mdi-timer-outline"
+                  />
+                </VCol>
+                <VCol cols="12" md="6">
+                  <VTextField
+                    v-model.number="SystemSettings.Advanced.LYRICS_PROVIDER_RETRY_MAX_WAIT"
+                    :label="t('setting.system.lyricsRetryMaxWait')"
+                    :hint="t('setting.system.lyricsRetryMaxWaitHint')"
+                    persistent-hint
+                    min="0"
+                    type="number"
+                    :suffix="t('setting.system.secondUnit')"
+                    prepend-inner-icon="mdi-timer-sand"
+                  />
+                </VCol>
+                <VCol cols="12" md="6">
                   <VCombobox
                     v-model="SystemSettings.Advanced.TMDB_IMAGE_DOMAIN"
                     :label="t('setting.system.tmdbImageDomain')"
@@ -2283,6 +2355,10 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                               <VIcon icon="mdi-file-replace" color="primary" class="mr-2" />
                               <span>{{ t('setting.system.policy.overwriteDesc') }}</span>
                             </div>
+                            <div class="d-flex align-center">
+                              <VIcon icon="mdi-arrow-up-bold-hexagon-outline" color="info" class="mr-2" />
+                              <span>{{ t('setting.system.policy.upgradeDesc') }}</span>
+                            </div>
                           </div>
                         </VTooltip>
                       </VExpansionPanelTitle>
@@ -2311,6 +2387,9 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                                 </VBtn>
                                 <VBtn value="overwrite" color="primary" size="small">
                                   <VIcon icon="mdi-file-replace" />
+                                </VBtn>
+                                <VBtn v-if="item.key === 'music_lyrics'" value="upgrade" color="info" size="small">
+                                  <VIcon icon="mdi-arrow-up-bold-hexagon-outline" />
                                 </VBtn>
                               </VBtnToggle>
                               <span class="ml-2">{{ t(item.label) }}</span>
@@ -2485,7 +2564,7 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
           <VWindowItem value="data">
             <div>
               <VRow>
-                <VCol cols="12">
+                <VCol cols="12" md="6">
                   <VSwitch
                     v-model="SystemSettings.Advanced.DB_BACKUP_ENABLE"
                     :label="t('setting.system.dbBackupEnable')"
@@ -2494,6 +2573,14 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                   />
                 </VCol>
                 <template v-if="SystemSettings.Advanced.DB_BACKUP_ENABLE">
+                  <VCol cols="12" md="6">
+                    <VSwitch
+                      v-model="SystemSettings.Advanced.DB_BACKUP_ON_UPGRADE"
+                      :label="t('setting.system.dbBackupOnUpgrade')"
+                      :hint="t('setting.system.dbBackupOnUpgradeHint')"
+                      persistent-hint
+                    />
+                  </VCol>
                   <VCol cols="12" md="6">
                     <VCronField
                       v-model="SystemSettings.Advanced.DB_BACKUP_CRON"
@@ -2543,15 +2630,10 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                       prepend-inner-icon="mdi-backup-restore"
                     />
                   </VCol>
-                  <VCol cols="12">
-                    <VSwitch
-                      v-model="SystemSettings.Advanced.DB_BACKUP_ON_UPGRADE"
-                      :label="t('setting.system.dbBackupOnUpgrade')"
-                      :hint="t('setting.system.dbBackupOnUpgradeHint')"
-                      persistent-hint
-                    />
-                  </VCol>
                 </template>
+                <VCol cols="12">
+                  <DatabaseBackupPanel :active="activeTab === 'data'" />
+                </VCol>
                 <VCol cols="12">
                   <VSwitch
                     v-model="SystemSettings.Advanced.DATA_CLEANUP_ENABLE"

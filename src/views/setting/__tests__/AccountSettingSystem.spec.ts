@@ -242,6 +242,7 @@ const BASIC_SETTING_KEYS = [
 function mockLoadedSettings() {
   mocks.apiGet.mockImplementation((endpoint: string) => {
     if (endpoint === 'system/env') return { success: true, data: systemEnv }
+    if (endpoint === 'system/database/backups') return { success: true, data: [] }
     if (endpoint === 'message/agent/mcp/servers') return { success: true, data: { servers: [] } }
     if (endpoint === 'system/setting/Downloaders')
       return { success: true, data: { value: structuredClone(downloadersSetting) } }
@@ -957,7 +958,12 @@ describe('AccountSettingSystem', () => {
       }),
     )
     expect(findPost('system/setting/ScrapingSwitchs')?.[1]).toEqual(
-      expect.objectContaining({ movie_backdrop: 'overwrite', movie_nfo: 'missingOnly', movie_poster: 'skip' }),
+      expect.objectContaining({
+        movie_backdrop: 'overwrite',
+        movie_nfo: 'missingOnly',
+        movie_poster: 'skip',
+        music_lyrics: 'upgrade',
+      }),
     )
     expect(mocks.toastSuccess).toHaveBeenCalledWith('高级设置保存成功')
   })
@@ -1006,6 +1012,12 @@ describe('AccountSettingSystem', () => {
     await fireEvent.update(dialog.getByLabelText('TMDB API服务地址'), 'api.tmdb.org')
     await fireEvent.update(dialog.getByLabelText('TMDB API Key'), 'tmdb-key')
     await fireEvent.update(dialog.getByLabelText('AcoustID API Key'), 'acoustid-key')
+    await fireEvent.update(dialog.getByLabelText('TheAudioDB API Key'), 'audiodb-key')
+    await fireEvent.update(dialog.getByLabelText('LRCLIB 服务地址'), 'https://lyrics.example')
+    await fireEvent.update(dialog.getByLabelText('Musixmatch API Key'), 'musixmatch-key')
+    await fireEvent.update(dialog.getByLabelText('Musixmatch API 地址'), 'https://musixmatch.example/ws/1.1')
+    await fireEvent.update(dialog.getByLabelText('歌词批次查询预算'), '90')
+    await fireEvent.update(dialog.getByLabelText('歌词来源最大重试等待'), '3')
     await fireEvent.update(dialog.getByLabelText('TMDB 图片服务地址'), 'image.tmdb.org')
     await fireEvent.update(dialog.getByLabelText('音乐封面代理地址'), 'https://music.example')
     await selectOption('TMDB 元数据语言', '繁体中文')
@@ -1036,8 +1048,13 @@ describe('AccountSettingSystem', () => {
         FANART_LANG: 'zh,ja',
         MEDIA_RECOGNIZE_SHARE: false,
         META_CACHE_EXPIRE: '48',
+        LRCLIB_BASE_URL: 'https://lyrics.example',
+        LYRICS_BATCH_TIMEOUT: 90,
+        LYRICS_PROVIDER_RETRY_MAX_WAIT: 3,
         MUSIC_COVER_PROXY: 'https://music.example',
         MUSIC_METADATA_TO_SIMPLIFIED: false,
+        MUSIXMATCH_API_KEY: 'musixmatch-key',
+        MUSIXMATCH_BASE_URL: 'https://musixmatch.example/ws/1.1',
         RECOGNIZE_PLUGIN_FIRST: true,
         SCRAP_FOLLOW_TMDB: false,
         TMDB_API_DOMAIN: 'api.tmdb.org',
@@ -1045,6 +1062,7 @@ describe('AccountSettingSystem', () => {
         TMDB_IMAGE_DOMAIN: 'image.tmdb.org',
         TMDB_LOCALE: 'zh-TW',
         TMDB_SCRAP_ORIGINAL_IMAGE: true,
+        THEAUDIODB_API_KEY: 'audiodb-key',
       }),
     )
   })
@@ -1135,7 +1153,7 @@ describe('AccountSettingSystem', () => {
     expect(dialog.getByLabelText('备份目录')).toHaveAttribute('data-storage', 'local')
     expect(dialog.getByLabelText('备份过期天数')).toHaveValue(30)
     expect(dialog.getByLabelText('最大保留份数')).toHaveValue(30)
-    expect(dialog.getByLabelText('数据库迁移前备份')).toBeChecked()
+    expect(dialog.getByLabelText('升级前自动备份')).toBeChecked()
   })
 
   it('loads, edits, and saves the database backup policy', async () => {
@@ -1153,12 +1171,12 @@ describe('AccountSettingSystem', () => {
 
     expect(dialog.getByLabelText('备份周期')).toHaveValue('15 2 * * 1')
     expect(dialog.getByLabelText('备份目录')).toHaveValue('/data/backup')
-    expect(dialog.getByLabelText('数据库迁移前备份')).not.toBeChecked()
+    expect(dialog.getByLabelText('升级前自动备份')).not.toBeChecked()
     await fireEvent.update(dialog.getByLabelText('备份周期'), '30 4 * * *')
     await fireEvent.update(dialog.getByLabelText('备份目录'), '  relative/backup  ')
     await fireEvent.update(dialog.getByLabelText('备份过期天数'), '60')
     await fireEvent.update(dialog.getByLabelText('最大保留份数'), '20')
-    await fireEvent.click(dialog.getByLabelText('数据库迁移前备份'))
+    await fireEvent.click(dialog.getByLabelText('升级前自动备份'))
     await fireEvent.click(dialog.getByRole('button', { name: '保存' }))
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -1189,7 +1207,7 @@ describe('AccountSettingSystem', () => {
 
     await fireEvent.click(dialog.getByLabelText('启用数据备份'))
     expect(dialog.queryByLabelText('备份周期')).not.toBeInTheDocument()
-    expect(dialog.queryByLabelText('数据库迁移前备份')).not.toBeInTheDocument()
+    expect(dialog.queryByLabelText('升级前自动备份')).not.toBeInTheDocument()
     await fireEvent.click(dialog.getByRole('button', { name: '保存' }))
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
