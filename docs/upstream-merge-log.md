@@ -155,3 +155,27 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
   另有 format-changed/frontend-workflow spec 的已知环境失败在 config 档（计入历史清单）。
 - 依赖无变化。
 
+
+## 2026-08-25 合并（第 4 次记录，定时任务执行）
+
+### 范围
+
+| 项 | 值 |
+|---|---|
+| merge-base | `62b2eae1` |
+| 上游区间 | `62b2eae1..bb25732c`，共 **7 个提交** |
+| 改动规模 | 27 文件，+1436 / −220 行 |
+| 合并提交 | 零 git 冲突（eslint-suppressions/types.ts 双方各改各区自动合并） |
+
+### 上游改动内容与用途
+
+- 数据库备份管理界面完善（#717）+ 设置面板格式化（#719）；
+- 下载任务破坏性删除确认（#718）；会话失效静默处理；
+- 仪表盘自动网格尺寸稳定化（#720）；音乐优先级规则组、歌词设置与专辑整理；
+- 新增 DatabaseBackupPanel/useConfirm/AnalyticsWeeklyOverview 等 spec。
+
+### 验证结果
+
+- ESLint ✅；单测 996 中 1 失败 = 已知 TransferHistoryView CRLF 断言（环境性）。
+- 依赖无变化。
+
