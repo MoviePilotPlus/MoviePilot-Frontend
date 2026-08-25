@@ -123,3 +123,35 @@ fork 的采集域视图（`src/views/collect/` 等）均为独有文件，本次
 
 本次为定时任务首次自动执行。流程要点：先枚举潜在冲突面（为空）再合并，
 验证只跑了 lint+单测（依赖未变）。
+
+## 2026-08-25 合并（第 3 次记录，定时任务执行）
+
+### 范围
+
+| 项 | 值 |
+|---|---|
+| merge-base | `7c02bf7c` |
+| 上游区间 | `7c02bf7c..c2b21f7e`，共 **6 个提交** |
+| 改动规模 | 23 文件，+1638 / −39 行 |
+| 合并提交 | 零冲突（潜在冲突面 src/api/types.ts 双方各加各的块，自动合并成功） |
+
+### 上游改动内容与用途
+
+- `feat(system): add release update prompt`：配合后端 staged release updates 的
+  系统更新提示 UI（SystemUpdateStatus 类型 + 状态机展示）。
+- `feat: 展示 V3t 运行时状态并锁定 Rust 加速 (#710)`：配合 Python 3.14t 自由线程镜像。
+- workflow 测试补强（#711/#712）、共享列表请求恢复（#709）、
+  discover 音乐榜默认专辑修复。
+
+### 冲突清单与解决方法
+
+无 git 冲突。fork 的采集类型块（types.ts 尾部 238 行追加块）与上游新增
+SystemUpdate 类型（中部插入）不重叠，自动合并。
+
+### 验证结果
+
+- **ESLint** ✅
+- **单元测试**：963 中 1 失败（TransferHistoryView CRLF 断言，已知 Windows 环境性失败）；
+  另有 format-changed/frontend-workflow spec 的已知环境失败在 config 档（计入历史清单）。
+- 依赖无变化。
+
