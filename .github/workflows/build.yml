@@ -1,10 +1,10 @@
-name: Build Moviepilot-Frontend v3
+- v3name: Build Moviepilot-Frontend v3
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - v3
+      - v3_plus
     paths:
       - 'package.json'
 

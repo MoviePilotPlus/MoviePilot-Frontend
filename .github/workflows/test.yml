@@ -3,10 +3,10 @@ name: Frontend Tests
 on:
   pull_request:
     branches:
-      - v3
+      - v3_plus
   push:
     branches:
-      - v3
+      - v3_plus
 
 permissions:
   contents: read
