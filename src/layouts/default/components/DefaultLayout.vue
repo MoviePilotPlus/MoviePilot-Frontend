@@ -38,6 +38,7 @@ import {
   type ThemeCustomizerSettings,
 } from '@/composables/useThemeCustomizer'
 import ThemeLogoMark from '@/components/misc/ThemeLogoMark.vue'
+import SystemUpdatePrompt from '@/components/system/SystemUpdatePrompt.vue'
 
 const display = useDisplay()
 // PWA模式检测
@@ -484,7 +485,10 @@ watch([() => pluginSidebarNavStore.items, userPermissions], () => {
 watch(
   () => pluginRuntimeStore.reconciliation,
   reconciliation => {
-    if (reconciliation > 0) void pluginSidebarNavStore.ensureSidebarNav(true)
+    if (reconciliation <= 0) return
+
+    void pluginSidebarNavStore.ensureSidebarNav(true)
+    void globalSettingsStore.loadUserSettings()
   },
 )
 
@@ -509,6 +513,7 @@ onMounted(async () => {
 </script>
 
 <template>
+  <SystemUpdatePrompt :enabled="canAdmin" :avoid-agent-assistant="showAgentAssistant" />
   <!-- 👉 Offline Page -->
   <OfflinePage />
 

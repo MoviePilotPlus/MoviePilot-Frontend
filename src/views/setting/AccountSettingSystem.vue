@@ -551,7 +551,6 @@ const rustAccelHint = computed(() =>
       ? t('setting.system.rustAccelHint')
       : t('setting.system.rustAccelUnavailableHint'),
 )
-
 const thinkingLevelItems = computed(() => [
   { title: t('setting.system.llmThinkingLevelOff'), value: 'off' },
   { title: t('setting.system.llmThinkingLevelAuto'), value: 'auto' },
@@ -1083,13 +1082,10 @@ function onMediaServerChange(mediaserver: MediaServerConf, name: string) {
   if (index !== -1) mediaServers.value[index] = mediaserver
 }
 
-// 添加计算属性
-const moviePilotAutoUpdate = computed({
-  get: () => {
-    return ['release', 'dev'].includes(SystemSettings.value.Advanced.MOVIEPILOT_AUTO_UPDATE)
-  },
-  set: val => {
-    SystemSettings.value.Advanced.MOVIEPILOT_AUTO_UPDATE = val ? 'release' : 'false'
+const moviePilotDevUpdate = computed({
+  get: () => SystemSettings.value.Advanced.MOVIEPILOT_AUTO_UPDATE === 'dev',
+  set: enabled => {
+    SystemSettings.value.Advanced.MOVIEPILOT_AUTO_UPDATE = enabled ? 'dev' : 'false'
   },
 })
 
@@ -2081,9 +2077,9 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                 </VCol>
                 <VCol cols="12" md="6">
                   <VSwitch
-                    v-model="moviePilotAutoUpdate"
-                    :label="t('setting.system.moviePilotAutoUpdate')"
-                    :hint="t('setting.system.moviePilotAutoUpdateHint')"
+                    v-model="moviePilotDevUpdate"
+                    :label="t('setting.system.moviePilotDevUpdate')"
+                    :hint="t('setting.system.moviePilotDevUpdateHint')"
                     persistent-hint
                   />
                 </VCol>
@@ -2782,7 +2778,8 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                     v-model="SystemSettings.Advanced.RUST_ACCEL"
                     :label="t('setting.system.rustAccel')"
                     :hint="rustAccelHint"
-                    :disabled="!rustAccelAvailable || rustAccelRequired"
+                    :disabled="!rustAccelAvailable"
+                    :readonly="rustAccelRequired"
                     persistent-hint
                   />
                 </VCol>
