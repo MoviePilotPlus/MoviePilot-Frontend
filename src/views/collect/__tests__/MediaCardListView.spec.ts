@@ -2,6 +2,7 @@ import MediaCardListView from '@/views/collect/MediaCardListView.vue'
 import type { VideoInfo } from '@/api/types'
 import { screen, waitFor } from '@testing-library/vue'
 import { renderWithProviders } from '@tests/support/render'
+import { defineComponent, type PropType } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -29,16 +30,16 @@ function envelope(data: VideoInfo[], session = '') {
   return { success: true, message: session, data }
 }
 
-const VInfiniteScrollStub = {
+const VInfiniteScrollStub = defineComponent({
   name: 'VInfiniteScrollStub',
-  props: { items: { type: Array, default: () => [] }, mode: { type: String, default: '' }, side: { type: String, default: '' } },
+  props: { items: { type: Array as PropType<unknown[]>, default: () => [] }, mode: { type: String, default: '' }, side: { type: String, default: '' } },
   emits: ['load'],
   // 真组件进入视口即触发 @load({done})，stub 在挂载时模拟首帧加载
   async mounted() {
     this.$emit('load', { done: () => {} })
   },
   template: '<div class="v-infinite-scroll-stub"><slot /><slot name="loading" /><slot name="empty" /></div>',
-}
+})
 
 const VideoCardStub = {
   props: { media: { type: Object, required: true }, cate: { type: String, default: '' } },
