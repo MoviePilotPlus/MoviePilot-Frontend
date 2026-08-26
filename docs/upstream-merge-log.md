@@ -208,3 +208,16 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
 - **零冲突**（自动合并，无重叠文件）。
 - 验收三件套：vitest 37 例全绿；eslint 0 问题；vue-tsc --noEmit exit=0。
 - fork 采集视图/采集配置不在改动面，未触碰。
+
+## 2026-08-26 合并（第 7 次记录，定时任务执行）
+
+### 范围
+
+- merge-base `f9ad7bc2` → upstream/v3 `4be29cc0`，增量 **1 提交 / 12 文件**（+259−59）。
+- 上游 `fix(plugin): 完善市场安装状态与官方来源选择 (#723)`：插件市场安装状态展示
+  与官方源选择完善（PluginCardListView +70 行、spec +92 行及关联组件/语言包）。
+
+### 冲突与解法
+
+- **零冲突**（fork 侧自基点无改动，无重叠文件）。
+- 验收三件套：vitest 44 例全绿；eslint 0 问题；vue-tsc --noEmit exit=0。
