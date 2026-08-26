@@ -194,3 +194,17 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
 - **零冲突**（git 自动合并）。唯一潜在冲突面 `src/api/types.ts` 自动合并成功。
 - 验收三件套：vitest 4 文件 87 例全绿；eslint 4 个改动入口文件 0 问题；
   `vue-tsc --noEmit` exit=0。fork 的 collect 视图/采集配置不在本次改动面，未触碰。
+
+## 2026-08-26 合并（第 6 次记录，定时任务执行）
+
+### 范围
+
+- merge-base `06c711bb` → upstream/v3 `f9ad7bc2`，增量 **1 提交 / 5 文件**（+133）。
+- 上游 `feat(settings): expose data retention controls`：系统设置页新增数据保留
+  控件（AccountSettingSystem.vue +84 行含 spec）与三语言 locale。
+
+### 冲突与解法
+
+- **零冲突**（自动合并，无重叠文件）。
+- 验收三件套：vitest 37 例全绿；eslint 0 问题；vue-tsc --noEmit exit=0。
+- fork 采集视图/采集配置不在改动面，未触碰。
