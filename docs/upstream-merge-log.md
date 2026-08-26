@@ -221,3 +221,16 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
 
 - **零冲突**（fork 侧自基点无改动，无重叠文件）。
 - 验收三件套：vitest 44 例全绿；eslint 0 问题；vue-tsc --noEmit exit=0。
+
+## 2026-08-26 合并（第 8 次记录，定时任务执行）
+
+### 范围
+
+- merge-base `4be29cc0` → upstream/v3 `dc6c0462`，增量 **2 提交 / 22 文件**（+602−219）。
+- 上游 `fix(plugin)` 明确插件仓库绑定与换仓确认（#724）、`fix(site)` 静默处理站点
+  图标缺失（含 msw handler 与 vite 配套）。
+
+### 冲突与解法
+
+- **零冲突**（唯一潜在面 `src/api/types.ts` 自动合并成功，无标记残留）。
+- 验收三件套：vitest 44 例全绿；eslint 0 问题；vue-tsc --noEmit exit=0。
