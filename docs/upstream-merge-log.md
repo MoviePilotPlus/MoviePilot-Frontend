@@ -179,3 +179,18 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
 - ESLint ✅；单测 996 中 1 失败 = 已知 TransferHistoryView CRLF 断言（环境性）。
 - 依赖无变化。
 
+
+## 2026-08-26 合并（第 5 次记录，定时任务执行）
+
+### 范围
+
+- merge-base `bb25732cf` → upstream/v3 `06c711bb`，增量 **1 提交 / 17 文件**（+1561−101）。
+- 上游 `feat(plugin): 增加插件来源绑定与换源界面 (#722)`：插件市场新增「来源绑定/换源」
+  能力——新 API 层 `src/api/pluginSource.ts`（含 spec）、PluginCard/PluginAppCard/
+  PluginMarketDetailDialog/PluginVersionHistoryDialog 组件与视图改动、三语言 locale。
+
+### 冲突与解法
+
+- **零冲突**（git 自动合并）。唯一潜在冲突面 `src/api/types.ts` 自动合并成功。
+- 验收三件套：vitest 4 文件 87 例全绿；eslint 4 个改动入口文件 0 问题；
+  `vue-tsc --noEmit` exit=0。fork 的 collect 视图/采集配置不在本次改动面，未触碰。
