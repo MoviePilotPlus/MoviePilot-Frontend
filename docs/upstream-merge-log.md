@@ -234,3 +234,15 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
 
 - **零冲突**（唯一潜在面 `src/api/types.ts` 自动合并成功，无标记残留）。
 - 验收三件套：vitest 44 例全绿；eslint 0 问题；vue-tsc --noEmit exit=0。
+
+## 2026-08-27 合并（第 9 次记录，定时任务执行）
+
+### 范围
+
+- merge-base `dc6c0462` → upstream/v3 `d8a843d5`，增量 **1 提交 / 13 文件**（+408−98）。
+- 上游 `fix(plugin): 收敛插件仓库来源交互 (#725)`：插件卡混合排序
+  （PluginMixedSortCard 新组件+spec）、仓库来源交互收敛。
+
+### 冲突与解法
+
+- 零冲突（types.ts 自动合并）。验收三件套：vitest 48 例全绿 / eslint 0 / tsc 0。
