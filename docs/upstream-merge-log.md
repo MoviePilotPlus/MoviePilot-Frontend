@@ -246,3 +246,24 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
 ### 冲突与解法
 
 - 零冲突（types.ts 自动合并）。验收三件套：vitest 48 例全绿 / eslint 0 / tsc 0。
+
+## 2026-08-27 合并（第 10 次记录，定时任务执行）
+
+### 范围
+
+- merge-base `d8a843d5` → upstream/v3 `42db5ab5`，增量 **1 提交 / 4 文件**
+  （fix(plugin): 更新过程保留绑定源 #726——PluginCard 与
+  PluginMarketDetailDialog 更新时携带 bound source，配套 spec 断言）。
+
+### 冲突与解法
+
+- **零冲突**（4 文件均 fork 无增量区）。
+
+### 验证
+
+- `yarn install --immutable` ✅；`yarn lint`（eslint --max-warnings=0）✅；
+- `yarn test:run`：2 文件 6 例失败，worktree 旧树同败 → Windows 环境族放行
+  （frontend-workflow CRLF permissions 断言 ×2、format-changed symlink/缓冲区
+  ×4，与第 9 次记录相同族；TransferHistoryView 2:3 cover 与 dashboard
+  first-frame 两例旧树同败亦环境相关）；
+- `yarn typecheck`（vue-tsc）✅。
