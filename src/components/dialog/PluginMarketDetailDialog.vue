@@ -1,12 +1,23 @@
 <script lang="ts" setup>
 import api from '@/api'
 import { getApiBusinessErrorMessage, isApiBusinessFailure } from '@/api/client'
-import { getPluginSourceOptions, installPluginFromSource } from '@/api/pluginSource'
-import type { Plugin, PluginRating, PluginSourceCandidate, PluginSourceOptions } from '@/api/types'
+import {
+  getPluginSourceOptions,
+  installPluginFromSource,
+  requiresExplicitPluginSourceInstall,
+} from '@/api/pluginSource'
+import type {
+  Plugin,
+  PluginInstallOutcome,
+  PluginRating,
+  PluginSourceCandidate,
+  PluginSourceOptions,
+} from '@/api/types'
 import { formatDownloadCount } from '@/@core/utils/formatters'
 import PluginRatingDisplay from '@/components/common/PluginRatingDisplay.vue'
 import { getLogoUrl } from '@/utils/imageUtils'
 import { useToast } from 'vue-toastification'
+import { usePluginRuntimeStore } from '@/stores/pluginRuntime'
 import { useI18n } from 'vue-i18n'
 import { openSharedDialog } from '@/composables/useSharedDialog'
 import { useConfirm } from '@/composables/useConfirm'
@@ -21,6 +32,7 @@ const { t } = useI18n()
 
 // 提示框
 const $toast = useToast()
+const pluginRuntimeStore = usePluginRuntimeStore()
 
 const createConfirm = useConfirm()
 
@@ -90,15 +102,9 @@ const onlineSourceCandidates = computed(() =>
     // 官方仓库是默认可信来源，在所有选源入口中始终置顶。
     .sort((left, right) => Number(right.source_type === 'official') - Number(left.source_type === 'official')),
 )
-const sourceNeedsSelection = computed(() => {
-  if (isInstalled.value) return false
-  if (sourceOptions.value?.selection_status === 'conflict') return true
-  return (
-    sourceOptions.value?.selection_status === 'selected' &&
-    onlineSourceCandidates.value.length === 1 &&
-    onlineSourceCandidates.value[0].source_type === 'third_party'
-  )
-})
+const sourceNeedsSelection = computed(() =>
+  sourceOptions.value ? requiresExplicitPluginSourceInstall(sourceOptions.value, isInstalled.value) : false,
+)
 const sourceHasConflict = computed(() => sourceOptions.value?.selection_status === 'conflict')
 const selectedInstallSource = computed(() =>
   onlineSourceCandidates.value.find(candidate => candidate.source_key === selectedInstallSourceKey.value),
@@ -113,6 +119,9 @@ const hasTrustedOnlineSource = computed(() => {
 const sourceNeedsInitialBinding = computed(
   () => isInstalled.value && !hasTrustedOnlineSource.value && onlineSourceCandidates.value.length > 0,
 )
+const sourceNeedsReinstallBinding = computed(
+  () => !isInstalled.value && sourceOptions.value?.selection_status === 'incomplete' && sourceNeedsSelection.value,
+)
 const changeSourceCandidates = computed(() => {
   const trustedSourceKey = sourceOptions.value?.identity?.trusted_source_key
   return onlineSourceCandidates.value.filter(candidate => candidate.source_key !== trustedSourceKey)
@@ -122,6 +131,7 @@ const sourceActionCandidates = computed(() =>
 )
 const sourceUnavailable = computed(() => {
   const unavailable = ['unavailable', 'incomplete'].includes(sourceOptions.value?.selection_status || '')
+  if (sourceNeedsSelection.value) return false
   if (!isInstalled.value) return unavailable
   // 未绑定但仍有候选时，优先展示首次绑定流程；已绑定来源失效则必须阻止普通更新。
   if (sourceNeedsInitialBinding.value) return false
@@ -358,14 +368,15 @@ async function installPlugin(releaseVersion?: string, repoUrl?: string) {
           }),
     )
 
+    let outcome: PluginInstallOutcome | null
     if (!isInstalled.value && explicitSource?.repo_url) {
-      await installPluginFromSource(props.plugin.id, {
+      outcome = await installPluginFromSource(props.plugin.id, {
         repo_url: explicitSource.repo_url,
         release_version: releaseVersion,
         force: Boolean(props.plugin?.has_update || releaseVersion),
       })
     } else {
-      await api.get(`plugin/install/${props.plugin?.id}`, {
+      outcome = await api.get<PluginInstallOutcome | null>(`plugin/install/${props.plugin?.id}`, {
         params: {
           release_version: releaseVersion,
           force: isInstalled.value || props.plugin?.has_update || Boolean(releaseVersion),
@@ -375,11 +386,12 @@ async function installPlugin(releaseVersion?: string, repoUrl?: string) {
       })
     }
 
-    $toast.success(
-      isInstalled.value
-        ? t('plugin.updateSuccess', { name: props.plugin?.plugin_name })
-        : t('plugin.installSuccess', { name: props.plugin?.plugin_name }),
-    )
+    const toastKey = isInstalled.value ? 'plugin.updateSuccess' : 'plugin.installSuccess'
+    const restartToastKey = isInstalled.value ? 'plugin.updateRestartRequired' : 'plugin.installRestartRequired'
+    const toast = t(outcome?.restart_required ? restartToastKey : toastKey, { name: props.plugin?.plugin_name })
+    if (outcome?.restart_required) $toast.warning(toast)
+    else $toast.success(toast)
+    void pluginRuntimeStore.refreshNow()
     versionHistoryDialogController?.close()
     versionHistoryDialogController = null
     visible.value = false
@@ -534,12 +546,18 @@ onUnmounted(() => {
               <h3 id="plugin-source-title" class="plugin-market-detail-source__title">
                 {{ t('plugin.source') }}
                 <VChip v-if="sourceNeedsSelection" size="x-small" color="warning" variant="tonal">
-                  {{ t(sourceHasConflict ? 'plugin.sourceSelectionRequired' : 'plugin.sourceConfirmationRequired') }}
+                  {{
+                    t(
+                      sourceHasConflict || onlineSourceCandidates.length > 1
+                        ? 'plugin.sourceSelectionRequired'
+                        : 'plugin.sourceConfirmationRequired',
+                    )
+                  }}
                 </VChip>
               </h3>
               <p class="plugin-market-detail-source__hint">
                 {{
-                  sourceNeedsInitialBinding
+                  sourceNeedsInitialBinding || sourceNeedsReinstallBinding
                     ? t('plugin.sourceBindingHint')
                     : isInstalled
                       ? t('plugin.sourceInstalledHint')
