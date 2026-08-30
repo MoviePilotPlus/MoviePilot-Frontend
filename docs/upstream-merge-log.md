@@ -279,3 +279,14 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
   （symlink 特权/ENOENT）——均为 SKILL.md 已记录 Windows 必假失败族，放行。
   本轮新增/触及 5 个测试文件单跑 36 例全绿。
 - 后端本轮无增量（22 轮已并入 `3e9c2dcf4`），跳过。
+
+## 2026-08-31 合并（第 24 次记录，定时任务执行）
+
+- 前端增量 **1 提交 / 12 文件（+204−38）**：`31ec7d3a` dashboard 图表在
+  路由离开前 deactivate（防止后台实例泄漏，新增 DashboardRender.spec）。
+  自动合并零冲突，合并提交 `7e7569cc` 双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ 0 警告、typecheck ✅；
+  test:run 1425 过 6F=frontend-workflow×2（CRLF）+ format-changed×4
+  （symlink/ENOENT/缓冲）+ TransferHistoryView×1——均为已知 Windows 必假
+  失败族，与第 23 轮清单 IDENTICAL，放行。新增 2 个测试文件单跑 3 例全绿。
+- 后端无增量（23 轮已接入 `3e9c2dcf4`），跳过。
