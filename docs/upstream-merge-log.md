@@ -267,3 +267,15 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
   ×4，与第 9 次记录相同族；TransferHistoryView 2:3 cover 与 dashboard
   first-frame 两例旧树同败亦环境相关）；
 - `yarn typecheck`（vue-tsc）✅。
+
+## 2026-08-30 合并（第 23 次记录，定时任务执行）
+
+- 前端增量 **2 提交 / 12 文件（+229−23）**：`ca48c146` site-resource 移动端
+  虚拟滚动（ProgressiveCardGrid）、`1f2b3e90` 登录前等待初始化状态
+  （initialize.vue + auth-guard/initialize/plugin-sidebar 新测试）。
+  自动合并零冲突（共享面仅 src/router/index.ts，双方改动不相交）。
+- 三件套：yarn install --immutable ✅、lint ✅ 0 警告、typecheck ✅；
+  test:run 1423 过 6F=frontend-workflow×2（CRLF 断言）+ format-changed×4
+  （symlink 特权/ENOENT）——均为 SKILL.md 已记录 Windows 必假失败族，放行。
+  本轮新增/触及 5 个测试文件单跑 36 例全绿。
+- 后端本轮无增量（22 轮已并入 `3e9c2dcf4`），跳过。
