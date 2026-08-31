@@ -399,6 +399,10 @@ const router = createRouter({
           component: () => import('../pages/initialize.vue'),
         },
         {
+          path: 'service-status',
+          component: () => import('../pages/service-status.vue'),
+        },
+        {
           path: '/:pathMatch(.*)*',
           component: () => import('../pages/[...all].vue'),
         },
@@ -407,6 +411,7 @@ const router = createRouter({
   ],
 })
 
+/** 解析普通页面或插件页面声明的权限约束，供导航守卫统一校验。 */
 async function getRoutePermission(to: any): Promise<PermissionProtectedItem> {
   if (to.meta.permission) {
     return {
@@ -442,10 +447,10 @@ router.beforeEach(async (to: any, from: any, next: any) => {
   try {
     initialized = await getInitializationState()
   } catch {
-    // 未确认初始化状态时必须进入初始化页，由页面持续等待后端就绪，避免启动竞态误放行登录页。
-    if (to.path !== '/initialize') {
+    // 接口不可达只代表服务尚未就绪，不能据此推断实例需要初始化。
+    if (to.path !== '/service-status') {
       setRequestNavigatingState(false)
-      next('/initialize')
+      next('/service-status')
       return
     }
   }
@@ -455,7 +460,7 @@ router.beforeEach(async (to: any, from: any, next: any) => {
     next('/initialize')
     return
   }
-  if (initialized === true && to.path === '/initialize') {
+  if (initialized === true && (to.path === '/initialize' || to.path === '/service-status')) {
     setRequestNavigatingState(false)
     next('/login')
     return
@@ -464,7 +469,9 @@ router.beforeEach(async (to: any, from: any, next: any) => {
   // 认证 Store
   const authStore = useAuthStore()
   // 登录页的实验参数不是登录后可恢复的业务目标。
-  if (to.path !== '/login' && to.path !== '/initialize') authStore.originalPath = to.fullPath
+  if (to.path !== '/login' && to.path !== '/initialize' && to.path !== '/service-status') {
+    authStore.originalPath = to.fullPath
+  }
   const isAuthenticated = authStore.token !== null
 
   if (to.meta.requiresAuth && !isAuthenticated) {
