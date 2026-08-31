@@ -304,6 +304,23 @@ export interface TransferHistory {
   src_fileitem?: FileItem
 }
 
+/** 整理历史删除的单个文件步骤状态。 */
+export type TransferHistoryDeleteStepStatus = 'not_requested' | 'deleted' | 'already_missing' | 'failed'
+
+/** 后端返回的整理历史删除分项结果，供失败重试和用户反馈复用。 */
+export interface TransferHistoryDeleteResult {
+  source: {
+    status: TransferHistoryDeleteStepStatus
+    message?: string
+  }
+  destination: {
+    status: TransferHistoryDeleteStepStatus
+    message?: string
+  }
+  history: 'deleted' | 'retained' | 'not_found'
+  message?: string
+}
+
 // 下载历史记录
 export interface DownloadHistory {
   // ID
@@ -1822,6 +1839,8 @@ export interface DownloaderConf {
 
 // 通知配置
 export interface NotificationConf {
+  // 稳定通知渠道身份；显示名称变化时保持不变，用于配置保存和运行态引用
+  id: string
   // 名称
   name: string
   // 类型 telegram/wechat/vocechat/synologychat
