@@ -303,3 +303,18 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
   假失败族 IDENTICAL，放行。本轮触及 5 个 spec 单跑 72 例全绿
   （client/index/SendMessageAction/AccountSettingNotification/UserProfileView）。
 - 后端 +15 另见后端仓记录。
+
+## 2026-08-31 合并（第 26 次记录，定时任务执行）
+
+- 前端增量 **9 提交 / 18 文件（+653−30044 大头为图标清理）**：`e7f29324`
+  独立服务状态检测页面（service-status.vue + 测试）、`39e8d7ff` 壁纸轮换
+  与静态图配置、`9c7310fa` 订阅批量删除保留失败项、玻璃背景模糊延迟/
+  V3t 图标裁切/设置卡片色条/输入提示间距等 UI 修复、`28d2dba2` music
+  测试进度清理 mock。自动合并零冲突（共享面 types.ts/router/common.scss
+  双方不相交），双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ 0 警告、typecheck ✅；
+  test:run 1437 过 6F=frontend-workflow×2（CRLF）+ format-changed×4
+  （symlink/ENOENT/缓冲）+ TransferHistoryView×1——与第 24/25 轮已知
+  Windows 假失败族 IDENTICAL，放行。新增 3 个测试文件（service-status/
+  inputHintSpacing/settingCardAppearance）单跑 4 例全绿。
+- 后端 +11 另见后端仓记录。
