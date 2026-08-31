@@ -290,3 +290,16 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
   （symlink/ENOENT/缓冲）+ TransferHistoryView×1——均为已知 Windows 必假
   失败族，与第 23 轮清单 IDENTICAL，放行。新增 2 个测试文件单跑 3 例全绿。
 - 后端无增量（23 轮已接入 `3e9c2dcf4`），跳过。
+
+## 2026-08-31 合并（第 25 次记录，定时任务执行）
+
+- 前端增量 **3 提交 / 16 文件（+801−193）**：`57127dd2` v3 profile 与 auth
+  错误对齐、`b512aee6` 历史删除恢复状态暴露、`dd90d407` 通知渠道稳定身份
+  与保存交互完善。自动合并零冲突（共享面仅 src/api/types.ts，双方改动
+  不相交），双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ 0 警告、typecheck ✅；
+  test:run 1426 过 6F=frontend-workflow×2（CRLF）+ format-changed×4
+  （symlink/ENOENT/缓冲）+ TransferHistoryView×1——与第 24 轮已知 Windows
+  假失败族 IDENTICAL，放行。本轮触及 5 个 spec 单跑 72 例全绿
+  （client/index/SendMessageAction/AccountSettingNotification/UserProfileView）。
+- 后端 +15 另见后端仓记录。
