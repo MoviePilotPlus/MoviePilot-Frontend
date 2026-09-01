@@ -318,3 +318,13 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
   Windows 假失败族 IDENTICAL，放行。新增 3 个测试文件（service-status/
   inputHintSpacing/settingCardAppearance）单跑 4 例全绿。
 - 后端 +11 另见后端仓记录。
+
+## 2026-09-01 合并（第 30 次记录，定时任务执行）
+
+- 前端增量 **1 提交 / 2 文件（+54−7）**：`6274b3be` 历史批量操作限定于
+  可见记录（防跨分页误删）。自动合并零冲突，双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1437 过
+  6F=已知 Windows 假失败族 IDENTICAL（frontend-workflow×2 CRLF +
+  format-changed×4 + TransferHistoryView 2:3 poster 旧用例）；触及的
+  TransferHistoryView.spec 26 例中 25 过（唯一败例即上述已知族）。
+- 后端 +10 另见后端仓记录。
