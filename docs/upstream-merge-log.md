@@ -344,3 +344,12 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
 - 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1438 过
   6F=已知 Windows 假失败族 IDENTICAL，放行。
 - 后端 +2 另见后端仓记录。
+
+## 2026-09-02 合并（第 34 次记录，定时任务执行）
+
+- 前端增量 **2 提交 / 12 文件（+608−178）**：`90193d5d` 区分应用更新与
+  资源更新（useSystemUpdateStatus composable）、`b07d60ca` 默认头像
+  不再写入用户资料。自动合并零冲突，双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1439 过
+  6F=已知 Windows 假失败族 IDENTICAL，放行。
+- 后端 +9 另见后端仓记录。
