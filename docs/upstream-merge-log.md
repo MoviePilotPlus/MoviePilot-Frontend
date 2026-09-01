@@ -328,3 +328,11 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
   format-changed×4 + TransferHistoryView 2:3 poster 旧用例）；触及的
   TransferHistoryView.spec 26 例中 25 过（唯一败例即上述已知族）。
 - 后端 +10 另见后端仓记录。
+
+## 2026-09-01 合并（第 31 次记录，定时任务执行）
+
+- 前端增量 **1 提交 / 8 文件（+17−21）**：`e9e63b29` 默认主题改为玻璃
+  主题（theme.ts 默认值切换）。自动合并零冲突，双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1437 过
+  6F=已知 Windows 假失败族 IDENTICAL，放行。
+- 后端 +11 另见后端仓记录。
