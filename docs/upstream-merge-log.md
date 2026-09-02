@@ -353,3 +353,11 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
 - 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1439 过
   6F=已知 Windows 假失败族 IDENTICAL，放行。
 - 后端 +9 另见后端仓记录。
+
+## 2026-09-02 合并（第 36 次记录，定时任务执行）
+
+- 前端增量 **1 提交 / 2 文件（+29−1）**：`00248805` 手动检查后刷新
+  更新状态（ServiceView）。自动合并零冲突，双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1439 过
+  6F=已知 Windows 假失败族 IDENTICAL；触及的 ServiceView.spec 7 例全绿。
+- 后端 +5 另见后端仓记录。
