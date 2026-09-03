@@ -380,3 +380,22 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
     本仓 CRLF 使失配返回 -1、slice 到文件尾多算 IconBtn——**CRLF 假失败
     族新用例**（与 frontend-workflow 同根）。
 - 后端 +29 另见后端仓记录。
+
+## 2026-09-03 合并（第 38 次记录，定时任务执行）
+
+- 前端增量 **3 提交 / 218 文件（+12088−31074）**：`e105e40a` 订阅执行
+  状态轮询与展示优化、`b67c6ee4` 视觉规则编辑器（替换旧
+  CategoryEditDialog——上游删 652 行，fork 侧 0 diff 安全跟随）、
+  `6b8c0bf4` 设置工作区 UI 精修。
+- 冲突 2 文件：
+  - eslint-suppressions.json：程序化并集（git 取两侧原文件解析合并，
+    fork 187 键全保留 + 上游新增并入；上游删的 DirectoryCard no-explicit-
+    any 等豁免跟随删）；
+  - types.ts：上游中段改动（订阅字段调整 + MediaClassification 快照
+    类型）+ fork 尾部采集块（MARK 分隔）双侧叠加；fork MARK 前的
+    CategoryRule/CategoryConfig 块单独回插（首轮漏——预检 grep 抓回）。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1504 过
+  6F=已知 Windows 假失败族 IDENTICAL + 4 例定性：WorkflowActionsDialog
+  ×1 与 ServiceView×1 单跑全绿=观察者效应、TransferHistoryView×2=CRLF
+  族（37 轮已定性同根）。
+- 后端 +15 另见后端仓记录。
