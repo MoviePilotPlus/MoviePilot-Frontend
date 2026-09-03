@@ -131,6 +131,7 @@ const CollectSettings = ref<any>({
     YOUKU_DOWNLOAD_LINE: 'normal_tv',
   },
   ImageHosting: {
+    order: ['pixhost', 'imgbox', 'ipic', 'imgbb', 'panda'],
     ipic: {
       active: true,
     },
@@ -344,21 +345,30 @@ async function loadImageHostingSetting() {
       'active': true,
     },
   }
+  const defaultHostingOrder = ['pixhost', 'imgbox', 'ipic', 'imgbb', 'panda']
   try {
     const result: { [key: string]: any } = await api.get('system/setting/ImageHostingParams')
     // 接口 data 是 {value: 配置对象} 信封；未配置为 null、历史脏数据可能是非对象，
     // 且存量配置可能缺新增图床的子键——一律与默认值合并后使用，保证表单可编辑
     const stored = result?.value
     // smms 图床已停服下线：存量配置残留的 smms 子键丢弃，不参与合并
-    const { smms: _dropped, ...storedRest } = (typeof stored === 'object' && stored !== null && !Array.isArray(stored))
+    const { smms: _dropped, order: storedOrder, ...storedRest } = (typeof stored === 'object' && stored !== null && !Array.isArray(stored))
       ? stored as Record<string, any>
       : {}
     CollectSettings.value.ImageHosting = typeof stored === 'object' && stored !== null
       ? { ...defaultImageHostingSettings, ...storedRest }
       : defaultImageHostingSettings
+    // 优先级序：存量 order（校验合法图床名，缺失的按默认序补尾）回填拖拽列表
+    const validKeys = defaultHostingOrder
+    const storedList = Array.isArray(storedOrder)
+      ? storedOrder.filter((k: any) => typeof k === 'string' && validKeys.includes(k))
+      : []
+    const mergedOrder = [...storedList, ...validKeys.filter(k => !storedList.includes(k))]
+    CollectSettings.value.ImageHosting.order = mergedOrder
   } catch (error) {
     console.log(error)
   }
+  syncHostingOrder()
 }
 async function loadSiteList() {
   try {
@@ -408,12 +418,44 @@ function handleImportSuccess() {
   loadSiteList()
   $toast.success(t('setting.collect.siteSchemaImportSuccess'))
 }
+// 图床优先级拖拽列表（与 CollectSettings.ImageHosting 双向同步；
+// 顺序即优先级，主流程取第一个启用的图床）
+const hostingOrder = ref<{ key: string; [field: string]: any }[]>([])
+
+// 图床显示名（词条键映射）
+function hostingLabel(key: string) {
+  const keyMap: Record<string, string> = {
+    ipic: 'setting.collect.ipic',
+    imgbb: 'setting.collect.imgbb',
+    panda: 'setting.collect.panda',
+    imgbox: 'setting.collect.imgbox',
+    pixhost: 'setting.collect.pixhost',
+  }
+  return t(keyMap[key] || key)
+}
+
+// 从 CollectSettings.ImageHosting 合成拖拽列表（顺序 + 各图床凭据/开关）；
+// 字段以引用共享，行内编辑直接写回 ImageHosting
+function syncHostingOrder() {
+  const hosting = CollectSettings.value.ImageHosting
+  if (!hosting) return
+  hostingOrder.value = (hosting.order || []).map((key: string) => ({
+    key,
+    ...(hosting[key] || {}),
+  }))
+}
+
 // 调用API保存下载器设置
 async function saveImageHostingSetting() {
   try {
-    const imageHostingParam = CollectSettings.value.ImageHosting
-    console.warn('imageHostingParam', imageHostingParam)
-    await api.post('system/setting/ImageHostingParams', imageHostingParam)
+    // 拖拽列表回写：顺序进 order 键，行内凭据/开关回各图床子键
+    const hosting: Record<string, any> = { ...CollectSettings.value.ImageHosting }
+    for (const item of hostingOrder.value) {
+      const { key, ...fields } = item
+      hosting[key] = { ...hosting[key], ...fields }
+    }
+    hosting.order = hostingOrder.value.map(item => item.key)
+    await api.post('system/setting/ImageHostingParams', hosting)
     $toast.success(t('setting.collect.imageHostingSaveSuccess'))
     await loadImageHostingSetting()
   } catch (error) {
@@ -1095,78 +1137,68 @@ onDeactivated(() => {
         </VCardItem>
         <VCardText>
           <VForm @submit.prevent="() => {}">
-            <VRow>
-              <!-- ipic -->
-              <VCol cols="12" class="pb-2">
-                <VListSubheader class="text-lg font-bold">{{ t('setting.collect.ipic') }}</VListSubheader>
-              </VCol>
-              <VCol cols="12" md="6">
-                <VSwitch
-                  v-model="CollectSettings.ImageHosting.ipic.active"
-                  :label="t('setting.collect.active')"
-                  persistent-hint
-                />
-              </VCol>
-              <!-- imgbb -->
-              <VCol cols="12" class="pb-2">
-                <VListSubheader class="text-lg font-bold">{{ t('setting.collect.imgbb') }}</VListSubheader>
-              </VCol>
-              <VCol cols="12" md="6">
-                <VTextField
-                  v-model="CollectSettings.ImageHosting.imgbb.apikey"
-                  :label="t('setting.collect.apikey')"
-                  prepend-inner-icon="mdi-key"
-                />
-              </VCol>
-              <VCol cols="12" md="6">
-                <VSwitch v-model="CollectSettings.ImageHosting.imgbb.active" :label="t('setting.collect.active')" />
-              </VCol>
-
-              <!-- panda -->
-              <VCol cols="12" class="pb-2">
-                <VListSubheader class="text-lg font-bold">{{ t('setting.collect.panda') }}</VListSubheader>
-              </VCol>
-              <VCol cols="12" md="6">
-                <VTextField
-                  v-model="CollectSettings.ImageHosting.panda.apikey"
-                  :label="t('setting.collect.apikey')"
-                  prepend-inner-icon="mdi-key"
-                />
-              </VCol>
-              <VCol cols="12" md="6">
-                <VSwitch v-model="CollectSettings.ImageHosting.panda.active" :label="t('setting.collect.active')" />
-              </VCol>
-
-              <!-- imgbox -->
-              <VCol cols="12" class="pb-2">
-                <VListSubheader class="text-lg font-bold">{{ t('setting.collect.imgbox') }}</VListSubheader>
-              </VCol>
-              <VCol cols="12" md="6">
-                <VTextField
-                  v-model="CollectSettings.ImageHosting.imgbox.username"
-                  :label="t('setting.collect.username')"
-                  prepend-inner-icon="mdi-account"
-                />
-              </VCol>
-              <VCol cols="12" md="6">
-                <VTextField
-                  v-model="CollectSettings.ImageHosting.imgbox.password"
-                  :label="t('setting.collect.password')"
-                  prepend-inner-icon="mdi-account-key"
-                />
-              </VCol>
-              <VCol cols="12" md="6">
-                <VSwitch v-model="CollectSettings.ImageHosting.imgbox.active" :label="t('setting.collect.active')" />
-              </VCol>
-
-              <!-- pixhost -->
-              <VCol cols="12" class="pb-2">
-                <VListSubheader class="text-lg font-bold">{{ t('setting.collect.pixhost') }}</VListSubheader>
-              </VCol>
-              <VCol cols="12" md="6">
-                <VSwitch v-model="CollectSettings.ImageHosting.pixhost.active" :label="t('setting.collect.active')" />
-              </VCol>
-            </VRow>
+            <div class="text-medium-emphasis text-body-2 mb-3">
+              {{ t('setting.collect.imageHostingOrderHint') }}
+            </div>
+            <!-- 图床优先级拖拽排序列表：顺序=优先级，主流程取第一个启用的 -->
+            <draggable
+              v-model="hostingOrder"
+              handle=".cursor-move"
+              item-key="key"
+              tag="div"
+              :component-data="{ 'class': 'd-flex flex-column gap-3' }"
+            >
+              <template #item="{ element }">
+                <VCard variant="tonal" class="pa-3">
+                  <VRow align="center" dense>
+                    <VCol cols="auto" class="cursor-move">
+                      <VIcon icon="mdi-drag" />
+                    </VCol>
+                    <VCol cols="12" sm="auto" class="text-subtitle-1 font-weight-bold">
+                      {{ hostingLabel(element.key) }}
+                    </VCol>
+                    <VCol cols="12" sm="auto" offset-sm="auto">
+                      <VSwitch
+                        v-model="element.active"
+                        :label="t('setting.collect.active')"
+                        color="primary"
+                        density="compact"
+                        hide-details
+                      />
+                    </VCol>
+                  </VRow>
+                  <!-- 各图床凭据字段（免账号图床无凭据段） -->
+                  <VRow v-if="element.key === 'imgbb' || element.key === 'panda'" dense class="mt-1">
+                    <VCol cols="12" md="6">
+                      <VTextField
+                        v-model="element.apikey"
+                        :label="t('setting.collect.apikey')"
+                        prepend-inner-icon="mdi-key"
+                        density="compact"
+                      />
+                    </VCol>
+                  </VRow>
+                  <VRow v-else-if="element.key === 'imgbox'" dense class="mt-1">
+                    <VCol cols="12" md="6">
+                      <VTextField
+                        v-model="element.username"
+                        :label="t('setting.collect.username')"
+                        prepend-inner-icon="mdi-account"
+                        density="compact"
+                      />
+                    </VCol>
+                    <VCol cols="12" md="6">
+                      <VTextField
+                        v-model="element.password"
+                        :label="t('setting.collect.password')"
+                        prepend-inner-icon="mdi-account-key"
+                        density="compact"
+                      />
+                    </VCol>
+                  </VRow>
+                </VCard>
+              </template>
+            </draggable>
           </VForm>
         </VCardText>
         <VCardText>

@@ -107,6 +107,7 @@ const zhTW = {
       movieFolderFormat: '電影文件夾格式',
       imageHosting: '圖床設置',
       imageHostingDesc: '設置圖床信息，用於上傳簡介截圖',
+      imageHostingOrderHint: '拖拽調整優先級：採集按列表順序取第一個啟用的圖床；發佈到限定圖床白名單的站點（如 SSD）時自動轉存；AilMWeb 製作組固定使用熊貓圖床。',
       imageHostingSaveSuccess: '圖床設置保存成功',
       imageHostingSaveFailed: '圖床設置保存失敗',
       defaultImageHostingNotice: '未設置默認圖床，已將【{name}】作為默認圖床',

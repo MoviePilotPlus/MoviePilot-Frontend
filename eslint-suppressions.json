@@ -1233,9 +1233,7 @@
     "@typescript-eslint/ban-ts-comment": {
       "count": 1
     },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 34
-    },
+    "@typescript-eslint/no-explicit-any": 37,
     "@typescript-eslint/no-unused-vars": {
       "count": 12
     },

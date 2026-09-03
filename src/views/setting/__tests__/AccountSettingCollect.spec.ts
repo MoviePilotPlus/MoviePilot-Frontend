@@ -202,6 +202,82 @@ describe('AccountSettingCollect', () => {
     })
   })
 
+  it('图床保存载荷含 order 优先级序（拖拽列表顺序回写）', async () => {
+    await renderCollectSettings()
+
+    const hostingCard = getCardByTitle('图床设置')
+    await fireEvent.click(hostingCard.getAllByRole('button', { name: /保存/ })[0])
+    await waitFor(() => {
+      const call = mocks.apiPost.mock.calls.find(([path]) => path === 'system/setting/ImageHostingParams')
+      expect(call).toBeTruthy()
+      const payload = call?.[1] as Record<string, unknown>
+      // fixture 无 order：保存时按默认序回填（存量用户无感知升级）
+      expect(Array.isArray(payload.order)).toBe(true)
+      expect(payload.order).toEqual(['pixhost', 'imgbox', 'ipic', 'imgbb', 'panda'])
+      // 各图床凭据子键随载荷提交
+      expect(payload.imgbb).toMatchObject({ apikey: 'bb-key' })
+    })
+  })
+
+  it('存量 order 缺失图床时按默认序补尾并校验合法值', async () => {
+    mocks.apiGet.mockImplementation((endpoint: string) => {
+      if (endpoint === 'system/setting/ImageHostingParams')
+        return settingEnvelope({
+          order: ['imgbb', 'unknown-host', 'panda'],
+          imgbb: { apikey: 'bb-key', active: true },
+          panda: { apikey: '', active: true },
+        })
+      if (endpoint === 'system/env') return systemEnvFixture
+      if (endpoint === 'system/setting/MediaServers') return settingEnvelope(null)
+      if (endpoint === 'system/setting/TEAM_PARAMS') return settingEnvelope(teamParamsFixture)
+      if (endpoint.startsWith('system/setting/')) return settingEnvelope(null)
+      if (endpoint === 'site/' || endpoint === 'siteschema/') return []
+      throw new Error(`Unexpected GET ${endpoint}`)
+    })
+
+    await renderCollectSettings()
+
+    const hostingCard = getCardByTitle('图床设置')
+    await fireEvent.click(hostingCard.getAllByRole('button', { name: /保存/ })[0])
+    await waitFor(() => {
+      const call = mocks.apiPost.mock.calls.find(([path]) => path === 'system/setting/ImageHostingParams')
+      expect(call).toBeTruthy()
+      const order = (call?.[1] as Record<string, unknown>).order
+      // 未知值过滤；用户序在前；缺失的 pixhost/imgbox/ipic 按默认序补尾
+      expect(order).toEqual(['imgbb', 'panda', 'pixhost', 'imgbox', 'ipic'])
+    })
+  })
+
+  it('拖拽列表按 order 渲染图床行且凭据回填', async () => {
+    mocks.apiGet.mockImplementation((endpoint: string) => {
+      if (endpoint === 'system/setting/ImageHostingParams')
+        return settingEnvelope({
+          order: ['imgbox', 'imgbb', 'pixhost'],
+          imgbox: { username: 'box-user', password: 'box-pass', active: true },
+          imgbb: { apikey: 'bb-key', active: true },
+          pixhost: { active: true },
+        })
+      if (endpoint === 'system/env') return systemEnvFixture
+      if (endpoint === 'system/setting/MediaServers') return settingEnvelope(null)
+      if (endpoint === 'system/setting/TEAM_PARAMS') return settingEnvelope(teamParamsFixture)
+      if (endpoint.startsWith('system/setting/')) return settingEnvelope(null)
+      if (endpoint === 'site/' || endpoint === 'siteschema/') return []
+      throw new Error(`Unexpected GET ${endpoint}`)
+    })
+
+    await renderCollectSettings()
+
+    const hostingCard = getCardByTitle('图床设置')
+    const values = Array.from(hostingCard.element.querySelectorAll('input'))
+      .map(el => (el as HTMLInputElement).value)
+    // 用户序 imgbox 首位：账号/密码回填
+    expect(values).toContain('box-user')
+    expect(values).toContain('box-pass')
+    expect(values).toContain('bb-key')
+    // 拖拽把手渲染（顺序可调）
+    expect(hostingCard.element.querySelectorAll('.cursor-move').length).toBeGreaterThanOrEqual(3)
+  })
+
   it('保存 Cookie 时 POST 原值到对应 system/setting 键', async () => {
     await renderCollectSettings()
 

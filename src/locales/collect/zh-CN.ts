@@ -107,6 +107,7 @@ const zhCN = {
       movieFolderFormat: '电影文件夹格式',
       imageHosting: '图床设置',
       imageHostingDesc: '设置图床信息，用于上传简介截图',
+      imageHostingOrderHint: '拖拽调整优先级：采集按列表顺序取第一个启用的图床；发布到限定图床白名单的站点（如 SSD）时自动转存；AilMWeb 制作组固定使用熊猫图床。',
       imageHostingSaveSuccess: '图床设置保存成功',
       imageHostingSaveFailed: '图床设置保存失败',
       defaultImageHostingNotice: '未设置默认图床，已将【{name}】作为默认图床',

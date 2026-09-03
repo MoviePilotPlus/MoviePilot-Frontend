@@ -111,6 +111,7 @@ const enUS = {
       movieFolderFormat: 'Movie Folder Format',
       imageHosting: 'Image Hosting',
       imageHostingDesc: 'Configuration for screenshot uploads',
+      imageHostingOrderHint: 'Drag to reorder priority: uploads use the first enabled host in the list; sites with a host whitelist (e.g. SSD) rehost automatically; the AilMWeb team always uses Panda.',
       imageHostingSaveSuccess: 'Image hosting settings saved',
       imageHostingSaveFailed: 'Failed to save image hosting settings',
       defaultImageHostingNotice: 'No default image host set, [{name}] has been set as default',
