@@ -812,9 +812,9 @@ export interface TmdbEpisode {
   // 评分
   vote_average?: number
   // 演职人员
-  crew: Object[]
+  crew: object[]
   // 嘉宾
-  guest_stars: Object[]
+  guest_stars: object[]
 }
 
 // TMDB人物信息

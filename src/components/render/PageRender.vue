@@ -53,7 +53,7 @@ async function commonAction(api_path: string, method: string, params = {}) {
 }
 
 // 组装事件
-let componentEvents = reactive<{ [key: string]: any }>({})
+const componentEvents = reactive<{ [key: string]: any }>({})
 watchEffect(() => {
   if (!isNullOrEmptyObject(props.config?.events)) {
     for (const key in props.config?.events) {

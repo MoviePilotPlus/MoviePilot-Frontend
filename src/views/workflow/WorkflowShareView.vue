@@ -77,7 +77,7 @@ watch(
 
 // 拼装参数
 function getParams() {
-  let params = {
+  const params = {
     page: page.value,
     count: 30,
     name: keyword.value,

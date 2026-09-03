@@ -89,7 +89,7 @@ function getTags() {
   if (!tags)
     return []
   // 明确指定 tagList 的类型为 string 数组，避免隐式的 any[] 类型
-  let tagList: string[] = []
+  const tagList: string[] = []
   tags.forEach((t: string) => {
     const tag = tagOptions[t as keyof typeof tagOptions]
     // 未映射的标签跳过，避免渲染出空芯片

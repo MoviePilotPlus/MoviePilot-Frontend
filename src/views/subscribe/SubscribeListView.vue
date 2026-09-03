@@ -72,7 +72,7 @@ interface SubscribeBatchState {
 }
 
 // 是否刷新过
-let isRefreshed = ref(false)
+const isRefreshed = ref(false)
 
 // 刷新状态
 const loading = ref(false)

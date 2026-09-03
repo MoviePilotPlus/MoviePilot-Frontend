@@ -131,7 +131,7 @@ const loadingGenerations = new Set<number>()
 
 // 拼装参数
 function getParams() {
-  let params: { [key: string]: any } = {
+  const params: { [key: string]: any } = {
     page: page.value,
     count: 30,
     name: keyword.value,
