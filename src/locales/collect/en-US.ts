@@ -123,6 +123,7 @@ const enUS = {
       imgbb: 'ImgBB',
       panda: 'Panda HD',
       imgbox: 'Imgbox',
+      pixhost: 'Pixhost (no account required)',
       siteSchema: 'Site Template',
       siteSchemaDesc: 'Site template configuration',
       siteSchemaImportHint: 'Select JSON file to batch import site templates',

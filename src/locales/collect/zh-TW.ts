@@ -119,6 +119,7 @@ const zhTW = {
       imgbb: 'ImgBB',
       panda: '熊貓高清',
       imgbox: 'Imgbox',
+      pixhost: 'Pixhost（免帳號）',
       siteSchema: '站點模闆',
       siteSchemaDesc: '配置站點模闆',
       siteSchemaImportHint: '選擇JSON文件批量導入站點模闆',

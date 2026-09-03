@@ -147,6 +147,9 @@ const CollectSettings = ref<any>({
       password: '',
       active: true,
     },
+    pixhost: {
+      active: true,
+    },
   },
 })
 
@@ -335,6 +338,9 @@ async function loadImageHostingSetting() {
     'imgbox': {
       'username': '',
       'password': '',
+      'active': true,
+    },
+    'pixhost': {
       'active': true,
     },
   }
@@ -1151,6 +1157,14 @@ onDeactivated(() => {
               </VCol>
               <VCol cols="12" md="6">
                 <VSwitch v-model="CollectSettings.ImageHosting.imgbox.active" :label="t('setting.collect.active')" />
+              </VCol>
+
+              <!-- pixhost -->
+              <VCol cols="12" class="pb-2">
+                <VListSubheader class="text-lg font-bold">{{ t('setting.collect.pixhost') }}</VListSubheader>
+              </VCol>
+              <VCol cols="12" md="6">
+                <VSwitch v-model="CollectSettings.ImageHosting.pixhost.active" :label="t('setting.collect.active')" />
               </VCol>
             </VRow>
           </VForm>

@@ -119,6 +119,7 @@ const zhCN = {
       imgbb: 'ImgBB',
       panda: '熊猫高清',
       imgbox: 'Imgbox',
+      pixhost: 'Pixhost（免账号）',
       siteSchema: '站点模板',
       siteSchemaDesc: '配置站点模板',
       siteSchemaImportHint: '选择JSON文件批量导入站点模板',
