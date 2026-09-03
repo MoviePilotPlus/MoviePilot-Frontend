@@ -348,6 +348,87 @@ describe('SubscribeCard display and progress', () => {
     expect(screen.queryByText('已暂停')).not.toBeInTheDocument()
     expect(container.querySelector('.subscribe-card')).not.toHaveClass('subscribe-card-paused')
   })
+
+  it.each([480, 1024])('shows governed execution state and safe failure detail at %ipx', async width => {
+    setViewport(width)
+    await renderCard({
+      execution_status: {
+        batch_id: 'batch-1',
+        can_cancel: true,
+        can_retry: false,
+        current_site_id: 9,
+        error: '站点 9 冷却中',
+        phase: 'waiting_site_budget',
+        requires_reconciliation: false,
+        state: 'waiting_site_budget',
+        updated_at: '2026-09-01T01:00:00+00:00',
+      },
+    })
+
+    expect(screen.getByText('等待站点额度')).toBeInTheDocument()
+    expect(screen.getByTitle('站点 9 冷却中')).toBeInTheDocument()
+  })
+
+  it.each([480, 1024])('briefly shows a fresh completion then restores normal metadata at %ipx', async width => {
+    setViewport(width)
+    const { media, rerender, unmount } = await renderCard({
+      lack_episode: 4,
+      state: 'R',
+      total_episode: 10,
+      type: '电视剧',
+    })
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-02T12:00:00+08:00'))
+
+    try {
+      await rerender({
+        media: {
+          ...media,
+          execution_status: {
+            can_cancel: false,
+            can_retry: false,
+            phase: 'completed',
+            requires_reconciliation: false,
+            state: 'completed',
+            updated_at: new Date().toISOString(),
+          },
+        },
+      })
+
+      expect(screen.getByText('执行完成')).toBeInTheDocument()
+      if (width < 600) expect(screen.queryByText('6 / 10')).not.toBeInTheDocument()
+
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      expect(screen.queryByText('执行完成')).not.toBeInTheDocument()
+      expect(screen.getByText('6 / 10')).toBeInTheDocument()
+      if (width >= 600) expect(screen.getByText(formatDateDifference(media.last_update))).toBeInTheDocument()
+    } finally {
+      unmount()
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not revive an expired completion after the card is reloaded', async () => {
+    setViewport(480)
+    await renderCard({
+      execution_status: {
+        can_cancel: false,
+        can_retry: false,
+        phase: 'completed',
+        requires_reconciliation: false,
+        state: 'completed',
+        updated_at: new Date(Date.now() - 6_000).toISOString(),
+      },
+      lack_episode: 4,
+      state: 'R',
+      total_episode: 10,
+      type: '电视剧',
+    })
+
+    expect(screen.queryByText('执行完成')).not.toBeInTheDocument()
+    expect(screen.getByText('6 / 10')).toBeInTheDocument()
+  })
 })
 
 describe('SubscribeCard interaction boundaries', () => {
@@ -443,7 +524,7 @@ describe('SubscribeCard item operations', () => {
   })
 
   it.each([
-    ['success', 200, { success: true }, 'success', '卡片测试媒体 提交搜索请求成功！'],
+    ['success', 200, { success: true }, 'success', '卡片测试媒体 已提交搜索请求'],
     ['business failure', 200, { message: 'rejected', success: false }, 'error', '请求失败，请稍后重试'],
     ['HTTP failure', 500, { message: 'server down', success: false }, 'error', '请求失败，请稍后重试'],
   ] as const)('reports search %s through the exact endpoint', async (_case, status, response, toastType, message) => {

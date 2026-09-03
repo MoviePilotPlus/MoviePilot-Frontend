@@ -229,6 +229,14 @@ const PassthroughStub = defineComponent({
   },
 })
 
+const IconButtonStub = defineComponent({
+  name: 'IconBtn',
+  inheritAttrs: false,
+  setup(_props, { attrs, slots }) {
+    return () => h('button', { ...attrs, type: 'button' }, slots.default?.())
+  },
+})
+
 const EmptyStub = defineComponent({
   inheritAttrs: false,
   setup() {
@@ -338,7 +346,7 @@ async function renderHistory(initialRoute = '/history') {
         VDataTableVirtual: HistoryTableStub,
         VImg: ImageStub,
         VInfiniteScroll: InfiniteScrollStub,
-        IconBtn: PassthroughStub,
+        IconBtn: IconButtonStub,
         VList: PassthroughStub,
         VListItem: ListItemStub,
         VListItemTitle: ListItemTitleStub,
@@ -436,6 +444,43 @@ describe('TransferHistoryView', () => {
     await renderHistory('/history?search=失败&status=failed')
 
     await waitFor(() => expect(requests).toEqual([{ count: 50, page: 1, status: false, title: '失败' }]))
+  })
+
+  it('joins the desktop status filter to search and moves the mobile filter into the titlebar menu', () => {
+    const mobileTitlebarSource = transferHistorySource.slice(
+      transferHistorySource.indexOf('<div class="transfer-history-mobile-titlebar__actions">'),
+      transferHistorySource.indexOf('<VCombobox\n      key="search_mobile"'),
+    )
+
+    expect(transferHistorySource).toContain('class="transfer-history-desktop-filter-group"')
+    expect(transferHistorySource).toContain('class="text-disabled transfer-history-desktop-search"')
+    expect(transferHistorySource).toContain('class="transfer-history-desktop-status"')
+    expect(transferHistorySource).toContain('border-start-end-radius: 0;')
+    expect(transferHistorySource).toContain('border-start-start-radius: 0;')
+    expect(transferHistorySource).toContain('data-menu-activator="history-status-filter-btn"')
+    expect(transferHistorySource).not.toContain('class="transfer-history-mobile-status"')
+    expect(mobileTitlebarSource.match(/<IconBtn/g)).toHaveLength(2)
+    expect(mobileTitlebarSource).toContain('<VIcon icon="mdi-filter-multiple-outline" />')
+    expect(mobileTitlebarSource).toContain('<VIcon icon="mdi-checkbox-multiple-marked-outline" />')
+    expect(mobileTitlebarSource).not.toContain('settings-icon-button')
+  })
+
+  it('selects a mobile status from the titlebar dropdown and refreshes with the explicit status query', async () => {
+    mocks.desktop = false
+    const requests: Array<Record<string, unknown>> = []
+    mocks.apiGet.mockImplementation((path: string, config?: { params?: Record<string, unknown> }) => {
+      if (path === 'system/setting/public/Storages') return Promise.resolve(storageResponse())
+      requests.push(config?.params ?? {})
+      return Promise.resolve(historyResponse([]))
+    })
+
+    const { router } = await renderHistory()
+    await fireEvent.click(screen.getByRole('button', { name: '状态筛选' }))
+    await fireEvent.click(screen.getByRole('button', { name: '失败' }))
+
+    await waitFor(() => expect(router.currentRoute.value.query.status).toBe('failed'))
+    await fireEvent.click(screen.getByRole('button', { name: '加载下一页' }))
+    await waitFor(() => expect(requests).toContainEqual({ count: 25, page: 1, status: false, title: '' }))
   })
 
   it('prevents an older desktop request from replacing a newer route search', async () => {
