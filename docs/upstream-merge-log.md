@@ -399,3 +399,18 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
   ×1 与 ServiceView×1 单跑全绿=观察者效应、TransferHistoryView×2=CRLF
   族（37 轮已定性同根）。
 - 后端 +15 另见后端仓记录。
+
+## 2026-09-03 合并（第 39 次记录，定时任务执行）
+
+- 前端增量 **2 提交 / 14 文件（+395−196）**：`2b643cfd` 分类设置控件
+  精修、`a5ffdb27` 分类标签去重（新增 mediaClassification.ts 工具）。
+  自动合并零冲突，双亲验证通过。
+- 三件套：install --immutable ✅ typecheck ✅；lint 两步修复：
+  1. fork 侧 AccountSettingCollect.vue 的豁免是**数字简写形态**
+     （`"no-explicit-any": 37`）——上游 38 轮 eslint 升级后只认
+     `{count}` 对象形态，简写静默失效爆 37 错——程序化规范化；
+  2. 修完后 prune-suppressions 清上游已删文件（CategoryEditDialog
+     等）的 stale 豁免（-50 行；注意必须先修真实报错再 prune，
+     否则 prune 会连带清掉 fork 仍有效的豁免）。
+  test:run 1505 过 8F=已知 Windows 假失败族 IDENTICAL。
+- 后端 +5 另见后端仓记录。
