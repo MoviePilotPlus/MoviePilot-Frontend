@@ -361,3 +361,22 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
 - 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1439 过
   6F=已知 Windows 假失败族 IDENTICAL；触及的 ServiceView.spec 7 例全绿。
 - 后端 +5 另见后端仓记录。
+
+## 2026-09-03 合并（第 37 次记录，定时任务执行）
+
+- 前端增量 **10 提交 / 28 文件（+997−131）**：`3a879744` 订阅治理前端
+  （msw handlers）、`ae0a423d` 工作流编辑器连线恢复、`92464b75` 空通知
+  渠道配置处理、`849a43be/880ac5c2` 历史状态筛选布局与移动端图标、
+  `c5d4b9ee` PWA favicon 透明度、`f5f690ba` 资源更新即时轮询、
+  `3f5768dc` 订阅完成后恢复卡片元数据、`29fd83ed/fecf8089` 目录卡片/
+  玻璃控件样式。自动合并零冲突（共享面 test.yml/types.ts 不相交），
+  双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1459 过
+  6F=已知 Windows 假失败族 IDENTICAL + 2 例新定性：
+  - WorkflowActionsDialog data contract：单跑 21 例全绿=分片观察者效应
+    （2104ms 慢用例）；
+  - TransferHistoryView "status filter joins search"：spec 与组件与上游
+    逐字节一致——失败根因是测试用 `indexOf('<VCombobox\n...')` 抽段，
+    本仓 CRLF 使失配返回 -1、slice 到文件尾多算 IconBtn——**CRLF 假失败
+    族新用例**（与 frontend-workflow 同根）。
+- 后端 +29 另见后端仓记录。
