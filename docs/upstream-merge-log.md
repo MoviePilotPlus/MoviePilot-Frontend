@@ -444,3 +444,12 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
 - 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1575 过
   9F=已知 Windows 假失败族 IDENTICAL（含 glassOverlayMaterial CRLF 例）。
 - 后端 +9 另见后端仓记录。
+
+## 2026-09-05 合并（第 44 次记录，定时任务执行）
+
+- 前端增量 **2 提交 / 26 文件（+398−453）**：`d64b0ad8` 分类策略编辑
+  器控件精修、`79ab32b0` 订阅状态 tooltip 绑定完整状态。自动合并零
+  冲突，双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1574 过
+  9F=已知 Windows 假失败族 IDENTICAL。
+- 后端 +6 另见后端仓记录。
