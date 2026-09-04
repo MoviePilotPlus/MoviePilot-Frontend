@@ -226,9 +226,19 @@ function handleDynamicMenuItemClick(item: DynamicButtonMenuItem) {
 
 <template>
   <Teleport v-if="shouldRenderFooterNav" to="body">
-    <div v-show="shouldRevealFooterNav" class="footer-nav-container">
+    <div
+      v-show="shouldRevealFooterNav"
+      class="footer-nav-container"
+      :class="{ 'footer-nav-container--with-accessory': showDynamicButton }"
+    >
       <TransitionGroup name="footer-nav" tag="div" class="footer-nav-group">
-        <VCard key="main-nav" elevation="3" class="footer-nav-card border" rounded="pill">
+        <VCard
+          key="main-nav"
+          data-footer-nav-role="primary"
+          elevation="3"
+          class="footer-nav-card border"
+          rounded="pill"
+        >
           <VCardText class="footer-card-content">
             <!-- 添加指示器 -->
             <div ref="indicator" class="nav-indicator"></div>
@@ -245,6 +255,7 @@ function handleDynamicMenuItemClick(item: DynamicButtonMenuItem) {
                 rounded="pill"
                 :class="{ 'footer-nav-btn-active': currentMenu === menu.to }"
                 :value="menu.to"
+                :aria-label="menu.title"
               >
                 <div class="btn-content">
                   <VIcon :icon="menu.icon" size="32"></VIcon>
@@ -262,6 +273,7 @@ function handleDynamicMenuItemClick(item: DynamicButtonMenuItem) {
                 class="footer-nav-btn"
                 :class="{ 'footer-nav-btn-active': currentMenu === '/apps' }"
                 value="/apps"
+                :aria-label="t('nav.more')"
               >
                 <div class="btn-content">
                   <VIcon icon="mdi-dots-horizontal" size="32"></VIcon>
@@ -274,6 +286,7 @@ function handleDynamicMenuItemClick(item: DynamicButtonMenuItem) {
         <VCard
           v-if="showDynamicButton"
           key="dynamic-btn"
+          data-footer-nav-role="accessory"
           elevation="3"
           class="footer-nav-card dynamic-btn-card border"
           rounded="pill"
@@ -332,6 +345,13 @@ function handleDynamicMenuItemClick(item: DynamicButtonMenuItem) {
   pointer-events: none;
 }
 
+// 动态按钮脱离主导航布局后，预留其最大宽度和间距，保持整个 Footer 的视觉中心不偏移。
+.footer-nav-container--with-accessory {
+  --footer-nav-accessory-space: 60px;
+
+  padding-inline-end: calc(var(--footer-nav-accessory-space) + 2px);
+}
+
 // 移动端两个设置面板都是全屏展示，打开时隐藏底部导航，避免不可见控件继续参与焦点和合成。
 html[data-theme-customizer-open='true'],
 html[data-agent-assistant-open='true'] {
@@ -343,14 +363,10 @@ html[data-agent-assistant-open='true'] {
 }
 
 .footer-nav-group {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-
-  // 按钮卡片之间的间距
-  > .v-card + .v-card {
-    margin-inline-start: 2px; // 减少间距
-  }
 }
 
 .footer-nav-card {
@@ -360,7 +376,11 @@ html[data-agent-assistant-open='true'] {
   backdrop-filter: blur(24px);
   background-color: rgba(var(--v-theme-surface), 0.6);
   pointer-events: auto;
-  transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+  transition:
+    border-radius 0.3s cubic-bezier(0.25, 1, 0.5, 1),
+    max-inline-size 0.3s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.2s ease,
+    transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
   will-change: transform, max-inline-size, opacity;
 
   --app-control-radius: var(--app-vuetify-rounded-pill);
@@ -427,7 +447,6 @@ html[data-agent-assistant-open='true'] {
     span {
       overflow: hidden;
       text-overflow: ellipsis;
-      transform-origin: center;
       white-space: nowrap;
     }
   }
@@ -435,9 +454,14 @@ html[data-agent-assistant-open='true'] {
 
 // 动态按钮卡片样式
 .dynamic-btn-card {
-  block-size: auto;
+  position: absolute;
+  block-size: 48px;
+  inset-block: 0;
+  inset-inline-start: calc(100% + 2px);
   inline-size: auto;
-  max-inline-size: 60px;
+  margin-block: auto !important;
+  margin-inline: 0 !important;
+  max-inline-size: var(--footer-nav-accessory-space, 60px);
   min-block-size: 0;
 
   .footer-card-content {
@@ -477,8 +501,22 @@ html[data-agent-assistant-open='true'] {
   transform: translateX(20px);
 }
 
+[dir='rtl'] .footer-nav-enter-from,
+[dir='rtl'] .footer-nav-leave-to {
+  transform: translateX(-20px);
+}
+
 .footer-nav-move {
   transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .footer-nav-card,
+  .footer-nav-enter-active,
+  .footer-nav-leave-active,
+  .footer-nav-move {
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @keyframes fade-in {
