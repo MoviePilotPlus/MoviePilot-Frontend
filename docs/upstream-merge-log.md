@@ -414,3 +414,14 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
      否则 prune 会连带清掉 fork 仍有效的豁免）。
   test:run 1505 过 8F=已知 Windows 假失败族 IDENTICAL。
 - 后端 +5 另见后端仓记录。
+
+## 2026-09-04 合并（第 41 次记录，定时任务执行）
+
+- 前端增量 **8 提交 / 232 文件（+3995−31389）**：`1f3f7598` 响应式
+  应用壳层与滚动顶栏重构（useShellScrollState）、`5e385241` 分类配置
+  与审阅 UI 精修、`455ed07a/0d7640c1/bab43700` 移动端底栏三连修、
+  `565c7928` 目录设置打开分类规则、`e8ae7e5d` 更新提醒浮层材质。
+  自动合并零冲突（共享面 setting.vue/i18n-menu 不相交），双亲通过。
+- 三件套：install --immutable ✅ lint ✅（不带 --fix——坑 29）typecheck ✅；
+  test:run 1575 过 9F=已知 Windows 假失败族 IDENTICAL。
+- 后端 +8 另见后端仓记录。
