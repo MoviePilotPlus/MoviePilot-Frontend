@@ -425,3 +425,14 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
 - 三件套：install --immutable ✅ lint ✅（不带 --fix——坑 29）typecheck ✅；
   test:run 1575 过 9F=已知 Windows 假失败族 IDENTICAL。
 - 后端 +8 另见后端仓记录。
+
+## 2026-09-04 合并（第 42 次记录，定时任务执行）
+
+- 前端增量 **3 提交 / 11 文件（+192−53）**：`199eee0a` 历史筛选组与
+  错误消息精修、`c6fc6caf` 分类源回退去重边框、`a8915721` 底栏配件
+  组居中（notification.ts 工具抽取）。自动合并零冲突，双亲通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1574 过
+  9F=已知 Windows 假失败族（8 旧例 + glassOverlayMaterial×1 新例定性：
+  spec indexOf 含 `\n` 字面量 needle 在 CRLF 工作树失配返回 -1——
+  TransferHistoryView 同根 CRLF 族；纯上游树同败佐证）。
+- 后端本轮终止（用户本地未提交改动与上游增量同文件冲突，见报告）。
