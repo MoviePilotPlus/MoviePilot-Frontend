@@ -436,3 +436,11 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
   spec indexOf 含 `\n` 字面量 needle 在 CRLF 工作树失配返回 -1——
   TransferHistoryView 同根 CRLF 族；纯上游树同败佐证）。
 - 后端本轮终止（用户本地未提交改动与上游增量同文件冲突，见报告）。
+
+## 2026-09-05 合并（第 43 次记录，定时任务执行）
+
+- 前端增量 **1 提交 / 4 文件（+40−5）**：`afeae0b4` 分类规则开关
+  保留条件组。自动合并零冲突，双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1575 过
+  9F=已知 Windows 假失败族 IDENTICAL（含 glassOverlayMaterial CRLF 例）。
+- 后端 +9 另见后端仓记录。
