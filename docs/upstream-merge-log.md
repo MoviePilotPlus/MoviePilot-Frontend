@@ -476,3 +476,16 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
   test:run 1601 过 8F=已知 Windows 假失败族 IDENTICAL + dashboard
   cached profile×1 与 WorkflowActionsDialog×1 单跑全绿=观察者效应。
 - 后端 +12 另见后端仓记录。
+
+## 2026-09-05 合并（第 47 次记录，定时任务执行）
+
+- 前端增量 **1 提交 / 5 文件（+54−16）**：`e6d11030` 修复整理历史筛选
+  框与自动分类弹窗对齐。自动合并零冲突，双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1602 过
+  7F=已知 Windows 假失败族 IDENTICAL + 新例定性 3：
+  - TransferHistoryView "native outlined alignment"——同 spec 文件
+    CRLF 族新断言（indexOf 根因同族）；
+  - eslint-config "允许图片别名" 70s 超时——单跑 48 例全绿=机器负载
+    （当轮后端性能采样 82-127s 极端值同窗口佐证）；
+  - WorkflowActionsDialog——单跑全绿=观察者效应。
+- 后端 +11 另见后端仓记录。
