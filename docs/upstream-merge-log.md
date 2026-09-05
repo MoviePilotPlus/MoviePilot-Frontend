@@ -453,3 +453,14 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
 - 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1574 过
   9F=已知 Windows 假失败族 IDENTICAL。
 - 后端 +6 另见后端仓记录。
+
+## 2026-09-05 合并（第 45 次记录，定时任务执行）
+
+- 前端增量 **5 提交 / 12 文件（+1240−145）**：`653a912b` 转移手动
+  审核任务暴露到队列（TransferManualReviewDialog 新组件 + 测试）、
+  `6e6d03b5/2aacffb9` 手动审核对话框移动端优化与警告保持可见、
+  `608e4ae2/e95505a0` 分类移动端预览与规则切换高度。自动合并零冲突，
+  双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1578 过
+  7F=已知 Windows 假失败族 IDENTICAL。
+- 后端 +11 另见后端仓记录。
