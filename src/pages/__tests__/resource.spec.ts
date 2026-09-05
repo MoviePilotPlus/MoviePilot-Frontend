@@ -1,7 +1,7 @@
 import type { Context, SubtitleInfo } from '@/api/types'
 import ResourcePage from '@/pages/resource.vue'
 import { DEFAULT_PERMISSIONS } from '@/utils/permission'
-import { fireEvent, screen, waitFor } from '@testing-library/vue'
+import { fireEvent, screen, waitFor, within } from '@testing-library/vue'
 import { renderWithProviders } from '@tests/support/render'
 import { defineComponent, nextTick } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -208,12 +208,14 @@ const TorrentFilterBarStub = defineComponent({
   `,
 })
 
-const NoDataFoundStub = defineComponent({
+const ResourceSearchEmptyStateStub = defineComponent({
   props: {
-    errorDescription: { type: String, default: '' },
-    errorTitle: { type: String, default: '' },
+    description: { type: String, default: '' },
+    query: { type: String, default: '' },
+    title: { type: String, default: '' },
   },
-  template: '<section data-testid="no-data">{{ errorTitle }} {{ errorDescription }}</section>',
+  template:
+    '<section role="status" :aria-label="title" data-testid="resource-empty-state">{{ title }} {{ description }} {{ query }}<slot name="actions" /></section>',
 })
 
 const PassThroughStub = defineComponent({
@@ -233,8 +235,8 @@ const RefreshButtonStub = defineComponent({
 const pageStubs = {
   IconBtn: RefreshButtonStub,
   LoadingBanner: PassThroughStub,
-  NoDataFound: NoDataFoundStub,
   ProgressiveCardGrid: ProgressiveCardGridStub,
+  ResourceSearchEmptyState: ResourceSearchEmptyStateStub,
   SubtitleCard: SubtitleCardStub,
   SubtitleItem: SubtitleItemStub,
   Teleport: true,
@@ -521,6 +523,47 @@ describe('resource page search flow', () => {
     })
   })
 
+  it('ignores malformed cached entries while restoring valid previous results', async () => {
+    const malformed = {
+      meta_info: createTorrent().meta_info,
+      title: '被错误响应模型展平的缓存资源',
+    } as unknown as Context
+    mocks.apiGet.mockResolvedValueOnce({
+      success: true,
+      data: {
+        params: { keyword: '上次关键词', result_type: 'torrent' },
+        results: [malformed, createTorrent({ title: '重启后恢复的资源' })],
+      },
+    })
+
+    await renderResource()
+
+    expect(await screen.findByText('重启后恢复的资源')).toBeInTheDocument()
+    expect(screen.getByTestId('torrent-filter-bar')).toBeInTheDocument()
+    expect(screen.queryByText('被错误响应模型展平的缓存资源')).not.toBeInTheDocument()
+  })
+
+  it('shows a clean empty state when cached results contain no renderable resources', async () => {
+    const malformed = {
+      meta_info: createTorrent().meta_info,
+      title: '被错误响应模型展平的缓存资源',
+    } as unknown as Context
+    mocks.apiGet.mockResolvedValueOnce({
+      success: true,
+      data: {
+        params: { keyword: '上次关键词', result_type: 'torrent' },
+        results: Array.from({ length: 74 }, () => malformed),
+      },
+    })
+
+    await renderResource()
+
+    const emptyState = await screen.findByRole('status', { name: '没有找到匹配的资源' })
+    expect(emptyState).toHaveTextContent('可以重新搜索，或调整关键词和站点范围后再试。')
+    expect(emptyState).not.toHaveTextContent('74')
+    expect(screen.queryByTestId('torrent-filter-bar')).not.toBeInTheDocument()
+  })
+
   it('migrates a legacy composite media keyword only when restoring local search state', async () => {
     localStorage.setItem(
       'MP_ResourceSearchParams',
@@ -575,6 +618,50 @@ describe('resource page search flow', () => {
     expect(mocks.apiGet).not.toHaveBeenCalled()
   })
 
+  it('keeps the search context visible and can retry directly from the empty state', async () => {
+    await renderResource({
+      path: '/resource',
+      query: { keyword: '冷门资源', result_type: 'torrent' },
+    })
+    const source = await latestEventSource()
+    finishStream(source, [])
+
+    const emptyState = await screen.findByRole('status', { name: '没有找到匹配的资源' })
+    expect(emptyState).toHaveTextContent('可以重新搜索，或调整关键词和站点范围后再试。')
+    expect(emptyState).toHaveTextContent('冷门资源')
+    expect(screen.queryByTestId('torrent-filter-bar')).not.toBeInTheDocument()
+
+    await fireEvent.click(within(emptyState).getByRole('button', { name: '重新搜索' }))
+
+    const retrySource = await latestEventSource(2)
+    expect(new URL(retrySource.url).searchParams.get('keyword')).toBe('冷门资源')
+    finishStream(retrySource, [])
+  })
+
+  it('offers to clear filters when existing resources are hidden by the current filter', async () => {
+    await renderResource({
+      path: '/resource',
+      query: { keyword: '筛选空态', result_type: 'torrent' },
+    })
+    const source = await latestEventSource()
+    finishStream(source, [createTorrent({ site: 'Site B', title: '筛选后可恢复资源' })])
+    expect(await screen.findByText('筛选后可恢复资源')).toBeInTheDocument()
+
+    await fireEvent.click(screen.getByRole('button', { name: '筛选 Site A' }))
+
+    const emptyState = await screen.findByRole('status', { name: '当前筛选条件没有匹配项' })
+    expect(emptyState).toHaveTextContent('清除筛选后可查看全部搜索结果。')
+    expect(emptyState).not.toHaveTextContent('1 个资源')
+    expect(screen.queryByTestId('torrent-filter-bar')).not.toBeInTheDocument()
+    expect(screen.queryByText('筛选后可恢复资源')).not.toBeInTheDocument()
+
+    await fireEvent.click(within(emptyState).getByRole('button', { name: '清除筛选' }))
+
+    expect(await screen.findByText('筛选后可恢复资源')).toBeInTheDocument()
+    expect(screen.getByTestId('torrent-filter-bar')).toBeInTheDocument()
+    expect(screen.queryByRole('status', { name: '当前筛选条件没有匹配项' })).not.toBeInTheDocument()
+  })
+
   it.each([
     {
       item: createTorrent({ title: '流式资源预览' }),
@@ -625,7 +712,7 @@ describe('resource page search flow', () => {
       value: 100,
     })
 
-    expect(await screen.findByTestId('no-data')).toHaveTextContent('搜索服务暂不可用')
+    expect(await screen.findByTestId('resource-empty-state')).toHaveTextContent('搜索服务暂不可用')
     await waitFor(() => expect(rendered.router.currentRoute.value.query).toEqual({}))
   })
 
@@ -640,7 +727,7 @@ describe('resource page search flow', () => {
       type: 'error',
       value: 100,
     })
-    expect(await screen.findByTestId('no-data')).toHaveTextContent('搜索服务暂不可用')
+    expect(await screen.findByTestId('resource-empty-state')).toHaveTextContent('搜索服务暂不可用')
 
     await rendered.router.push({
       path: '/resource',
@@ -649,7 +736,7 @@ describe('resource page search flow', () => {
     const emptySource = await latestEventSource(2)
     finishStream(emptySource, [])
 
-    expect(await screen.findByTestId('no-data')).toHaveTextContent('未搜索到任何资源')
+    expect(await screen.findByTestId('resource-empty-state')).toHaveTextContent('没有找到匹配的资源')
     expect(screen.queryByText('搜索服务暂不可用')).not.toBeInTheDocument()
   })
 
@@ -678,7 +765,7 @@ describe('resource page search flow', () => {
     source.message({ type: 'done' })
     source.fail()
 
-    expect(await screen.findByTestId('no-data')).toHaveTextContent('找到 19 个资源，但均不符合过滤规则')
+    expect(await screen.findByTestId('resource-empty-state')).toHaveTextContent('找到 19 个资源，但均不符合过滤规则')
     expect(screen.queryByText('未搜索到任何资源')).not.toBeInTheDocument()
   })
 
@@ -698,7 +785,7 @@ describe('resource page search flow', () => {
     })
     source.fail()
 
-    expect(await screen.findByTestId('no-data')).toHaveTextContent('找到 5 个资源，但均不符合过滤规则')
+    expect(await screen.findByTestId('resource-empty-state')).toHaveTextContent('找到 5 个资源，但均不符合过滤规则')
   })
 
   it('restores the default empty-state message when the fallback request succeeds without results', async () => {
@@ -711,7 +798,7 @@ describe('resource page search flow', () => {
 
     source.fail()
 
-    expect(await screen.findByTestId('no-data')).toHaveTextContent('未搜索到任何资源')
+    expect(await screen.findByTestId('resource-empty-state')).toHaveTextContent('没有找到匹配的资源')
     expect(screen.queryByText('搜索连接已断开')).not.toBeInTheDocument()
     await waitFor(() => expect(rendered.router.currentRoute.value.query).toEqual({}))
   })
@@ -784,7 +871,7 @@ describe('resource page search flow', () => {
     mocks.apiGet.mockResolvedValueOnce({ data: [], success: true })
     await mocks.keepAliveRefresh()
 
-    expect(await screen.findByTestId('no-data')).toHaveTextContent('未搜索到任何资源')
+    expect(await screen.findByTestId('resource-empty-state')).toHaveTextContent('没有找到匹配的资源')
     expect(screen.queryByText('静默刷新失败')).not.toBeInTheDocument()
   })
 
@@ -1020,7 +1107,7 @@ describe('resource page search flow', () => {
     })
     const secondSource = await latestEventSource(2)
     finishStream(secondSource, [])
-    await waitFor(() => expect(screen.getByTestId('no-data')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('resource-empty-state')).toBeInTheDocument())
 
     resolveOldRequest({ message: '过期业务错误', success: false })
     await flushAsyncWork()

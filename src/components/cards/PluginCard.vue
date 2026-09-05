@@ -12,9 +12,12 @@ import { useI18n } from 'vue-i18n'
 import { openSharedDialog } from '@/composables/useSharedDialog'
 import { usePluginSidebarNavStore } from '@/stores/pluginSidebarNav'
 import { useGlobalSettingsStore, usePluginRuntimeStore } from '@/stores'
+import { reloadPluginRuntime } from '@/api/pluginCapabilities'
 
 // 插件日志面板只有点击“查看日志”时才需要，延后加载可减轻插件列表首屏。
 const PluginConfigDialog = defineAsyncComponent(() => import('../dialog/PluginConfigDialog.vue'))
+const PluginCapabilitiesDialog = defineAsyncComponent(() => import('../dialog/PluginCapabilitiesDialog.vue'))
+const PluginDataSummaryDialog = defineAsyncComponent(() => import('../dialog/PluginDataSummaryDialog.vue'))
 const PluginDataDialog = defineAsyncComponent(() => import('../dialog/PluginDataDialog.vue'))
 const ProgressDialog = defineAsyncComponent(() => import('../dialog/ProgressDialog.vue'))
 const PluginCloneDialog = defineAsyncComponent(() => import('../dialog/PluginCloneDialog.vue'))
@@ -48,6 +51,7 @@ const props = defineProps({
 })
 const globalSettingsStore = useGlobalSettingsStore()
 const pluginRuntimeStore = usePluginRuntimeStore()
+const reloading = ref(false)
 
 // 定义触发的自定义事件
 const emit = defineEmits<{
@@ -99,7 +103,10 @@ const runtimeUnavailable = computed(
     ['blocked_by_policy', 'load_failed'].includes(runtimeStatus.value || '') ||
     (!props.runtimeSettling && ['source_missing', 'dependency_pending', 'ready'].includes(runtimeStatus.value || '')),
 )
-const runtimeActionsBlocked = computed(() => props.installing || runtimePending.value || runtimeUnavailable.value)
+const runtimeActionsBlocked = computed(
+  () => props.installing || reloading.value || runtimePending.value || runtimeUnavailable.value,
+)
+const reloadBlocked = computed(() => props.installing || reloading.value || runtimePending.value)
 const runtimePendingStatusKeys: Partial<Record<NonNullable<Plugin['runtime_status']>, string>> = {
   source_missing: 'plugin.sourceRestoring',
   dependency_pending: 'plugin.dependencyInstalling',
@@ -151,6 +158,7 @@ const isVisible = ref(true)
 
 // 菜单显示状态
 const menuVisible = ref(false)
+const advancedMenuVisible = ref(false)
 
 // 用户头像是否加载完成
 const isAvatarLoaded = ref(false)
@@ -254,6 +262,46 @@ async function showPluginInfo() {
     },
     { closeOn: ['close', 'switch'] },
   )
+}
+
+/** 显示当前插件注册的安全只读运行能力。 */
+function showPluginCapabilities() {
+  openSharedDialog(PluginCapabilitiesDialog, { plugin: props.plugin }, {}, { closeOn: ['close', 'update:modelValue'] })
+}
+
+/** 显示当前插件不包含持久化原值的数据诊断摘要。 */
+function showPluginDataSummary() {
+  openSharedDialog(PluginDataSummaryDialog, { plugin: props.plugin }, {}, { closeOn: ['close', 'update:modelValue'] })
+}
+
+/** 重新加载当前插件并刷新插件页相关运行事实。 */
+async function reloadPlugin() {
+  const pluginId = props.plugin?.id
+  if (!pluginId || reloadBlocked.value) return
+
+  reloading.value = true
+  try {
+    await reloadPluginRuntime(pluginId)
+    await Promise.all([pluginRuntimeStore.refreshNow(), pluginSidebarNavStore.ensureSidebarNav(true)])
+    $toast.success(t('plugin.reloadSuccess', { name: props.plugin?.plugin_name }))
+    emit('save')
+  } catch (error) {
+    $toast.error(
+      t('plugin.reloadFailed', {
+        name: props.plugin?.plugin_name,
+        message: getApiBusinessErrorMessage(error) || t('common.serverConnectionFailed'),
+      }),
+    )
+    console.error(error)
+  } finally {
+    reloading.value = false
+  }
+}
+
+/** 根据运行态决定插件菜单项是否可操作。 */
+function isDropdownItemDisabled(value: number) {
+  if (value === 12) return reloadBlocked.value
+  return runtimeActionsBlocked.value && [1, 2, 4, 8].includes(value)
 }
 
 // 显示插件配置
@@ -659,6 +707,28 @@ const dropdownItems = ref([
   },
 ])
 
+// 低频诊断与维护能力收进二级菜单，避免插件卡片一级菜单过长。
+const advancedDropdownItems = [
+  {
+    title: t('plugin.runtimeCapabilities'),
+    value: 11,
+    prependIcon: 'mdi-puzzle-check-outline',
+    click: showPluginCapabilities,
+  },
+  {
+    title: t('plugin.dataSummary'),
+    value: 13,
+    prependIcon: 'mdi-database-eye-outline',
+    click: showPluginDataSummary,
+  },
+  {
+    title: t('plugin.reload'),
+    value: 12,
+    prependIcon: 'mdi-reload',
+    click: reloadPlugin,
+  },
+]
+
 // 监听插件状态变化
 watch(
   () => [props.plugin?.has_update, props.plugin?.update_candidate?.is_bound] as const,
@@ -796,19 +866,56 @@ watch(
                   <VIcon icon="mdi-dots-vertical" />
                   <VMenu v-model="menuVisible" activator="parent" close-on-content-click>
                     <VList>
-                      <VListItem
-                        v-for="(item, i) in dropdownItems"
-                        v-show="item.show"
-                        :key="i"
-                        :base-color="item.props.color"
-                        :disabled="runtimeActionsBlocked && [1, 2, 4, 8].includes(item.value)"
-                        @click="item.props.click"
-                      >
-                        <template #prepend>
-                          <VIcon :icon="item.props.prependIcon" />
-                        </template>
-                        <VListItemTitle>{{ item.title }}</VListItemTitle>
-                      </VListItem>
+                      <template v-for="(item, i) in dropdownItems" :key="i">
+                        <VListItem
+                          v-show="item.show"
+                          :base-color="item.props.color"
+                          :disabled="isDropdownItemDisabled(item.value)"
+                          @click="item.props.click"
+                        >
+                          <template #prepend>
+                            <VIcon :icon="item.props.prependIcon" />
+                          </template>
+                          <VListItemTitle>{{ item.title }}</VListItemTitle>
+                        </VListItem>
+
+                        <VMenu
+                          v-if="item.value === 1 && props.plugin?.installed"
+                          v-model="advancedMenuVisible"
+                          :location="display.smAndDown.value ? 'bottom end' : 'start top'"
+                          :offset="display.smAndDown.value ? 4 : 8"
+                          :close-on-content-click="true"
+                        >
+                          <template #activator="{ props: menuProps }">
+                            <VListItem v-bind="menuProps" data-testid="plugin-advanced-menu">
+                              <template #prepend>
+                                <VIcon icon="mdi-tools" />
+                              </template>
+                              <VListItemTitle>{{ t('plugin.advancedActions') }}</VListItemTitle>
+                              <template #append>
+                                <VIcon
+                                  :icon="display.smAndDown.value ? 'mdi-chevron-down' : 'mdi-chevron-left'"
+                                  size="small"
+                                />
+                              </template>
+                            </VListItem>
+                          </template>
+
+                          <VList min-width="12rem">
+                            <VListItem
+                              v-for="advancedItem in advancedDropdownItems"
+                              :key="advancedItem.value"
+                              :disabled="isDropdownItemDisabled(advancedItem.value)"
+                              @click="advancedItem.click"
+                            >
+                              <template #prepend>
+                                <VIcon :icon="advancedItem.prependIcon" />
+                              </template>
+                              <VListItemTitle>{{ advancedItem.title }}</VListItemTitle>
+                            </VListItem>
+                          </VList>
+                        </VMenu>
+                      </template>
                     </VList>
                   </VMenu>
                 </IconBtn>

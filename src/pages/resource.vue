@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { LocationQuery } from 'vue-router'
-import NoDataFound from '@/components/states/NoDataFound.vue'
+import ResourceSearchEmptyState from '@/components/states/ResourceSearchEmptyState.vue'
 import api from '@/api'
 import type { Context, MediaDataSource, SubtitleInfo } from '@/api/types'
 import TorrentCard from '@/components/cards/TorrentCard.vue'
@@ -382,9 +382,6 @@ const searchProgressLabel = computed(() =>
 
 // 进度未返回前使用不确定态
 const searchProgressIndeterminate = computed(() => !progressEnabled.value && searchProgressPercent.value <= 0)
-
-// 错误标题
-const errorTitle = ref(t('resource.noData'))
 
 // 错误描述
 const errorDescription = ref(t('resource.noResourceFound'))
@@ -1392,11 +1389,40 @@ const hasData = computed(() => {
   }
 
   if (viewType.value === 'row') {
-    return filteredRowDataList.value.length > 0 || rawDataList.value.length > 0
+    return filteredRowDataList.value.length > 0
   } else {
-    return filteredCardDataList.value.length > 0 || rawDataList.value.length > 0
+    return filteredCardDataList.value.length > 0
   }
 })
+
+// 空态保留用户可识别的搜索词，不展示内部媒体来源 ID。
+const emptySearchQuery = computed(() => title.value.trim() || keyword.value.trim())
+
+// 只有用户实际选择了筛选值时，空态才提供清除筛选操作。
+const hasActiveTorrentFilters = computed(() => !isSubtitleSearch.value && torrentFilter.hasActiveFilters())
+
+// 只有存在可重放参数时才提供重新搜索操作。
+const hasRefreshableSearch = computed(
+  () =>
+    hasSearchKeyword(activeSearchParams.value) ||
+    Boolean(lastSearchParams.value && hasSearchKeyword(lastSearchParams.value)),
+)
+
+const searchEmptyTitle = computed(() =>
+  errorDescription.value === t('resource.noResourceFound') ? t('torrent.noResults') : errorDescription.value,
+)
+
+const searchEmptyDescription = computed(() =>
+  hasRefreshableSearch.value ? t('resource.emptySearchHint') : t('resource.emptyStartHint'),
+)
+
+const resultEmptyTitle = computed(() =>
+  hasActiveTorrentFilters.value ? t('resource.filteredEmptyTitle') : searchEmptyTitle.value,
+)
+
+const resultEmptyDescription = computed(() =>
+  hasActiveTorrentFilters.value ? t('resource.filteredEmptyHint') : searchEmptyDescription.value,
+)
 
 // 监听 AI_RECOMMEND_ENABLED 状态和数据加载状态
 // 使用 watchEffect 确保计算属性变化时立即响应
@@ -1615,163 +1641,169 @@ onUnmounted(() => {
 
       <!-- 视图切换区域 -->
       <VFadeTransition mode="out-in">
-        <!-- 卡片视图模式 -->
-        <div v-if="viewType === 'card'" key="card">
-          <div
-            v-if="isSubtitleSearch && progressActive && streamPreviewSubtitleDataList.length > 0"
-            class="grid gap-4 grid-torrent-card items-start"
-          >
-            <SubtitleCard
-              v-for="(item, index) in streamPreviewSubtitleDataList"
-              :key="getSubtitleItemKey(item, index)"
-              :subtitle="item"
-              :media-source="activeSearchParams.media_source || undefined"
-              :media-id="activeSearchParams.media_id || undefined"
-              class="stream-result-item"
-            />
-          </div>
-          <ProgressiveCardGrid
-            v-else-if="isSubtitleSearch && rawSubtitleDataList.length > 0"
-            :items="rawSubtitleDataList"
-            :get-item-key="getSubtitleItemKey"
-            :min-item-width="300"
-            :estimated-item-height="320"
-          >
-            <template #default="{ item }">
+        <div :key="viewType">
+          <!-- 卡片视图模式 -->
+          <div v-if="viewType === 'card'">
+            <div
+              v-if="isSubtitleSearch && progressActive && streamPreviewSubtitleDataList.length > 0"
+              class="grid gap-4 grid-torrent-card items-start"
+            >
               <SubtitleCard
+                v-for="(item, index) in streamPreviewSubtitleDataList"
+                :key="getSubtitleItemKey(item, index)"
                 :subtitle="item"
                 :media-source="activeSearchParams.media_source || undefined"
                 :media-id="activeSearchParams.media_id || undefined"
-              />
-            </template>
-          </ProgressiveCardGrid>
-          <div
-            v-else-if="!isSubtitleSearch && progressActive && streamPreviewDataList.length > 0"
-            class="grid gap-4 grid-torrent-card items-start"
-          >
-            <TorrentCard
-              v-for="(item, index) in streamPreviewDataList"
-              :key="getTorrentItemKey(item, index)"
-              :torrent="item"
-              class="stream-result-item"
-            />
-          </div>
-          <ProgressiveCardGrid
-            v-else-if="filteredCardDataList.length > 0"
-            :items="filteredCardDataList"
-            :get-item-key="getTorrentItemKey"
-            :min-item-width="300"
-            :estimated-item-height="400"
-          >
-            <template #default="{ item }">
-              <TorrentCard :torrent="item" :more="item.more" />
-            </template>
-          </ProgressiveCardGrid>
-          <!-- 无结果时显示 -->
-          <div
-            v-if="
-              !progressActive &&
-              ((isSubtitleSearch && rawSubtitleDataList.length === 0) ||
-                (!isSubtitleSearch && filteredCardDataList.length === 0))
-            "
-            class="no-results"
-          >
-            <VIcon icon="mdi-file-search-outline" size="64" color="grey-lighten-1" />
-            <div class="text-h6 text-grey mt-4">{{ t('torrent.noResults') }}</div>
-          </div>
-        </div>
-
-        <!-- 列表视图模式 -->
-        <div v-else-if="viewType === 'row'" key="row">
-          <VCard class="resource-list-container">
-            <!-- 无结果时显示 -->
-            <div
-              v-if="
-                !progressActive &&
-                ((isSubtitleSearch && rawSubtitleDataList.length === 0) ||
-                  (!isSubtitleSearch && filteredRowDataList.length === 0))
-              "
-              class="no-results"
-            >
-              <VIcon icon="mdi-file-search-outline" size="64" color="grey-lighten-1" />
-              <div class="text-h6 text-grey mt-4">{{ t('torrent.noResults') }}</div>
-            </div>
-            <div
-              v-else-if="isSubtitleSearch && progressActive && streamPreviewSubtitleDataList.length > 0"
-              class="resource-list overflow-visible"
-            >
-              <div
-                v-for="(item, index) in streamPreviewSubtitleDataList"
-                :key="getSubtitleItemKey(item, index)"
                 class="stream-result-item"
-              >
-                <SubtitleItem
+              />
+            </div>
+            <ProgressiveCardGrid
+              v-else-if="isSubtitleSearch && rawSubtitleDataList.length > 0"
+              :items="rawSubtitleDataList"
+              :get-item-key="getSubtitleItemKey"
+              :min-item-width="300"
+              :estimated-item-height="320"
+            >
+              <template #default="{ item }">
+                <SubtitleCard
                   :subtitle="item"
                   :media-source="activeSearchParams.media_source || undefined"
                   :media-id="activeSearchParams.media_id || undefined"
                 />
-                <VDivider v-if="index < streamPreviewSubtitleDataList.length - 1" class="my-2" />
-              </div>
+              </template>
+            </ProgressiveCardGrid>
+            <div
+              v-else-if="!isSubtitleSearch && progressActive && streamPreviewDataList.length > 0"
+              class="grid gap-4 grid-torrent-card items-start"
+            >
+              <TorrentCard
+                v-for="(item, index) in streamPreviewDataList"
+                :key="getTorrentItemKey(item, index)"
+                :torrent="item"
+                class="stream-result-item"
+              />
             </div>
-            <div v-else-if="isSubtitleSearch && rawSubtitleDataList.length > 0" class="resource-list">
-              <ProgressiveCardGrid
-                :items="rawSubtitleDataList"
-                :columns="1"
-                :gap="8"
-                :estimated-item-height="190"
-                :overscan-rows="6"
-                :get-item-key="getSubtitleItemKey"
+            <ProgressiveCardGrid
+              v-else-if="filteredCardDataList.length > 0"
+              :items="filteredCardDataList"
+              :get-item-key="getTorrentItemKey"
+              :min-item-width="300"
+              :estimated-item-height="400"
+            >
+              <template #default="{ item }">
+                <TorrentCard :torrent="item" :more="item.more" />
+              </template>
+            </ProgressiveCardGrid>
+          </div>
+
+          <!-- 列表视图模式 -->
+          <div v-else-if="viewType === 'row'">
+            <VCard class="resource-list-container">
+              <div
+                v-if="isSubtitleSearch && progressActive && streamPreviewSubtitleDataList.length > 0"
+                class="resource-list overflow-visible"
               >
-                <template #default="{ item, index }">
+                <div
+                  v-for="(item, index) in streamPreviewSubtitleDataList"
+                  :key="getSubtitleItemKey(item, index)"
+                  class="stream-result-item"
+                >
                   <SubtitleItem
                     :subtitle="item"
                     :media-source="activeSearchParams.media_source || undefined"
                     :media-id="activeSearchParams.media_id || undefined"
                   />
-                  <VDivider v-if="index < rawSubtitleDataList.length - 1" class="my-2" />
-                </template>
-              </ProgressiveCardGrid>
-            </div>
-            <div
-              v-else-if="!isSubtitleSearch && progressActive && streamPreviewDataList.length > 0"
-              class="resource-list overflow-visible"
-            >
-              <div
-                v-for="(item, index) in streamPreviewDataList"
-                :key="getTorrentItemKey(item, index)"
-                class="stream-result-item"
-              >
-                <TorrentItem :torrent="item" />
-                <VDivider v-if="index < streamPreviewDataList.length - 1" class="my-2" />
+                  <VDivider v-if="index < streamPreviewSubtitleDataList.length - 1" class="my-2" />
+                </div>
               </div>
-            </div>
-            <div v-else-if="!isSubtitleSearch && filteredRowDataList.length > 0" class="resource-list">
-              <ProgressiveCardGrid
-                :items="filteredRowDataList"
-                :columns="1"
-                :gap="8"
-                :estimated-item-height="240"
-                :overscan-rows="6"
-                :get-item-key="getTorrentItemKey"
+              <div v-else-if="isSubtitleSearch && rawSubtitleDataList.length > 0" class="resource-list">
+                <ProgressiveCardGrid
+                  :items="rawSubtitleDataList"
+                  :columns="1"
+                  :gap="8"
+                  :estimated-item-height="190"
+                  :overscan-rows="6"
+                  :get-item-key="getSubtitleItemKey"
+                >
+                  <template #default="{ item, index }">
+                    <SubtitleItem
+                      :subtitle="item"
+                      :media-source="activeSearchParams.media_source || undefined"
+                      :media-id="activeSearchParams.media_id || undefined"
+                    />
+                    <VDivider v-if="index < rawSubtitleDataList.length - 1" class="my-2" />
+                  </template>
+                </ProgressiveCardGrid>
+              </div>
+              <div
+                v-else-if="!isSubtitleSearch && progressActive && streamPreviewDataList.length > 0"
+                class="resource-list overflow-visible"
               >
-                <template #default="{ item, index }">
+                <div
+                  v-for="(item, index) in streamPreviewDataList"
+                  :key="getTorrentItemKey(item, index)"
+                  class="stream-result-item"
+                >
                   <TorrentItem :torrent="item" />
-                  <VDivider v-if="index < filteredRowDataList.length - 1" class="my-2" />
-                </template>
-              </ProgressiveCardGrid>
-            </div>
-          </VCard>
+                  <VDivider v-if="index < streamPreviewDataList.length - 1" class="my-2" />
+                </div>
+              </div>
+              <div v-else-if="!isSubtitleSearch && filteredRowDataList.length > 0" class="resource-list">
+                <ProgressiveCardGrid
+                  :items="filteredRowDataList"
+                  :columns="1"
+                  :gap="8"
+                  :estimated-item-height="240"
+                  :overscan-rows="6"
+                  :get-item-key="getTorrentItemKey"
+                >
+                  <template #default="{ item, index }">
+                    <TorrentItem :torrent="item" />
+                    <VDivider v-if="index < filteredRowDataList.length - 1" class="my-2" />
+                  </template>
+                </ProgressiveCardGrid>
+              </div>
+            </VCard>
+          </div>
         </div>
       </VFadeTransition>
     </div>
 
     <!-- 无数据显示 -->
-    <div v-else-if="isRefreshed && !progressActive" class="d-flex flex-column align-center justify-center py-8">
-      <NoDataFound :errorTitle="errorTitle" :errorDescription="errorDescription" />
-      <VBtn rounded="pill" class="mt-4" color="primary" prepend-icon="mdi-home" to="/">
-        {{ t('resource.backToHome') }}
-      </VBtn>
-    </div>
+    <ResourceSearchEmptyState
+      v-else-if="isRefreshed && !progressActive"
+      class="resource-page-empty-state"
+      :title="resultEmptyTitle"
+      :description="resultEmptyDescription"
+      :query="emptySearchQuery"
+      :icon="hasActiveTorrentFilters ? 'mdi-filter-off-outline' : 'mdi-database-search-outline'"
+    >
+      <template #actions>
+        <VBtn
+          v-if="hasActiveTorrentFilters"
+          color="primary"
+          variant="tonal"
+          prepend-icon="mdi-filter-off-outline"
+          @click="handleClearAllFilters"
+        >
+          {{ t('torrent.clearFilters') }}
+        </VBtn>
+        <VBtn
+          v-else-if="hasRefreshableSearch"
+          color="primary"
+          variant="tonal"
+          prepend-icon="mdi-refresh"
+          :loading="isRefreshing"
+          :disabled="isRefreshing"
+          @click="refreshSearch"
+        >
+          {{ t('resource.refreshSearch') }}
+        </VBtn>
+        <VBtn v-if="!hasActiveTorrentFilters" variant="text" color="default" prepend-icon="mdi-home-outline" to="/">
+          {{ t('resource.backToHome') }}
+        </VBtn>
+      </template>
+    </ResourceSearchEmptyState>
 
     <!-- 初始加载状态 -->
     <LoadingBanner v-else-if="!isRefreshed && !isSearchLoading" />
@@ -1970,13 +2002,8 @@ onUnmounted(() => {
   display: block;
 }
 
-/* 无结果提示 */
-.no-results {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-block-size: 300px;
+.resource-page-empty-state {
+  margin-block: 16px;
 }
 
 @media (width <= 600px) {
