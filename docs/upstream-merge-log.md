@@ -464,3 +464,15 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
 - 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1578 过
   7F=已知 Windows 假失败族 IDENTICAL。
 - 后端 +11 另见后端仓记录。
+
+## 2026-09-05 合并（第 46 次记录，定时任务执行）
+
+- 前端增量 **5 提交 / 286 文件（+5924−31174）**：`775977a3` 结构化 API
+  能力条目补全（TransferHistoryMaintenancePanel 新组件+测试）、
+  `a10fd121/e359b965` 资源搜索空态与缓存结果安全恢复、`12b04733`
+  订阅搜索进度澄清、`56a0bf68` 插件卡片高级操作分组。自动合并零冲突
+  （共享面 types.ts/SubscribeListView 不相交），双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅（不带 --fix）typecheck ✅；
+  test:run 1601 过 8F=已知 Windows 假失败族 IDENTICAL + dashboard
+  cached profile×1 与 WorkflowActionsDialog×1 单跑全绿=观察者效应。
+- 后端 +12 另见后端仓记录。
