@@ -489,3 +489,13 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
     （当轮后端性能采样 82-127s 极端值同窗口佐证）；
   - WorkflowActionsDialog——单跑全绿=观察者效应。
 - 后端 +11 另见后端仓记录。
+
+## 2026-09-06 合并（第 48 次记录，定时任务执行）
+
+- 前端增量 **1 提交 / 8 文件**：`bb6cdb2e` 完善音乐候选展示与手动下载
+  确认（MusicMatchBadge 组件 + torrent.ts 工具抽取）。自动合并零冲突，
+  双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 1605 过
+  10F=已知 Windows 假失败族 IDENTICAL（TransferHistoryView×3 全为
+  CRLF 族断言，47 轮已定性同根）。
+- 后端 +4 另见后端仓记录。
