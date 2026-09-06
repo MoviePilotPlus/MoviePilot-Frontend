@@ -500,6 +500,8 @@ export const seedStatus = {
 
 export const tagOptions = {
   Mandarin: '国语',
+  // 国配（SSD 语义：外语片/粤语片含普通话配音轨；原始对白普通话不可用）
+  MandarinDub: '国配',
   Cantonese: '粤语',
   Japanese: '日语',
   Korean: '韩语',
