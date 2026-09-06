@@ -499,3 +499,14 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
   10F=已知 Windows 假失败族 IDENTICAL（TransferHistoryView×3 全为
   CRLF 族断言，47 轮已定性同根）。
 - 后端 +4 另见后端仓记录。
+
+## 2026-09-06 合并（第 50 次记录，定时任务执行）
+
+- 前端增量 **3 提交 / 6 文件（+384−37）**：`3b55e787` 历史按专辑分组
+  音乐轨道（TransferHistoryView 大改 +231 行测试）、`dc2dd8d3` 分类
+  未分类标签去重、`9cefc93a` 上游自合并（含 #752 历史轮询上游修复）。
+  自动合并零冲突（共享面 suppressions/types 不相交），双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅（不带 --fix）typecheck ✅；
+  test:run 1605 过 10F=已知 Windows 假失败族 IDENTICAL
+  （TransferHistoryView×3 为 CRLF 族断言）。
+- 后端 +7 另见后端仓记录。
