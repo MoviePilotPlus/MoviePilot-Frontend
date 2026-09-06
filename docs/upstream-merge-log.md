@@ -510,3 +510,17 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
   test:run 1605 过 10F=已知 Windows 假失败族 IDENTICAL
   （TransferHistoryView×3 为 CRLF 族断言）。
 - 后端 +7 另见后端仓记录。
+
+## 2026-09-06 合并（第 51 次记录，定时任务执行）
+
+- 前端增量 **18 提交 / 205 文件（+3939−30535）**：**玻璃导航折射大轮**
+  （e8484504→f466912c 共 14 提交：实时导航栏折射原型→参数驱动 POC→
+  V3 表面材质统一→可读性光学→性能优化三连→#755 合入，新增
+  glassNavbarRefraction.ts 工具+测试与 _glass-v3.scss 主题）、
+  `33bb01ab` 历史字幕与音轨记录区分、`2e854804` 取消请求不弹 toast、
+  `7f046dd0` 分类策略历史堆叠。自动合并零冲突（suppressions 自动
+  并入），双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅（不带 --fix）typecheck ✅；
+  test:run 1665 过 12F=已知 Windows 假失败族 IDENTICAL + 新例定性：
+  useMediaSubscribe cancelled-create 单跑 43 例全绿=观察者效应。
+- 后端 +8 另见后端仓记录。
