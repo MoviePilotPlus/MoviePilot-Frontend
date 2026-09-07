@@ -1549,6 +1549,7 @@ function handleIgnore() {
             <VChip
               v-for="track in audioTrackOptions"
               :key="track.name"
+              :color="selectedAudioTracks.includes(track.name) ? 'primary' : ''"
               filter
               variant="outlined"
               :value="track.name"
