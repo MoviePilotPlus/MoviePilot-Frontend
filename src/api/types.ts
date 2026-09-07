@@ -2024,7 +2024,7 @@ export interface StorageOption {
 export interface MediaServerConf {
   // 名称
   name: string
-  // 类型 emby/zspace/jellyfin/plex/trimemedia/ugreen/navidrome
+  // 类型 emby/zspace/jellyfin/plex/trimemedia/ugreen/navidrome/mediavault
   type: string
   // 配置
   config: { [key: string]: any }
@@ -2040,7 +2040,7 @@ export interface MediaServerConf {
 export interface MediaServerClient {
   // 实例名称
   name: string
-  // 类型 emby/zspace/jellyfin/plex/trimemedia/ugreen/navidrome
+  // 类型 emby/zspace/jellyfin/plex/trimemedia/ugreen/navidrome/mediavault
   type: string
 }
 
@@ -2651,6 +2651,10 @@ export interface SystemUpdateItemStatus {
 
 /** 后端主程序与站点资源后台更新状态机快照。 */
 export interface SystemUpdateStatus {
+  /** 当前自动检查开关；由后端实时返回，避免旧缓存继续触发提醒。 */
+  auto_update?: boolean
+  /** 站点资源单独控制自动检查和提醒。 */
+  auto_update_resource?: boolean
   state: SystemUpdateState
   current_version: string
   version?: string | null
