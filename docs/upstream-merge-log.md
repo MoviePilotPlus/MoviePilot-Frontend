@@ -609,3 +609,17 @@ architecture 基线四刷新。
   worktree 对照同败=既有环境失败**，非本轮回归）全部 Windows 环境族。
   上游新增分类测试 55+12 例全绿。
 - 后端 +2 另见后端仓记录。
+
+## 2026-09-08 合并（第 57 次记录，定时任务执行）
+
+- 前端增量 **12 提交 / 38 文件（+3587−284）**：glass 导航可读性系列
+  （#762：磨砂导航与样式解耦+默认清晰风格+滚动稳定+指针恢复护栏+
+  displacement 像素批量化+主场景编译复用，glassNavbarRefraction 大改）、
+  dashboard 性能（grid 宽度预量+封面异步编码）、应用中心动态动作保留、
+  logo 待编译随场景退场。自动合并零冲突（eslint-suppressions 自动并集，
+  fork CollectCard 豁免保留），双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3032 过
+  11F 与第 56 轮完全一致（app-glass-optical-preload×1/glassOverlay
+  Material×1/TransferHistoryView×3/format-changed×4/frontend-workflow×2
+  全部已定性 Windows 环境族 IDENTICAL）；上游新增 glass 测试 105 例全绿。
+- 后端无增量跳过。
