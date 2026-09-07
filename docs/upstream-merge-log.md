@@ -524,3 +524,21 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
   test:run 1665 过 12F=已知 Windows 假失败族 IDENTICAL + 新例定性：
   useMediaSubscribe cancelled-create 单跑 43 例全绿=观察者效应。
 - 后端 +8 另见后端仓记录。
+
+## 2026-09-07 合并（第 54 次记录，定时任务执行）
+
+- 前端增量 **8 提交 / 54 文件（+3635−358）**：玻璃面板系列 6 提交
+  （#756 软轮廓+侧栏圆角折射+仪表盘悬停材质+去冗余采样+Inactive GPU
+  延迟）、`1fb09274` 自动更新与 Dev 跟踪设置拆分（AccountSettingSystem
+  增 MOVIEPILOT_UPDATE_DEV 开关+新测试）、`9acf9396` MediaVault 自建
+  媒体库。自动合并零冲突，双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅（prune 收敛）typecheck ✅；
+  test:run 2892 过 10F——AccountSettingSystem×5 为 **fork 真回归已修**：
+  采集语言包 `locales/collect/*.ts` 残留旧版 `setting.system.moviePilot*`
+  词条，经 i18n mergeLocaleMessage 深合并**遮蔽**上游 1fb09274 新文案
+  （「自动检查版本更新」找不到 label）；纯上游树对照 43 绿复现差异后
+  删 stale 词条×3（moviePilotAutoUpdate/Hint 双语言、dataCleanup*Hint、
+  autoUpdateResourceHint 遮蔽族全清）→ 43/43 绿。其余 TransferHistory
+  View×3+glassOverlayMaterial×1+format-changed×4+frontend-workflow×2
+  纯上游树同败=已知 Windows 假失败族 IDENTICAL（symlink EPERM/CRLF）。
+- 后端 +? 另见后端仓记录。
