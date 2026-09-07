@@ -1086,7 +1086,7 @@
       "count": 1
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 10
+      "count": 9
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 7
