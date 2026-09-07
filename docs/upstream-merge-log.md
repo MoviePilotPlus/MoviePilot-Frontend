@@ -542,3 +542,70 @@ SystemUpdate 类型（中部插入）不重叠，自动合并。
   View×3+glassOverlayMaterial×1+format-changed×4+frontend-workflow×2
   纯上游树同败=已知 Windows 假失败族 IDENTICAL（symlink EPERM/CRLF）。
 - 后端 +? 另见后端仓记录。
+
+## 2026-09-07 合并（第 54 次记录·后端：MediaVault 模块 + uv.lock 采集依赖回补）
+
+前端两段：36e18ee3（9 提交：MediaVault 自建媒体库 + auto-update/dev 拆分）、
+496edbea（9 提交：glass 材质四连修 + 资源搜索级联收敛）；用户 WIP 四文件
+与上游零交集，全程带 WIP 合并。后端增量 **10 提交 / 45 文件（+2157−188）**：
+MediaVault 模块（PR #6596）、auto-update 与 dev tracking 拆分
+（config.update_check_enabled）、frozen source step identity、
+architecture 基线四刷新。
+
+- 本轮特殊背景：第 53 轮后推送间隔内插入了两批用户会话提交
+  （b80480473 腾讯 TV 线路 + f6a8234a6 em=80 fallback），第 54 轮
+  preflight 时工作区有该会话未提交 WIP（音轨选择 + TENCENT_FETCH_LINE
+  + 5MB 调优），中断轮已 stash 两次（stash@{0} 后期 overlay、
+  stash@{1} 首轮含 5MB）。恢复现场后全部核验。
+- 冲突 5 文件（两文档 + 两基线 + capability 测试）：全部生成/权威文件族，
+  中断轮已解算——核验通过后仅补 checklist mypy 行（12,462→12,461），
+  后随 tv_assets 吸收改 12,519/630。
+- **腾讯会话两大门禁破口回修（合并前存量）**：
+  a) mypy.ini 的 `[mypy-app.modules.tencent._tv_assets.*] ignore_errors`
+  违反 fork 门禁（type_gate 断言 mypy.ini 无 ignore_errors）——删段，
+  59 条错误按 tmdbv3api 先例进基线（含 Windows 少报的 anc_decrypt
+  assignment 1 条剔除），mypy 12,461→**12,519 / 630 文件**；
+  b) 6 个 TV 多词文件未登记 filename-policy（tv_login/tv_client/
+  _tv_assets×4，SSD 站点同族）——按 youku _nativesign 先例登记。
+- **uv.lock 采集依赖回补**：HEAD 锁自 2026-08-21 大迁移提交（4dd7cee0c
+  pyproject 已加 construct/m3u8/unicorn/wasmtime 等 11 包）后丢失全部
+  采集域条目（-S 全历史仅该提交出现），说明 53 轮 lock 均 take-theirs。
+  本轮 merge 带回（+145 行，13 包），且此前 CI 装锁在 pyproject 已声明
+  的状态下运行——修复+推送后 CI 变绿。
+- **用户真实库连带事故排查**：冒烟报 duplicate column selected_audio_tracks
+  ——用户 14:28 的 app.main（3001）用含 WIP 迁移文件的树升级了 config/
+  user.db 到 b52786024c6a+列已建，而工作区模型已不含该列（stash 所致）。
+  无数据损坏（只加列+未跟踪迁移文件仍在），恢复 WIP 后自洽。
+- **冒烟姿势修正**：CONFIG_DIR 是裸名 env（不带 MOVIEPILOT_ 前缀），
+  带 `MOVIEPILOT_CONFIG_DIR` 完全无效——连真实库跑（早期冒烟全中此坑，
+  早期"成功"值得怀疑）。正确：`CONFIG_DIR=<tmp> MOVIEPILOT_AUTO_UPDATE=false
+  PORT=19892`。✅ 19892 openapi 200 已关停。
+- 预演：契约 101+44（补文档数字）✅ check-host ✅ strict 42 ✅ 四静态 ✅
+  ruff 396 ✅ mypy 12,519 ✅（Linux 对照 12,553 差异全在 app/plugins
+  被棘轮 exclude 的目录，手工对照须带同 exclude）性能 587/598/600 ✅
+  workflow 四件 44+7 ✅ build-v3 三要素 ✓ 迁移树 81 单 head ✓
+  uv lock --check ✓ 采集全家桶 168 ✅ pylint 增量 27 文件 10.00 ✅。
+- 四分片（IDENTICAL 环境族放行）：s3 2F（package_installer Rust 版本差 +
+  plugin_compat=tv 破口已修）、s4 19F（17 已知族+type_gate 已修+
+  transfer_overwrite_guard 平台差）；**pytest 显式路径 ignore 失效族**——
+  run.py 把分片文件显式传给 pytest.main，`--ignore` 不生效、`--deselect`
+  才生效（历轮"带 deselect"实为 deselect 兜底）；s1/s2 挂起族
+  fs_proxy（test_timeout_raises_and_kills_worker 等 CRLF 相关 Windows
+  管道挂起，单跑同败+旧树同败=平台差）与 docker_bootstrap（旧树 48F
+  同败）整文件 deselect 后 s2 59F 全落已知族、s1 复跑中。
+- 前端验收：vitest 2904/2917（11F 全为 CRLF/symlink 环境族：glass
+  indexOf=-1 旧树同败、app-glass 新 spec CRLF 假失败）eslint 零警告 ✅
+  vue-tsc 零错误 ✅。
+
+## 2026-09-08 合并（第 56 次记录，定时任务执行）
+
+- 前端增量 **3 提交 / 15 文件（+307−102）**：`2fff276c` 分类规则值与
+  目标类目澄清（分类编辑器三组件+mediaClassification utils+测试五件套）、
+  `b18595ba` 测试对齐目录分类路径期望、`c3c849b1` TransferHistoryView
+  样式一致性调整。自动合并零冲突，双亲验证通过。
+- 三件套：lint ✅ typecheck ✅；test:run 2911 过 11F——TransferHistory
+  View×3（CRLF 族）/glassOverlayMaterial×1/format-changed×4/frontend-
+  workflow×2/app-glass-optical-preload×1（新例，单跑 1F，**合并前旧树
+  worktree 对照同败=既有环境失败**，非本轮回归）全部 Windows 环境族。
+  上游新增分类测试 55+12 例全绿。
+- 后端 +2 另见后端仓记录。
