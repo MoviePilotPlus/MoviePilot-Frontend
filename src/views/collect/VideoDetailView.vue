@@ -145,8 +145,43 @@ const isRefreshed = ref(false)
 const isLoading = ref(true)
 const onlyShowMainEpisodes = ref(false)
 
-function definitionLabel(definition: any) {
-  return definition?.sname || definition?.cname || definition?.name || ''
+// 清晰度条目（definition_list 元素；fs=视频流字节数）
+interface DefinitionInfo {
+  name?: string
+  cname?: string
+  sname?: string
+  fs?: number
+}
+
+// CollectCreate 扩展（selected_audio_tracks 提交字段）
+interface CollectForm {
+  selected_audio_tracks?: string[] | null
+}
+
+function definitionLabel(definition: DefinitionInfo) {
+  const label = definition?.sname || definition?.cname || definition?.name || ''
+  // 拼接视频流大小（fs 字节；能拿到时展示，如「超高清SDR (4.3G)」）
+  const fs = Number(definition?.fs) || 0
+  if (label && fs > 0) {
+    const gb = fs / 1024 / 1024 / 1024
+    return `${label} (${gb >= 1 ? gb.toFixed(2) + 'G' : (fs / 1024 / 1024).toFixed(0) + 'M'})`
+  }
+  return label
+}
+
+// 独立音频轨勾选（默认全选；源无独立音轨时隐藏整组）
+const audioTrackOptions = computed<{ name: string, track?: string, fs?: number }[]>(() => {
+  const tracks = (mediaDetail.value as VideoInfo)?.audio_tracks
+  return Array.isArray(tracks) ? tracks.filter((t): t is { name: string } => !!t?.name) : []
+})
+const selectedAudioTracks = ref<string[]>([])
+watch(audioTrackOptions, (opts) => {
+  if (opts.length > 0) selectedAudioTracks.value = opts.map(t => t.name)
+}, { immediate: true })
+function toggleAudioTrack(name: string) {
+  const idx = selectedAudioTracks.value.indexOf(name)
+  if (idx >= 0) selectedAudioTracks.value.splice(idx, 1)
+  else selectedAudioTracks.value.push(name)
 }
 
 function optionLabel(option: any) {
@@ -421,6 +456,10 @@ async function addCollect() {
         addForm.value.copyright = teamItem.copyright
       }
     }
+    // 独立音频轨勾选：null=源无独立音轨或用户未改（全部）；数组=勾选子集
+    ;(addForm.value as CollectForm).selected_audio_tracks = audioTrackOptions.value.length > 0
+      ? [...selectedAudioTracks.value]
+      : null
     // 提交前检查参数
     console.log(addForm.value)
 
@@ -1503,6 +1542,25 @@ function handleIgnore() {
                 {{ definitionLabel(definition) }}
               </VChip>
             </template>
+          </VChipGroup>
+        </div>
+
+        <div v-if="audioTrackOptions.length > 0" class="mt-6">
+          <GroupTile title="音频轨" />
+          <div class="text-caption text-medium-emphasis mb-2">
+            选择要下载合并的独立音频流（不选则只保留视频内嵌音轨）
+          </div>
+          <VChipGroup column>
+            <VChip
+              v-for="track in audioTrackOptions"
+              :key="track.name"
+              :color="selectedAudioTracks.includes(track.name) ? 'primary' : ''"
+              filter
+              variant="outlined"
+              @click="toggleAudioTrack(track.name)"
+            >
+              {{ track.name }}{{ track.track ? ` (${track.track})` : '' }}
+            </VChip>
           </VChipGroup>
         </div>
 

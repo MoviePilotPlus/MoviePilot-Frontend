@@ -2808,6 +2808,8 @@ export interface Collect {
   created_at?: string
   // 更新时间
   updated_at?: string
+  // 独立音频轨列表（腾讯/优酷等源 detail 预取；空=源无独立音频轨）
+  audio_tracks?: { name?: string, track?: string, fs?: number }[]
 }
 
 // 采集任务创建参数

@@ -130,6 +130,9 @@ const CollectSettings = ref<any>({
   Youku: {
     YOUKU_DOWNLOAD_LINE: 'normal_tv',
   },
+  Tencent: {
+    TENCENT_FETCH_LINE: 'normal_tv',
+  },
   ImageHosting: {
     order: ['pixhost', 'imgbox', 'ipic', 'imgbb', 'panda'],
     ipic: {
@@ -158,6 +161,12 @@ const youkuDownloadLineOptions = [
   { title: '普通酷喵TV', value: 'normal_tv' },
   { title: '安卓端', value: 'android' },
   { title: '酷喵帧享影院', value: 'frame_enjoy_cinema' },
+]
+
+const tencentFetchLineOptions = [
+  { title: 'TV形态（默认）', value: 'normal_tv' },
+  { title: '手机App形态（部分版权内容仅此线路放行）', value: 'phone' },
+  { title: '智能切换（TV被拒自动试手机）', value: 'auto' },
 ]
 
 // 是否发送请求的总开关
@@ -542,6 +551,12 @@ async function saveBasicSettings() {
 async function saveYoukuDownloadLineSettings() {
   if (await saveSystemSetting(CollectSettings.value.Youku)) {
     $toast.success(t('setting.collect.youkuDownloadLineSaveSuccess'))
+  }
+}
+
+async function saveTencentFetchLineSettings() {
+  if (await saveSystemSetting(CollectSettings.value.Tencent)) {
+    $toast.success(t('setting.collect.tencentFetchLineSaveSuccess'))
   }
 }
 // 添加制作组配置
@@ -1455,6 +1470,35 @@ onDeactivated(() => {
           <VForm @submit.prevent="() => {}">
             <div class="d-flex flex-wrap gap-4 mt-4">
               <VBtn type="submit" @click="saveYoukuDownloadLineSettings"> {{ t('common.save') }} </VBtn>
+            </div>
+          </VForm>
+        </VCardText>
+      </VCard>
+    </VCol>
+  </VRow>
+  <VRow>
+    <VCol cols="12">
+      <VCard>
+        <VCardItem>
+          <VCardTitle>{{ t('setting.collect.tencentFetchLine') }}</VCardTitle>
+          <VCardSubtitle>{{ t('setting.collect.tencentFetchLineHint') }}</VCardSubtitle>
+        </VCardItem>
+        <VCardText>
+          <VSelect
+            v-model="CollectSettings.Tencent.TENCENT_FETCH_LINE"
+            :items="tencentFetchLineOptions"
+            item-title="title"
+            item-value="value"
+            :label="t('setting.collect.tencentFetchLine')"
+            :hint="t('setting.collect.tencentFetchLineHint')"
+            persistent-hint
+            prepend-inner-icon="mdi-routes"
+          />
+        </VCardText>
+        <VCardText>
+          <VForm @submit.prevent="() => {}">
+            <div class="d-flex flex-wrap gap-4 mt-4">
+              <VBtn type="submit" @click="saveTencentFetchLineSettings"> {{ t('common.save') }} </VBtn>
             </div>
           </VForm>
         </VCardText>
