@@ -178,11 +178,6 @@ const selectedAudioTracks = ref<string[]>([])
 watch(audioTrackOptions, (opts) => {
   if (opts.length > 0) selectedAudioTracks.value = opts.map(t => t.name)
 }, { immediate: true })
-function toggleAudioTrack(name: string) {
-  const idx = selectedAudioTracks.value.indexOf(name)
-  if (idx >= 0) selectedAudioTracks.value.splice(idx, 1)
-  else selectedAudioTracks.value.push(name)
-}
 
 function optionLabel(option: any) {
   return option?.label || option?.name || option?.value || ''
@@ -1550,14 +1545,13 @@ function handleIgnore() {
           <div class="text-caption text-medium-emphasis mb-2">
             选择要下载合并的独立音频流（不选则只保留视频内嵌音轨）
           </div>
-          <VChipGroup column>
+          <VChipGroup column multiple v-model="selectedAudioTracks">
             <VChip
               v-for="track in audioTrackOptions"
               :key="track.name"
-              :color="selectedAudioTracks.includes(track.name) ? 'primary' : ''"
               filter
               variant="outlined"
-              @click="toggleAudioTrack(track.name)"
+              :value="track.name"
             >
               {{ track.name }}{{ track.track ? ` (${track.track})` : '' }}
             </VChip>
