@@ -591,6 +591,10 @@ function validateForm() {
   if (!mediaDetail.value.episode_list?.some(e => e.selected)) {
     errors.push('请至少选择一集！')
   }
+  // 分离音轨源（优酷帧享等）视频流无内嵌音，至少勾一条，否则成片无声
+  if (audioTrackOptions.value.length > 0 && selectedAudioTracks.value.length === 0) {
+    errors.push('该清晰度的视频流不含内嵌音轨，请至少选择一条音频轨！')
+  }
 
   // 新增：校验选中剧集的集数必须为数字且不重复
   const selectedEpisodes = mediaDetail.value.episode_list?.filter(ep => ep.selected) || []
@@ -1543,7 +1547,7 @@ function handleIgnore() {
         <div v-if="audioTrackOptions.length > 0" class="mt-6">
           <GroupTile title="音频轨" />
           <div class="text-caption text-medium-emphasis mb-2">
-            选择要下载合并的独立音频流（不选则只保留视频内嵌音轨）
+            选择要下载合并的独立音频流（该视频流无内嵌音轨，至少选择一条）
           </div>
           <VChipGroup column multiple v-model="selectedAudioTracks">
             <VChip
