@@ -654,3 +654,15 @@ architecture 基线四刷新。
   2/2 佐证（blob 为 LF），与 TransferHistoryView CRLF 族同根，IDENTICAL
   放行。
 - 后端 +6 另见后端仓记录。
+
+## 2026-09-08 合并（第 60 次记录，定时任务执行）
+
+- 前端增量 **4 提交 / 11 文件（+728−215）**：`8d65a45b` #763 音乐发行
+  偏好控件（AccountSettingSystem 高级媒体设置按用途分组大改 +545 行、
+  Subscribe 编辑器、types.music_release_regions/scripts）、`fa916ce1`
+  音乐整理历史删除改 ID-only 载荷、`67a115ad` 设置分组、`aaf02179` 菜单
+  hover 圆角统一。自动合并零冲突（types.ts/common.scss 双方改动区不重叠），
+  双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3102 过
+  12F 与第 59 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
+- 后端 +1 另见后端仓记录。
