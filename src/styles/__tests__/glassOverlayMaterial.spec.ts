@@ -90,6 +90,14 @@ describe('glass overlay material styles', () => {
     expect(styles).toMatch(/\.plugin-card__plugin-icon \.v-img__img\s*\{\s*object-fit:\s*contain;/u)
   })
 
+  it('flattens nested shortcut dialog surfaces while keeping the outer overlay contour', () => {
+    const styles = readFileSync(resolve(cwd(), 'src/styles/themes/glass.scss'), 'utf8')
+
+    expect(styles).toContain('.words-shortcut-dialog-card .words-workspace')
+    expect(styles).toContain('.scheduler-shortcut-dialog-card .d-none.d-md-block')
+    expect(styles).toMatch(/\.words-shortcut-dialog-card \.words-workspace,[\s\S]*?border-radius: 0 !important;/u)
+  })
+
   it('keeps overlays translucent enough for CSS backdrop compositing in every material', () => {
     const styles = readFileSync(resolve(cwd(), 'src/styles/themes/glass.scss'), 'utf8')
 
@@ -285,13 +293,13 @@ describe('glass overlay material styles', () => {
     )
   })
 
-  it('keeps Chromium frosted fixed shells on the stable wallpaper backplate', () => {
+  it('keeps Chromium frosted sidebars on the stable wallpaper backplate', () => {
     const styles = readFileSync(resolve(cwd(), 'src/styles/themes/glass.scss'), 'utf8')
     const backplate = readFileSync(resolve(cwd(), 'src/components/theme/GlassFixedShellBackplate.vue'), 'utf8')
 
     expect(styles).toContain('--glass-fixed-shell-backplate-filter: blur(min(var(--glass-blur-raised), 60px))')
     expect(styles).toMatch(
-      /&\[data-glass-appearance='frosted'\]\[data-glass-quality='css'\]\s+body\[data-theme='glass'\][\s\S]*?\.layout-wrapper\.layout-fixed-shell-backplate-active \.layout-vertical-nav::before,[\s\S]*?\.layout-wrapper\.layout-fixed-shell-backplate-active \.layout-navbar,[\s\S]*?backdrop-filter:\s*none\s*!important;/,
+      /&\[data-glass-appearance='frosted'\]\[data-glass-quality='css'\]\s+body\[data-theme='glass'\][\s\S]*?\.layout-wrapper\.layout-fixed-shell-backplate-active \.layout-vertical-nav::before\s*\{[\s\S]*?backdrop-filter:\s*none\s*!important;/,
     )
     expect(styles).toMatch(
       /\[data-glass-appearance='frosted'\]\[data-glass-quality='balanced'\]\s*\{[\s\S]*?--glass-fixed-shell-backplate-filter:\s*var\(--glass-native-surface-backdrop-filter\);/,
@@ -355,7 +363,7 @@ describe('glass overlay material styles', () => {
     expect(styles).not.toContain("url('#glass-sidebar-live-refraction-high') var(--glass-fixed-shell-backdrop-filter)")
     expect(styles).toContain('--glass-sidebar-live-filter: none !important')
     expect(styles).toContain('--glass-fixed-shell-backplate-filter: var(--glass-sidebar-backdrop-filter)')
-    expect(styles).toContain('--glass-navbar-scrolled-backdrop-filter: none')
+    expect(styles).not.toContain('--glass-navbar-scrolled-backdrop-filter: none')
     expect(defs).toContain("readyAttribute: 'data-glass-sidebar-refraction-ready'")
     expect(layout).toContain("'data-glass-navigation-refraction': navbarRefractionMode")
     expect(layout).toContain("'data-glass-navbar-refraction': navbarRefractionMode")
