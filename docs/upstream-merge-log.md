@@ -666,3 +666,17 @@ architecture 基线四刷新。
 - 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3102 过
   12F 与第 59 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
 - 后端 +1 另见后端仓记录。
+
+## 2026-09-09 合并（第 61 次记录，定时任务执行）
+
+- 前端增量 **5 提交 / 15 文件（+623−169）**：`e3d8c756` #759 识别源
+  组织器（SourceClassificationDialog 新组件 + DownloadSource
+  ClassificationData 类型 + msw handler + Reorganize/DownloadHistory/
+  DownloadTaskSettings 测试扩充）、`0a7fed76` #765 选中历史单批提交、
+  `792d9f20` 移除前端错误改写（notification.ts 及其测试删除）、
+  `c709fcd1/c13653a9` 媒体类型/来源选择列布局与下载历史测试对齐。
+  自动合并零冲突（types.ts 双方改动区不重叠），双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3102 过
+  12F 与 59/60 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）；
+  新功能相关 dialog 测试 476 例全绿。
+- 后端 +27 另见后端仓记录。
