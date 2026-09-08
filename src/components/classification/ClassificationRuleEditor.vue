@@ -334,6 +334,7 @@ watch(
       <template #item="{ element: rule, index }">
         <VCard
           class="classification-rule"
+          :class="{ 'classification-rule--expanded': expandedRuleId === rule.id }"
           variant="outlined"
           role="article"
           :aria-label="`规则 ${index + 1}：${rule.name || rule.id}`"
@@ -554,6 +555,8 @@ watch(
 
 <style scoped>
 .classification-rule-editor {
+  --glass-button-surface-hover: rgba(var(--v-theme-primary), 0.12);
+
   display: grid;
   gap: 12px;
   min-width: 0;
@@ -589,6 +592,8 @@ watch(
 
 .classification-rule-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
   gap: 10px;
 }
 
@@ -637,7 +642,7 @@ watch(
 
 .classification-rule-summary:hover,
 .classification-rule-summary:focus-visible {
-  background: var(--classification-control, rgba(var(--v-theme-on-surface), 0.08));
+  background: rgba(var(--v-theme-primary), 0.08);
 }
 
 .classification-rule-summary:focus-visible {
@@ -747,6 +752,17 @@ watch(
   border-radius: 6px;
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.875rem;
+}
+
+@media (min-width: 960px) {
+  .classification-rule-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* 展开的条件编辑器保留整行空间，规则顺序仍按列表从左到右排列。 */
+  .classification-rule--expanded {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 760px) {

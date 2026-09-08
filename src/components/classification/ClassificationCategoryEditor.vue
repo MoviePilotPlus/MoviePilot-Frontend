@@ -573,6 +573,8 @@ function updateFallback(mediaType: ClassificationMediaType, categoryId: string |
 
 <style scoped>
 .classification-category-editor {
+  --glass-button-surface-hover: rgba(var(--v-theme-primary), 0.12);
+
   display: grid;
   gap: 20px;
   inline-size: 100%;
@@ -674,6 +676,7 @@ function updateFallback(mediaType: ClassificationMediaType, categoryId: string |
 
 .classification-category-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   min-inline-size: 0;
 }
@@ -863,6 +866,16 @@ function updateFallback(mediaType: ClassificationMediaType, categoryId: string |
   margin: -1px;
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
+}
+
+@media (min-width: 960px) {
+  .classification-category-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .classification-category-empty {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 720px) {
