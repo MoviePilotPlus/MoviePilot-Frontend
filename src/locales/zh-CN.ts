@@ -679,11 +679,6 @@ export default {
     clearSystemSuccess: '系统消息已清理',
     clearMediaSuccess: '媒体消息已清理',
     clearFailed: '通知清理失败',
-    fileOrganizeFailed: '文件整理失败',
-    fileOrganizePlanConflict: '文件整理任务的执行计划与当前记录不一致，系统已停止本次操作。请刷新整理历史后重试。',
-    fileOrganizeLeaseLost: '这条文件整理任务已被其他操作接管或已失效，请刷新整理历史后重试。',
-    fileOrganizeGenericError:
-      '文件整理没有完成，系统已停止本次操作。请刷新整理历史后重试；如果仍然失败，请查看系统日志。',
     empty: '暂无通知',
     systemMessages: '系统类消息',
     mediaMessages: '媒体消息',
@@ -1532,6 +1527,18 @@ export default {
       saveSuccess: '下载任务设置已保存',
       saveFailed: '下载任务设置保存失败',
       partialFailure: '部分设置未生效，请查看逐项结果',
+      sourceClassificationHint:
+        '按下载时的媒体分类与当前资源目录规则重新定位。确认后由下载器移动，不直接操作 PT 文件。',
+      previewSourceClassification: '预览按类别分类',
+      confirmSourceClassification: '确认由下载器移动',
+      classificationCategory: '媒体分类',
+      currentSavePath: '当前保存目录',
+      targetSavePath: '目标保存目录',
+      sourceClassificationSuccess: '资源目录已按类别重新定位',
+      sourceClassificationUnchanged: '当前保存目录已符合分类规则',
+      sourceClassificationFailed: '资源目录按类别分类失败',
+      manualMediaCategory: '手动媒体分类（可选）',
+      manualMediaCategoryHint: '仅当旧下载历史没有分类时填写，例如 Album；必须与当前自动分类策略中的目录完全一致。',
     },
   },
   resource: {
@@ -4252,6 +4259,7 @@ export default {
       noDataHint: '已添加的下载任务会显示在这里',
       loadFailed: '下载历史加载失败',
       deleteFailed: '下载历史删除失败',
+      classifySource: '资源目录按类别分类',
     },
     siteUserData: {
       title: '站点用户数据',

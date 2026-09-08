@@ -419,6 +419,8 @@ export interface DownloadHistory {
   poster?: string
   // 下载器 Hash
   download_hash?: string
+  // 下载器实例
+  downloader?: string
   // 种子名称
   torrent_name?: string
   // 种子描述
@@ -1072,6 +1074,17 @@ export interface DownloadTaskUpdateData {
   hash: string
   downloader: string
   results: DownloadTaskMutationResult[]
+}
+
+/** 资源目录按媒体类别重新定位的预览或执行结果。 */
+export interface DownloadSourceClassificationData {
+  hash: string
+  downloader: string
+  current_save_path: string
+  target_save_path: string
+  category: string
+  changed: boolean
+  executed: boolean
 }
 
 // 缺失剧集信息
@@ -2265,11 +2278,15 @@ export interface TransferForm {
 }
 
 // 手动整理请求
-export interface ManualTransferPayload extends Omit<TransferForm, 'fileitem'> {
+export interface ManualTransferPayload extends Omit<TransferForm, 'fileitem' | 'logid'> {
   // 文件项
   fileitem?: FileItem
   // 多选文件批量请求
   fileitems?: FileItem[]
+  // 单条整理历史请求
+  logid?: number
+  // 多选整理历史批量请求
+  logids?: number[]
 }
 
 // 手动整理目的路径匹配请求

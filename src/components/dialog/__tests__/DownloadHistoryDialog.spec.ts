@@ -256,6 +256,26 @@ describe('DownloadHistoryDialog', () => {
     expect(deletedBodies).toEqual([item])
   })
 
+  it('opens recognition and source organization for a history that still has a task hash', async () => {
+    const item = createHistory({
+      download_hash: '0123456789abcdef0123456789abcdef01234567',
+      downloader: 'qb-main',
+      title: '待重新分类',
+    })
+    server.use(
+      downloadHistoryHandler([item]),
+      http.get('*/api/v1/download/paths', () => apiJson([])),
+    )
+    const user = userEvent.setup()
+
+    await renderDialog()
+
+    await user.click(await screen.findByText('识别与资源归类'))
+
+    expect(screen.getByRole('button', { name: '识别并预览' })).toBeInTheDocument()
+    expect(screen.getAllByText('待重新分类')).not.toHaveLength(0)
+  })
+
   it('offers a retry after the first load fails', async () => {
     const item = createHistory({ title: '重试成功历史' })
     let requestCount = 0
