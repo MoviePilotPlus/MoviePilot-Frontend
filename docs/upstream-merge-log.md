@@ -623,3 +623,17 @@ architecture 基线四刷新。
   Material×1/TransferHistoryView×3/format-changed×4/frontend-workflow×2
   全部已定性 Windows 环境族 IDENTICAL）；上游新增 glass 测试 105 例全绿。
 - 后端无增量跳过。
+
+## 2026-09-08 合并（第 58 次记录，定时任务执行）
+
+- 前端增量 **5 提交 / 14 文件（+611−58）**：`b2b08109` 单条订阅搜索周期
+  （Subscribe.search_interval + 订阅卡编辑）、`eac03293` 订阅卡执行态紧凑化
+  与 stale hint 清理、`e11ebcad` #761 折叠音乐专辑行富化、`3f6f41e6` 桌面端
+  分类列表双列、`0dd50afd` 分类搜索约束与 hover 色柔化。自动合并零冲突
+  （types.ts 双方改动区不重叠），双亲验证通过。
+- 三件套：lint ✅（129s 高负载窗口）typecheck ✅；test:run 3039 过 12F
+  ——10 个已知 Windows 环境族（glass-preload/glassOverlay/TransferHistory
+  ×2/format-changed×4/frontend-workflow×2，上游本轮重写 TransferHistory
+  spec 后「joins」转绿）+ 2 个新例单跑 64/64 全绿=观察者效应（useMedia
+  Subscribe 51 轮先例；高负载佐证）。
+- 后端 +9 另见后端仓记录。
