@@ -680,3 +680,13 @@ architecture 基线四刷新。
   12F 与 59/60 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）；
   新功能相关 dialog 测试 476 例全绿。
 - 后端 +27 另见后端仓记录。
+
+## 2026-09-09 合并（第 62 次记录，定时任务执行）
+
+- 前端增量 **2 提交 / 7 文件（+328−10）**：`e29ec812` #766 手动搜索
+  候选澄清（音乐候选列表标注）、`35bcae6d` #767 keep-alive 路由回弹
+  防护（TransferHistoryView +13 行防护与 +21 行测试）。自动合并零冲突，
+  双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3107 过
+  12F 与第 61 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
+- 后端 +7 另见后端仓记录。
