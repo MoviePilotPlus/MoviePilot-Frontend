@@ -637,3 +637,20 @@ architecture 基线四刷新。
   spec 后「joins」转绿）+ 2 个新例单跑 64/64 全绿=观察者效应（useMedia
   Subscribe 51 轮先例；高负载佐证）。
 - 后端 +9 另见后端仓记录。
+
+## 2026-09-08 合并（第 59 次记录，定时任务执行）
+
+- 前端增量 **16 提交 / 33 文件（+2050−206）**：glass 性能优化系列
+  （#764 及连串：backdrop 采样共享、poster presentation 复用+固定失效域、
+  行级 displacement 合成、不变量行复用、固定表面片元着色限界、fallback
+  暂停与接管跳过、材质 uniforms 提交竞态修复、frosted 导航实时采样）、
+  媒体卡隐藏详情延迟渲染、搜索缓存进度测试、UserProfile modal handoff
+  样式契约（新增 spec）。自动合并零冲突（suppressions 自动并集），
+  双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3096 过
+  12F——10 个已知 Windows 环境族 + **UserProfile×2 新例定性**：断言用
+  LF 拼接 `.v-overlay-container:has(...)` selector，本机 autocrlf=true 把
+  glass.scss 检出为 CRLF 致 toContain 失配；纯上游树 worktree 同败
+  2/2 佐证（blob 为 LF），与 TransferHistoryView CRLF 族同根，IDENTICAL
+  放行。
+- 后端 +6 另见后端仓记录。
