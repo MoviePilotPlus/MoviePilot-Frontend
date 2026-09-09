@@ -2787,11 +2787,8 @@ export default {
       theAudioDbApiKeyHint: 'Used for music metadata and plain-lyrics fallback; 123 is the public V1 key',
       lrclibBaseUrl: 'LRCLIB Service URL',
       lrclibBaseUrlHint: 'Use the official service or a self-hosted LRCLIB-compatible instance',
-      musixmatchApiKey: 'Musixmatch API Key',
-      musixmatchApiKeyHint:
-        'Optional; uses only the licensed official API. Ensure your plan permits storing and displaying lyrics',
-      musixmatchBaseUrl: 'Musixmatch API URL',
-      musixmatchBaseUrlHint: 'Root URL of the official API or an authorized proxy',
+      amllBaseUrl: 'AMLL TTML Service URL',
+      amllBaseUrlHint: 'Use the AMLL TTML lyrics API or a compatible self-hosted instance; no API key is required',
       lyricsBatchTimeout: 'Lyrics Batch Budget',
       lyricsBatchTimeoutHint:
         'Maximum time for all online lyrics requests in one music scrape; 0 uses local lyrics only',
@@ -4254,6 +4251,9 @@ export default {
       reorganizeAgain: 'Reorganize',
       historyFound:
         '{count} successful organization record(s) found. Reorganizing removes the old target and history; move mode keeps the current source file.',
+      historySkipped:
+        '{count} successful organization record(s) found. These records will be skipped, keeping their target files and history. Only the remaining files will be organized.',
+      skipSuccessfulRecords: 'Skip successfully organized records',
       auto: 'Auto',
       processing: 'Processing ...',
       successMessage: 'File {name} has been added to the organization queue!',
