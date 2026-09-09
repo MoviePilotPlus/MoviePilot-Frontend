@@ -726,3 +726,13 @@ architecture 基线四刷新。
   workflow 2F→3F（a5d8c9e0 新增「PR 复用结果」断言同 CRLF 家族，
   blob i/lf 检出 w/crlf 佐证）；ServiceView×1 消失（往轮观察者效应族）。
 - 后端 +17 另见后端仓记录。
+
+## 2026-09-09 合并（第 66 次记录，定时任务执行）
+
+- 前端增量 **5 提交 / 11 文件（+295−71）**：`18bea99d` AMLL TTML 歌词
+  服务配置、`8ac17e10` 移除 Musixmatch 歌词设置、`5b301c8f` 下载设置与
+  整理恢复对话框优化、`0fabfd40` 手动整理跳过成功项、`f4ebf6c2`
+  AddDownloadDialog 媒体选择布局调整。自动合并零冲突，双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3167 过
+  13F 与第 65 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
+- 后端 +11 另见后端仓记录。
