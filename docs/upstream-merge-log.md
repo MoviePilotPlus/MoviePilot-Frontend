@@ -690,3 +690,12 @@ architecture 基线四刷新。
 - 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3107 过
   12F 与第 61 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
 - 后端 +7 另见后端仓记录。
+
+## 2026-09-09 合并（第 63 次记录，定时任务执行）
+
+- 前端增量 **1 提交 / 3 文件（+130−19）**：`e5de69f4` #768 导航期间
+  阻断路由写入（TransferHistoryView 守卫 + render.ts 测试支撑）。
+  自动合并零冲突，双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3108 过
+  12F 与第 62 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
+- 后端 +8 另见后端仓记录。
