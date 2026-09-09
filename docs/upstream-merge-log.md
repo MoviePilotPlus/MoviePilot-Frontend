@@ -711,3 +711,18 @@ architecture 基线四刷新。
   13F=12 个已知 Windows CRLF/环境族 + ServiceView×1 单跑 7/7 全绿=
   观察者效应（既有族）。
 - 后端 +20 另见后端仓记录。
+
+## 2026-09-09 合并（第 65 次记录，定时任务执行）
+
+- 前端增量 **5 提交 / 30 文件（+1518−194）**：`cdf8e034` 整理恢复操作与
+  提交结果暴露（TransferRecoveryDialog 测试）、`c1f9cfe8` 音乐订阅默认
+  规则暴露、`5699a8c9` WebPush 后端重启后恢复订阅（useWebPush
+  Notifications 新组合式+测试）、`984d8ba4` 清玻璃遮罩模糊降低、
+  `a5d8c9e0` CI 复用已验证 PR 检查与类型检查并行化（test.yml 加
+  permissions/reuse job + reuse.test.mjs 脚本）。自动合并零冲突
+（v3_plus 触发分支保留），双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅（117s 高负载）typecheck ✅；
+  test:run 3160 过 13F——12 个已知 Windows CRLF/环境族 + frontend-
+  workflow 2F→3F（a5d8c9e0 新增「PR 复用结果」断言同 CRLF 家族，
+  blob i/lf 检出 w/crlf 佐证）；ServiceView×1 消失（往轮观察者效应族）。
+- 后端 +17 另见后端仓记录。
