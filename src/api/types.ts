@@ -356,6 +356,20 @@ export interface TransferHistory {
   status: boolean
   // 失败原因
   errmsg?: string
+  // 失败阶段
+  failure_stage?: string
+  // 建议恢复动作
+  recovery_action?: string
+  // 当前文件版本的失败次数
+  retry_count?: number
+  // 是否已达到自动重试上限
+  retry_exhausted?: boolean
+  // 自动整理是否已暂停
+  auto_paused?: boolean
+  // 下载器清理状态
+  cleanup_status?: 'pending' | 'succeeded' | 'failed' | 'resolved' | null
+  // 下载器清理错误
+  cleanup_error?: string
   // 日期
   date?: string
   // 音乐实体类型
@@ -613,6 +627,13 @@ export interface MediaInfo {
   sample_rate?: number
   // 音频码率
   bitrate?: number
+}
+
+// 音乐作品在媒体库中的存在状态
+export interface MusicLibraryStatus {
+  media_source: MediaDataSource
+  media_id: string
+  exists: boolean
 }
 
 // 音乐可浏览实体类型
@@ -2347,6 +2368,11 @@ export interface ManualTransferPreviewItem {
   success?: boolean
   // 提示信息
   message?: string
+  // 失败阶段和建议恢复动作
+  failure_stage?: string
+  recovery_action?: string
+  // 是否因覆盖策略跳过
+  overwrite_skipped?: boolean
   // 媒体类型
   type?: string
   // 媒体标题
