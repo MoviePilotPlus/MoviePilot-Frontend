@@ -278,8 +278,8 @@ onMounted(() => {
                   <div class="text-caption" v-if="!item.success">
                     {{ item.error_msg }}
                   </div>
-                  <!-- 失败节点：重试当前 action -->
-                  <div class="text-caption mt-1" v-if="!item.success && canRetryAction(item.action)">
+                  <!-- 每个节点均可重试（成功态也保留，便于手动触发） -->
+                  <div class="text-caption mt-1" v-if="canRetryAction(item.action)">
                     <VBtn
                       variant="elevated"
                       @click="handleSubmit(item.action)"
