@@ -699,3 +699,15 @@ architecture 基线四刷新。
 - 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3108 过
   12F 与第 62 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
 - 后端 +8 另见后端仓记录。
+
+## 2026-09-09 合并（第 64 次记录，定时任务执行）
+
+- 前端增量 **3 提交 / 20 文件（+1494−111）**：`b94b13eb` #769 艺人作品
+  资源矩阵（新页 music-artist-resources + 测试）、`97ce5afe` 订阅自动等待
+  澄清与搜索恢复操作（SubscribeExecutionDialog 新组件+测试）、`ac86c39e`
+  TransferHistoryView 修复。自动合并零冲突（预判三处冲突面 types/router/
+  SubscribeList 双方改动区均不相交），双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3127 过
+  13F=12 个已知 Windows CRLF/环境族 + ServiceView×1 单跑 7/7 全绿=
+  观察者效应（既有族）。
+- 后端 +20 另见后端仓记录。
