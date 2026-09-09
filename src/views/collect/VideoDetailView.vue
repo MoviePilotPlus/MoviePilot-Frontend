@@ -954,12 +954,21 @@ async function querySites() {
     // 过滤站点，只有启用的站点才显示
     allSites.value = data.filter(item => item.is_active)
     if (allSites.value.length > 0) {
-      selectedSites.value = allSites.value[0].id
+      // 恢复上次选择的站点（找不到时回退第一个）
+      const lastSiteId = Number(localStorage.getItem('collect_search_last_site'))
+      selectedSites.value = allSites.value.some(item => item.id === lastSiteId)
+        ? lastSiteId
+        : allSites.value[0].id
     }
   } catch (error) {
     console.log(error)
   }
 }
+// 选中站点变化时记住选择（三个采集搜索入口共用同一 key）
+watch(selectedSites, (val) => {
+  if (val)
+    localStorage.setItem('collect_search_last_site', String(val))
+})
 // 点击搜索
 async function clickSearch() {
   if (allSites.value?.length > 0) return
