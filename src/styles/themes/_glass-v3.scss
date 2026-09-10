@@ -11,6 +11,7 @@ $-popup-hosts: (
   '.agent-assistant-command-menu',
   '.agent-assistant-pending-files',
   '.agent-assistant-input',
+  '.compact-fab .v-btn',
   '.v-snackbar__wrapper',
   '.Vue-Toastification__toast',
   '.system-update-prompt',
@@ -25,6 +26,7 @@ $-popup-hosts: (
     --glass-v3-rim: clamp(0.12, calc(0.16 + var(--glass-reflection, 0.38) * 0.28), 0.4);
     --glass-v3-sheen: clamp(0.04, calc(0.035 + var(--glass-reflection, 0.38) * 0.18), 0.2);
     --glass-v3-shadow: 0 12px 30px rgba(0, 0, 0, 0.14);
+    --glass-v3-hover-shadow: 0 16px 34px rgba(0, 0, 0, 0.18);
     --glass-v3-card-tint: 0;
     // 导航使用随主题递增的紧凑半径档，比大块内容表面略收敛。
     --glass-v3-navigation-radius: var(--app-field-radius, 16px);
@@ -32,7 +34,7 @@ $-popup-hosts: (
     --glass-v3-navigation-content-gap: 16px;
     --glass-v3-navigation-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
     --glass-v3-navigation-filter: saturate(118%) brightness(var(--glass-transmission-brightness, 1));
-    // 透明材质的 Dock、菜单与弹窗只做轻度扩散，保留背景层次并由底色保障阅读。
+    // 自适应界面材质为导航、菜单、弹窗和 FAB 提供统一的阅读保护。
     --glass-popup-blur: 6px;
     --glass-popup-surface: rgba(31, 34, 39, clamp(0.2, calc(0.14 + var(--glass-surface-density, 0.62) * 0.16), 0.32));
     --glass-popup-filter: blur(var(--glass-popup-blur)) saturate(135%);
@@ -74,7 +76,31 @@ $-popup-hosts: (
       );
     }
 
+    // 通透风格减少临时表面和悬浮导航的吸收与扩散；所有消费者通过 popup token 实时同步。
+    &[data-glass-ui-style='clear']:is([data-glass-appearance='clear'], [data-glass-appearance='tinted']) {
+      --glass-popup-blur: 0px;
+      --glass-popup-surface: rgba(
+        31,
+        34,
+        39,
+        clamp(0.12, calc(0.08 + var(--glass-surface-density, 0.62) * 0.12), 0.24)
+      );
+    }
+
+    &[data-glass-ui-style='clear'][data-glass-appearance='tinted'] {
+      --glass-popup-surface: color-mix(
+        in srgb,
+        rgba(31, 34, 39, clamp(0.12, calc(0.08 + var(--glass-surface-density, 0.72) * 0.12), 0.24)) 92%,
+        rgba(var(--glass-material-accent-rgb), 0.12)
+      );
+    }
+
     body[data-theme='glass'] {
+      .glass-panel-shadow {
+        background: transparent;
+        box-shadow: var(--glass-v3-shadow);
+      }
+
       .v-card,
       .layout-navbar,
       .layout-vertical-nav::before {
@@ -303,10 +329,14 @@ $-popup-hosts: (
       .dashboard-grid-content-measure > .v-card:hover,
       .dashboard-grid-content-measure > :first-child > .v-card:hover {
         --glass-v3-rim: clamp(0.2, calc(0.22 + var(--glass-reflection, 0.38) * 0.36), 0.54);
-        --glass-v3-shadow: 0 16px 34px rgba(0, 0, 0, 0.18);
+        --glass-v3-shadow: var(--glass-v3-hover-shadow);
 
         // 悬停沿用静态轮廓，只增强其受光和投影，不切换到独立的硬质描边。
         box-shadow: var(--glass-v3-surface-edge), var(--glass-v3-shadow) !important;
+      }
+
+      .v-card:hover + .glass-panel-shadow {
+        --glass-v3-shadow: var(--glass-v3-hover-shadow);
       }
     }
   }
@@ -448,14 +478,14 @@ $-popup-hosts: (
     }
   }
 
-  // 两种顶栏风格共用透镜和材料参数；阅读扩散只属于导航，不传播到内容卡片或侧栏。
+  // 两种界面风格共用材质入口，顶栏、Dock、弹层和 FAB 只消费共享 token。
   html[data-theme='glass'] body[data-theme='glass'] {
     .layout-wrapper[data-shell-mode] .layout-navbar {
       --glass-navbar-reading-filter: saturate(100%);
       --glass-navbar-live-filter: var(--glass-navbar-reading-filter) var(--glass-v3-navigation-filter);
     }
 
-    // Dock 必须隔开任意滚动内容；其阅读保护不随顶栏风格关闭。
+    // Dock 与弹层、FAB 共用当前界面风格的阅读材质。
     .footer-nav-card {
       --glass-navigation-reading-filter: var(--glass-popup-filter);
 
@@ -561,7 +591,7 @@ $-popup-hosts: (
     --glass-navbar-reading-filter: blur(3px) brightness(92%);
   }
 
-  html[data-theme='glass'][data-glass-navbar-style='adaptive']:is(
+  html[data-theme='glass'][data-glass-ui-style='adaptive']:is(
       [data-glass-appearance='clear'],
       [data-glass-appearance='tinted']
     )
@@ -582,6 +612,19 @@ $-popup-hosts: (
     .layout-wrapper[data-shell-mode='app'] .layout-navbar {
       background: var(--glass-v3-card-background) !important;
     }
+  }
+
+  // 移动自适应导航与弹层共用完整阅读材质，收起和重现时不切换采样或叠加导航亮度修正。
+  html[data-theme='glass']:where([data-glass-ui-style='adaptive']):is(
+      [data-glass-appearance='clear'],
+      [data-glass-appearance='tinted']
+    )
+    body[data-theme='glass']
+    .layout-wrapper:is([data-shell-mode='app'], [data-shell-mode='drawer'])
+    .layout-navbar {
+    --glass-navbar-live-filter: var(--glass-popup-filter);
+
+    background: var(--glass-sheen), var(--glass-popup-surface) !important;
   }
 
   // Frosted 顶栏只由一个表面采样；桌面读取滚动正文，移动端保留其稳定背板合同。
@@ -649,7 +692,7 @@ $-popup-hosts: (
 
   @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
     html[data-theme='glass'][data-glass-appearance] body[data-theme='glass'] {
-      .layout-wrapper .layout-navbar,
+      .layout-wrapper[data-shell-mode] .layout-navbar,
       .layout-wrapper .layout-navbar::before,
       .footer-nav-card {
         background: rgb(31, 34, 39) !important;

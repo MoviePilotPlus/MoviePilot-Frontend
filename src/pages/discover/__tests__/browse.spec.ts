@@ -1,4 +1,4 @@
-import BrowsePage from '@/pages/browse.vue'
+import BrowsePage from '@/pages/discover/browse.vue'
 import { screen } from '@testing-library/vue'
 import { renderWithProviders } from '@tests/support/render'
 import { defineComponent, h, type PropType } from 'vue'
@@ -90,7 +90,7 @@ describe('browse page', () => {
 
     await renderBrowse(['person', 'search'], query)
 
-    expect(screen.getByRole('heading', { name: '演员: 张三' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '演员/艺术家: 张三' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: '人物 browse 列表' })).toHaveAttribute('data-api-path', 'person/search')
     expect(projectedQuery('人物 browse 查询')).toEqual(query)
     expect(screen.queryByRole('region', { name: '媒体 browse 列表' })).not.toBeInTheDocument()

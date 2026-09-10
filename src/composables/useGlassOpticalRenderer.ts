@@ -116,7 +116,8 @@ export function prepareGlassWebGLContext(canvas: HTMLCanvasElement) {
   const context = canvas.getContext('webgl2', {
     alpha: true,
     antialias: false,
-    depth: true,
+    // 所有光学 pass 都是二维覆盖，不使用深度测试，避免分配和清空默认深度缓冲。
+    depth: false,
     failIfMajorPerformanceCaveat: false,
     powerPreference: 'high-performance',
     premultipliedAlpha: true,
@@ -775,6 +776,9 @@ vec3 sampleWallpaper(vec2 uv) {
 }
 
 vec3 sampleChromatic(vec2 uv, float separation) {
+  // 无色散时三个通道采样同一坐标，复用完整颜色，避免重复执行壁纸曝光映射。
+  if (separation == 0.0) return sampleWallpaper(uv);
+
   return vec3(
     sampleWallpaper(uv + vec2(separation, 0.0)).r,
     sampleWallpaper(uv).g,
@@ -965,7 +969,8 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
     ? sampleWallpaper(sourceUv)
     : sampleChromatic(sourceUv, separation);
   float detailSeparation = separation * mix(1.45, 2.35, uQuality);
-  vec3 detailed = usesPrefilteredFrost > 0.5
+  // 静态轮廓由原生材质持有时 edge 为零，两级色散采样完全相同。
+  vec3 detailed = usesPrefilteredFrost > 0.5 || separation == 0.0
     ? refracted
     : sampleChromatic(sourceUv, detailSeparation);
   refracted = mix(refracted, detailed, mix(0.06, 0.16, uQuality) * (1.0 - frosted));
@@ -1099,8 +1104,7 @@ const SURFACE_TRANSITION_DURATION_MS = 96
 const SURFACE_TRANSFORM_TRACKING_MAX_MS = 1000
 
 /** 按 shader 协议读取视觉表面的四角圆角。 */
-function readBorderRadii(element: HTMLElement) {
-  const style = getComputedStyle(element)
+function readBorderRadii(element: HTMLElement, style = getComputedStyle(element)) {
   const parseRadius = (value: string) => {
     const radius = Number.parseFloat(value)
 
@@ -1116,9 +1120,7 @@ function readBorderRadii(element: HTMLElement) {
 }
 
 /** 判断元素是否在布局和视口中实际可见。 */
-function isVisibleSurface(element: HTMLElement, bounds: DOMRect) {
-  const style = getComputedStyle(element)
-
+function isVisibleSurface(style: CSSStyleDeclaration, bounds: DOMRect) {
   return (
     style.display !== 'none' &&
     style.visibility !== 'hidden' &&
@@ -1160,7 +1162,8 @@ function collectGlassOpticalSurfaceDescriptors(
       collectedElements?.push(element)
 
       const bounds = element.getBoundingClientRect()
-      if (!isVisibleSurface(element, bounds)) continue
+      const style = getComputedStyle(element)
+      if (!isVisibleSurface(style, bounds)) continue
 
       const left = Math.max(0, bounds.left)
       const top = Math.max(0, bounds.top)
@@ -1177,7 +1180,7 @@ function collectGlassOpticalSurfaceDescriptors(
         mode: resolveGlassOpticalSurfaceMode(element),
         rect: {
           height: bounds.height,
-          radii: [...readBorderRadii(element)] as GlassCornerRadii,
+          radii: [...readBorderRadii(element, style)] as GlassCornerRadii,
           rank: rank + candidates.length * 0.001,
           width: bounds.width,
           x: bounds.left + coordinateOffsetX,
@@ -1315,6 +1318,7 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
   let lastSurfaceGeometrySignature = ''
   let lastInteractionAt = 0
   let lastInteractionFrameAt = 0
+  let lastDynamicFrameAt = Number.NEGATIVE_INFINITY
   let lastPointerAt = 0
   let lastTrailAt = Number.NEGATIVE_INFINITY
   let lastPointerX = window.innerWidth * 0.5
@@ -1348,6 +1352,8 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
   let contextEventCanvas: HTMLCanvasElement | null = null
   let contextRecoveryCanvas: HTMLCanvasElement | null = null
   let resizeObserver: ResizeObserver | null = null
+  // 与原生观察器同步持有目标身份，保留已有节点的首次通知与尺寸基准。
+  const observedResizeTargets = new Set<HTMLElement>()
   let surfaceMutationObserver: MutationObserver | null = null
   let observedSurfaces: HTMLElement[] = []
   let surfaceRegistry: GlassOpticalSurfaceDescriptor[] = []
@@ -1550,14 +1556,26 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
     }
   }
 
-  /** scroll 呈现层必须跟随页面异步撑高，即使页面内没有可发现的光学表面。 */
-  function observeResizeTargets(reset = true) {
-    if (reset) resizeObserver?.disconnect()
+  /** 只增删目标，避免在尺寸回调中重注册祖先节点而产生同帧循环通知。 */
+  function observeResizeTargets() {
+    if (!resizeObserver) return
+
+    const nextTargets = new Set(observedSurfaces)
     if (presentationSpace === 'scroll') {
       const presentationRoot = options.canvas.value?.parentElement
-      if (presentationRoot) resizeObserver?.observe(presentationRoot)
+      // 根节点独立于卡片列表，空页面仍需响应异步撑高。
+      if (presentationRoot) nextTargets.add(presentationRoot)
     }
-    for (const element of observedSurfaces) resizeObserver?.observe(element)
+    for (const element of observedResizeTargets) {
+      if (nextTargets.has(element)) continue
+      resizeObserver.unobserve(element)
+      observedResizeTargets.delete(element)
+    }
+    for (const element of nextTargets) {
+      if (observedResizeTargets.has(element)) continue
+      resizeObserver.observe(element)
+      observedResizeTargets.add(element)
+    }
   }
 
   function cancelScheduledFrame() {
@@ -1987,7 +2005,15 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
       resources.renderer.setScissor(scissor.x, scissor.y, scissor.width, scissor.height)
       resources.renderer.setScissorTest(true)
     }
-    resources.renderer.render(resources.scene, resources.camera)
+    // 主输出已按呈现空间清屏；只在本次 draw 关闭自动清屏，离屏 pass 继续使用原策略。
+    const { renderer, scene, camera } = resources
+    const autoClear = renderer.autoClear
+    renderer.autoClear = false
+    try {
+      renderer.render(scene, camera)
+    } finally {
+      renderer.autoClear = autoClear
+    }
     renderedFrames.value += 1
   }
 
@@ -2251,14 +2277,9 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
     else refreshInteractionClipGeometry()
     updateVisibleSurfaceUniforms(timestamp)
 
-    const observedSurfacesChanged =
-      nextObservedSurfaces.length !== observedSurfaces.length ||
-      nextObservedSurfaces.some((element, index) => element !== observedSurfaces[index])
-
-    if (observedSurfacesChanged) {
-      observedSurfaces = nextObservedSurfaces
-      observeResizeTargets()
-    }
+    // 空页面和恢复后的根容器也可能换绑，观察目标不能只依赖卡片成员变化。
+    observedSurfaces = nextObservedSurfaces
+    observeResizeTargets()
     if (scheduleRender) scheduleFrame()
   }
 
@@ -2275,7 +2296,11 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
       scrollGeometryRefreshPending = true
       return true
     }
-    if (scrollLateGeometryCommitted) return true
+    if (scrollLateGeometryCommitted) {
+      // 一帧只补交一次；其后的失效留给下一滚动帧，不能丢失新的表面资格。
+      scrollGeometryRefreshPending = true
+      return true
+    }
 
     scrollLateGeometryCommitted = true
     scrollGeometryRefreshPending = false
@@ -2844,6 +2869,19 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
       return
     }
 
+    // Balanced 将动态模拟与合成限制在 60Hz；输入继续采集，High 保留显示器原生刷新节奏。
+    const minimumInterval = toValue(options.quality) === 'balanced' ? 1000 / 60 : 0
+    const frameElapsed = timestamp - lastDynamicFrameAt
+    if (frameElapsed < minimumInterval - 0.5) {
+      animationFrame = requestAnimationFrame(renderInteractionFrame)
+      return
+    }
+    // 保留刷新相位，避免 75/90/144Hz 下每次丢弃余量而退化到更低帧率；长间隔不补绘历史帧。
+    lastDynamicFrameAt =
+      minimumInterval > 0 && Number.isFinite(lastDynamicFrameAt)
+        ? lastDynamicFrameAt + Math.max(1, Math.floor((frameElapsed + 0.5) / minimumInterval)) * minimumInterval
+        : timestamp
+
     if (hasRippleCapability()) {
       writeSurfaceUniforms(timestamp)
       const keepAnimating = advanceRipple(timestamp)
@@ -2908,6 +2946,7 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
     cancelScheduledFrame()
     interactionAnimating = true
     lastInteractionFrameAt = 0
+    lastDynamicFrameAt = Number.NEGATIVE_INFINITY
     animationFrame = requestAnimationFrame(renderInteractionFrame)
   }
 
@@ -3280,6 +3319,8 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
       if (scrollWallpaperSamplingSuppressed) finishNativeScrollPresentation(timestamp, !hasRippleCapability())
       else renderFrame(timestamp, !hasRippleCapability())
       if (keepRippleAnimating) {
+        // 恢复帧已经推进水漾，后续动态从该帧计时，避免下一次 RAF 再立即推进。
+        lastDynamicFrameAt = timestamp
         interactionAnimating = true
         animationFrame = requestAnimationFrame(renderInteractionFrame)
       }
@@ -3479,7 +3520,7 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
 
   function setupObservers() {
     resizeObserver = new ResizeObserver(handleSurfaceResize)
-    observeResizeTargets(false)
+    observeResizeTargets()
     const observedMutationRoots = new Set<Node>()
 
     function observeMutationRoot(root: Node | null, subtree: boolean) {
@@ -3519,7 +3560,13 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
 
       interactionClipMembershipDirty = true
       commitActivePagePresentation()
-      scheduleSurfaceStabilityUpdate()
+      const membershipOnly = mutations.every(
+        mutation => mutation.type === 'attributes' && mutation.attributeName === 'data-glass-optical-mode',
+      )
+      if (membershipOnly) {
+        // 模式只改变光学资格，不改变布局；已有稳定帧仍需完成真实几何采样。
+        if (surfaceStabilityFrame === null) scheduleSurfaceUpdate()
+      } else scheduleSurfaceStabilityUpdate()
     })
     observeMutationRoot(document.querySelector('.app-wrapper'), true)
     observeMutationRoot(document.querySelector('.v-overlay-container'), true)
@@ -3625,6 +3672,7 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
     removeEvents()
     resizeObserver?.disconnect()
     resizeObserver = null
+    observedResizeTargets.clear()
     surfaceMutationObserver?.disconnect()
     surfaceMutationObserver = null
     observedSurfaces = []
@@ -4162,6 +4210,8 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
       const renderer = new three.WebGLRenderer({
         alpha: true,
         antialias: false,
+        depth: false,
+        stencil: false,
         canvas,
         ...(context ? { context } : {}),
         powerPreference: 'high-performance',
