@@ -736,3 +736,19 @@ architecture 基线四刷新。
 - 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3167 过
   13F 与第 65 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
 - 后端 +11 另见后端仓记录。
+
+## 2026-09-10 合并（第 67 次记录，定时任务执行）
+
+- 前端增量 **20 提交 / 89 文件（+4863−511）**：#773 液态玻璃导航系列
+（perf 主输出清除去重/默认深度缓冲省略/指针样式跳过/动态帧率相位同步/
+  balanced 60Hz 上限/wallpaper 采样复用+测试）、#771 滚动导航收敛合并、
+  #770 音乐艺人合集发现与整理、艺人并入人物搜索、**e230b6dd 页面文件按
+  域重组**（pages/ 平铺→discover/ 等子目录）、CI vitest worker 并发限界
+  三连、历史成功记录隐藏失败 tooltip、横向导航贴边对齐。冲突 1 文件
+  eslint-suppressions（**程序化 JSON 并集**——文本级叠加在「共享尾部」
+  形态下必截断条目丢 vue/valid-v-for 键致 lint 假红；改 git show 两版
+  json.load 取并集+prune 收敛，真实报错清零后 prune 清掉被上游修复的
+  stale 条目），双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3318 过
+  13F 与第 66 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
+- 后端 +17 另见后端仓记录。
