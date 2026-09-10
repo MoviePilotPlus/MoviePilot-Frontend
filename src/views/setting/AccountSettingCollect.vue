@@ -427,6 +427,25 @@ function handleImportSuccess() {
   loadSiteList()
   $toast.success(t('setting.collect.siteSchemaImportSuccess'))
 }
+// 同步覆盖站点模板：用默认 siteschema.json 覆盖库中同 domain 行（2FA 保留，库独有不删）
+const siteSyncConfirmDialog = ref(false)
+const siteSyncLoading = ref(false)
+async function syncSiteSchemas() {
+  siteSyncLoading.value = true
+  try {
+    const result: { written?: number, kept?: number } = await api.post('siteschema/sync/default')
+    siteSyncConfirmDialog.value = false
+    loadSiteList()
+    $toast.success(t('setting.collect.siteSchemaSyncSuccess', { written: result?.written ?? 0, kept: result?.kept ?? 0 }))
+  }
+  catch (error) {
+    console.error('同步覆盖站点模板失败:', error)
+    $toast.error(t('setting.collect.siteSchemaSyncFailed'))
+  }
+  finally {
+    siteSyncLoading.value = false
+  }
+}
 // 图床优先级拖拽列表（与 CollectSettings.ImageHosting 双向同步；
 // 顺序即优先级，主流程取第一个启用的图床）
 const hostingOrder = ref<{ key: string; [field: string]: any }[]>([])
@@ -1143,6 +1162,21 @@ onDeactivated(() => {
     <VImg v-if="tplPreviewSrc" :src="tplPreviewSrc" max-height="90vh" contain @click="tplPreviewLarge = false" style="cursor:pointer" class="rounded-0" />
   </VDialog>
 
+  <!-- 同步覆盖站点模板确认弹窗 -->
+  <VDialog v-model="siteSyncConfirmDialog" max-width="36rem">
+    <VCard>
+      <VCardItem>
+        <VCardTitle>{{ t('setting.collect.siteSchemaSyncConfirmTitle') }}</VCardTitle>
+      </VCardItem>
+      <VCardText>{{ t('setting.collect.siteSchemaSyncConfirmText') }}</VCardText>
+      <VCardActions>
+        <VSpacer />
+        <VBtn variant="text" @click="siteSyncConfirmDialog = false">{{ t('common.cancel') }}</VBtn>
+        <VBtn color="primary" :loading="siteSyncLoading" @click="syncSiteSchemas">{{ t('common.confirm') }}</VBtn>
+      </VCardActions>
+    </VCard>
+  </VDialog>
+
   <VRow>
     <VCol cols="12">
       <VCard>
@@ -1258,6 +1292,10 @@ onDeactivated(() => {
               <!-- 导出按钮 -->
               <VBtn color="warning" variant="tonal" @click="exportSiteSchemas" prepend-icon="mdi-export">
                 {{ t('site.actions.export') }}
+              </VBtn>
+              <!-- 同步覆盖按钮：用默认模板覆盖库中同 domain 行 -->
+              <VBtn color="error" variant="tonal" @click="siteSyncConfirmDialog = true" prepend-icon="mdi-sync">
+                {{ t('setting.collect.siteSchemaSyncConfirmTitle') }}
               </VBtn>
             </div>
           </VForm>
