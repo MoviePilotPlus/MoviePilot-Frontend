@@ -117,6 +117,12 @@ const CollectSettings = ref<any>({
     SCREENSHOT_TEMPLATE: 'default',
     SCREENSHOT_TEMPLATE_CONFIG: '',
     SCREENSHOT_HDR_PROCESSOR: 'auto',
+    SCREENSHOT_COUNT: 4,
+    SCREENSHOT_GRID_ENABLED: true,
+    SCREENSHOT_COMPRESS_LIMIT: 5 * 1024 * 1024,
+    SCREENSHOT_MIN_SIZE_LIMIT: 1800 * 1024,
+    BANGUMI_API_BASE: '',
+    TORRENT_AUTHOR: '',
     DOWNLOADER_DELETE_AFTER_DONE: true,
     SEED_SKIP_HASH_CHECK: false,
     HIGH_BITRATE_THRESHOLD: 10000000,
@@ -929,6 +935,67 @@ onDeactivated(() => {
                   hint="HDR/DV 截图的色彩映射引擎。auto 自动检测 Vulkan；libplacebo 质量最好但需要 Vulkan 支持；zscale 纯 CPU 速度快但 DV 可能偏色"
                   persistent-hint
                   prepend-inner-icon="mdi-palette"
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VSwitch
+                  v-model="CollectSettings.Basic.SCREENSHOT_GRID_ENABLED"
+                  :label="t('setting.collect.screenshotGridEnabled')"
+                  :hint="t('setting.collect.screenshotGridEnabledHint')"
+                  persistent-hint
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VTextField
+                  v-model="CollectSettings.Basic.SCREENSHOT_COUNT"
+                  type="number"
+                  :label="t('setting.collect.screenshotCount')"
+                  :hint="t('setting.collect.screenshotCountHint')"
+                  placeholder="4"
+                  persistent-hint
+                  prepend-inner-icon="mdi-image-multiple"
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VTextField
+                  v-model="CollectSettings.Basic.SCREENSHOT_COMPRESS_LIMIT"
+                  type="number"
+                  :label="t('setting.collect.screenshotCompressLimit')"
+                  :hint="t('setting.collect.screenshotCompressLimitHint')"
+                  placeholder="5242880"
+                  persistent-hint
+                  prepend-inner-icon="mdi-image-size-select-large"
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VTextField
+                  v-model="CollectSettings.Basic.SCREENSHOT_MIN_SIZE_LIMIT"
+                  type="number"
+                  :label="t('setting.collect.screenshotMinSizeLimit')"
+                  :hint="t('setting.collect.screenshotMinSizeLimitHint')"
+                  placeholder="1843200"
+                  persistent-hint
+                  prepend-inner-icon="mdi-image-size-select-small"
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VTextField
+                  v-model="CollectSettings.Basic.BANGUMI_API_BASE"
+                  :label="t('setting.collect.bangumiApiBase')"
+                  :hint="t('setting.collect.bangumiApiBaseHint')"
+                  placeholder="https://bgmapi.anibt.net/"
+                  persistent-hint
+                  prepend-inner-icon="mdi-api"
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VTextField
+                  v-model="CollectSettings.Basic.TORRENT_AUTHOR"
+                  :label="t('setting.collect.torrentAuthor')"
+                  :hint="t('setting.collect.torrentAuthorHint')"
+                  placeholder=""
+                  persistent-hint
+                  prepend-inner-icon="mdi-account-edit"
                 />
               </VCol>
               <VCol cols="12" md="12">
