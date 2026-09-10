@@ -43,7 +43,19 @@ function normalizeSelectedSites(selectedSiteIds: number[] = []) {
 watch(
   [() => props.selected, () => props.sites],
   ([value]) => {
-    selectedSites.value = normalizeSelectedSites(value || [])
+    let initial = normalizeSelectedSites(value || [])
+    // 初始没有预选（调用方没传或为空）时恢复上次搜索的站点选择
+    if (initial.length === 0) {
+      try {
+        const remembered = JSON.parse(localStorage.getItem('search_site_dialog_last') || '[]')
+        if (Array.isArray(remembered))
+          initial = normalizeSelectedSites(remembered)
+      }
+      catch (error) {
+        console.log(error)
+      }
+    }
+    selectedSites.value = initial
   },
   { immediate: true },
 )
@@ -74,9 +86,11 @@ function toggleSiteSelection(siteId: number) {
   }
 }
 
-// 确认搜索时只提交当前可用站点。
+// 确认搜索时只提交当前可用站点，并记住本次选择。
 function confirmSearch() {
-  emit('search', normalizeSelectedSites(selectedSites.value))
+  const confirmed = normalizeSelectedSites(selectedSites.value)
+  localStorage.setItem('search_site_dialog_last', JSON.stringify(confirmed))
+  emit('search', confirmed)
 }
 
 // 根据筛选条件过滤站点
