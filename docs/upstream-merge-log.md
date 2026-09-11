@@ -760,3 +760,16 @@ architecture 基线四刷新。
 - 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3320 过
   13F 与第 67 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
 - 后端 +31 另见后端仓记录。
+
+## 2026-09-11 合并（第 69 次记录，定时任务执行）
+
+- 前端增量 **11 提交 / 60 文件（+1770−571）**：agent 转向修复系列四连
+（消息流序保持/插入索引重算/排队的 WebAgent 消息保留/continuation 工具
+  更新响应式）、自适应玻璃对话框模糊分离、多行 agent 日志保留、LLM 上下文
+  回退 128K、**设置页模块选项从后端加载**（00149b8c，catalog msw handler
+  +62 行）、下载卡/媒体选择器测试种子目录。冲突 1 文件 i18n-menu（上游把
+  recommend/explore 改为按媒体源目录条件渲染——取上游条件化形态 + fork
+  采集导航三块无条件追加保序），双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3327 过
+  13F 与第 68 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
+- 后端 +44 另见后端仓记录。
