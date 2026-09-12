@@ -773,3 +773,13 @@ architecture 基线四刷新。
 - 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3327 过
   13F 与第 68 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
 - 后端 +44 另见后端仓记录。
+
+## 2026-09-12 合并（第 70 次记录，定时任务执行）
+
+- 前端增量 **8 提交 / 2 文件（+538−77）**：agent 流分段修复系列八连
+（迟到事件路由到所属流分段/活动工具按生命周期渲染/转向锚定流分段/
+  queued 边界位置与状态终结/文本保持/消息事件序保持——AgentAssistant
+  Panel 大改 +303 行测试）。自动合并零冲突，双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3330 过
+  13F 与第 69 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
+- 后端 +35 另见后端仓记录。
