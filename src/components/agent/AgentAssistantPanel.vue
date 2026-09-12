@@ -103,6 +103,7 @@ interface AgentChatMessage {
   choice_selection?: AgentChoiceSelection
   steeringStatus?: 'queued' | 'applied'
   steeringMessageId?: string
+  steeringAnchorAssistantId?: string
 }
 
 interface AgentSessionHistoryItem {
@@ -299,10 +300,13 @@ let streamRecoveryAbortRequested = false
 let streamRecoveryTimer: number | null = null
 let activeStreamStartedAt = 0
 let protectedDeliveryGeneration = 0
-let pendingSteeringDraft: AgentChatMessage | null = null
+// 保留尚未收到稳定 steering ID 的本地草稿；Set 维持用户提交顺序，避免并发 ACK 覆盖单一引用。
+const pendingSteeringDrafts = new Set<AgentChatMessage>()
 const pendingSteeringMessages = new Map<string, AgentChatMessage>()
 const acknowledgedSteeringMessages = new Set<string>()
 const steeringContinuationMessages = new Map<string, AgentChatMessage>()
+// 记录因 steering 边界而结束的助手段，确保迟到的主流事件继续写入正确的续答卡片。
+const assistantContinuationMessages = new Map<string, AgentChatMessage>()
 const steeringAbortControllers = new Set<AbortController>()
 let sendingRequestId = 0
 
@@ -674,6 +678,8 @@ function normalizeStoredMessages(value: unknown) {
           ? message.steeringStatus
           : undefined,
       steeringMessageId: stringifyChoiceField(message.steeringMessageId || message.steering_message_id) || undefined,
+      steeringAnchorAssistantId:
+        stringifyChoiceField(message.steeringAnchorAssistantId || message.steering_anchor_assistant_id) || undefined,
     } as AgentChatMessage
   })
 
@@ -683,8 +689,12 @@ function normalizeStoredMessages(value: unknown) {
 // 将本地 camelCase 消息字段转换为后端展示接口使用的 snake_case 字段。
 function serializeMessagesForServer(value: AgentChatMessage[]) {
   return normalizeStoredMessages(value).map(message => {
-    const { steeringMessageId, ...rest } = message
-    return steeringMessageId ? { ...rest, steering_message_id: steeringMessageId } : rest
+    const { steeringMessageId, steeringAnchorAssistantId, ...rest } = message
+    return {
+      ...rest,
+      ...(steeringMessageId ? { steering_message_id: steeringMessageId } : {}),
+      ...(steeringAnchorAssistantId ? { steering_anchor_assistant_id: steeringAnchorAssistantId } : {}),
+    }
   })
 }
 
@@ -791,8 +801,15 @@ function restorePendingSteeringMessages() {
   pendingSteeringMessages.clear()
   acknowledgedSteeringMessages.clear()
   steeringContinuationMessages.clear()
+  assistantContinuationMessages.clear()
+  pendingSteeringDrafts.clear()
   messages.value.forEach(message => {
-    if (message.role !== 'user' || !message.steeringMessageId) return
+    if (message.role !== 'user' || !message.steeringStatus) return
+
+    if (message.steeringStatus === 'queued' && !message.steeringMessageId) {
+      pendingSteeringDrafts.add(message)
+    }
+    if (!message.steeringMessageId) return
 
     pendingSteeringMessages.set(message.steeringMessageId, message)
     if (message.steeringStatus === 'queued') acknowledgedSteeringMessages.add(message.steeringMessageId)
@@ -1453,12 +1470,72 @@ function createChatMessage(
   }
 }
 
+// 查找当前仍在接收事件的助手段；消息列表可能已经包含多个 steering continuation。
+function findActiveAssistantMessage() {
+  return (
+    [...messages.value].reverse().find(message => message.role === 'assistant' && message.status === 'streaming') ||
+    [...messages.value].reverse().find(message => message.role === 'assistant') ||
+    null
+  )
+}
+
+// 跟随已经建立的 steering 边界解析助手消息，避免 ACK 流与主流各自持有旧对象引用。
+function resolveAssistantContinuation(message: AgentChatMessage | null) {
+  let resolved = message
+  const visited = new Set<string>()
+  while (resolved && !visited.has(resolved.id)) {
+    visited.add(resolved.id)
+    const continuation = assistantContinuationMessages.get(resolved.id)
+    if (!continuation) break
+    resolved = continuation
+  }
+  return resolved
+}
+
+// 计算排队补充消息在当前助手段之后的稳定插入点，保留同一边界上的提交顺序。
+function getSteeringInsertionIndex(assistantMessage: AgentChatMessage | null) {
+  if (!assistantMessage) return messages.value.length
+
+  const assistantIndex = messages.value.indexOf(assistantMessage)
+  if (assistantIndex < 0) return messages.value.length
+
+  let insertionIndex = assistantIndex + 1
+  while (
+    messages.value[insertionIndex]?.role === 'user' &&
+    messages.value[insertionIndex]?.steeringStatus === 'queued'
+  ) {
+    insertionIndex += 1
+  }
+  return insertionIndex
+}
+
+// 立即把 queued 草稿放到当前助手边界之后，避免 ACK 阶段先出现在消息列表末尾。
+function insertSteeringMessageAtBoundary(
+  content: string,
+  attachments: AgentMessageAttachment[],
+  choiceSelection?: AgentChoiceSelection,
+  status: 'queued' | 'applied' = 'queued',
+) {
+  const draft = createChatMessage('user', content, 'done', attachments, choiceSelection, status)
+  const anchorAssistant = findActiveAssistantMessage()
+  const insertionIndex = getSteeringInsertionIndex(anchorAssistant)
+  messages.value.splice(insertionIndex, 0, draft)
+  const reactiveDraft = messages.value[insertionIndex]
+  if (anchorAssistant) reactiveDraft.steeringAnchorAssistantId = anchorAssistant.id
+  if (status === 'queued') pendingSteeringDrafts.add(reactiveDraft)
+
+  persistState()
+  scrollToBottom()
+  return reactiveDraft
+}
+
 // 清理尚未与服务端 applied 事件对齐的补充消息本地状态。
 function clearSteeringDraftState(options: { preserveDraft?: boolean } = {}) {
   const { preserveDraft = false } = options
-  if (pendingSteeringDraft && !preserveDraft) {
-    messages.value = messages.value.filter(message => message !== pendingSteeringDraft)
-    pendingSteeringDraft = null
+  if (!preserveDraft && pendingSteeringDrafts.size) {
+    const drafts = new Set(pendingSteeringDrafts)
+    messages.value = messages.value.filter(message => !drafts.has(message))
+    pendingSteeringDrafts.clear()
     refreshMessageList()
   }
   // 已收到 queued ACK 的消息已经是用户可见记录，保留索引以接住迟到的 applied 事件。
@@ -1642,6 +1719,81 @@ function applyToolLifecycleEvent(event: AgentStreamEvent, message: AgentChatMess
   if (existing) existing.status = status
 }
 
+// 在 steering 被后端实际消费的事件边界切分助手消息，让之后到达的工具事件落到续答卡片。
+function splitAssistantAtSteeringBoundary(
+  steeringMessage: AgentChatMessage,
+  assistantMessage: AgentChatMessage | null,
+  boundaryAssistant: AgentChatMessage | null = null,
+  continuationMessageId?: string,
+) {
+  const currentAssistant =
+    (boundaryAssistant && messages.value.includes(boundaryAssistant) ? boundaryAssistant : null) ||
+    resolveAssistantContinuation(assistantMessage) ||
+    [...messages.value].reverse().find(message => message.role === 'assistant' && message.status === 'streaming') ||
+    null
+  if (!currentAssistant || !messages.value.includes(currentAssistant)) return null
+
+  const existingContinuation = assistantContinuationMessages.get(currentAssistant.id)
+  if (existingContinuation && messages.value.includes(existingContinuation)) return existingContinuation
+  // 边界事件可能先于下一帧文本增量抵达；先冲刷边界前的增量，避免它被路由到续答段。
+  if (pendingStreamDeltaMessage === currentAssistant) flushPendingStreamDelta()
+
+  let assistantIndex = messages.value.indexOf(currentAssistant)
+  const steeringIndex = messages.value.indexOf(steeringMessage)
+  if (steeringIndex >= 0) {
+    messages.value.splice(steeringIndex, 1)
+    if (steeringIndex < assistantIndex) assistantIndex -= 1
+  }
+
+  currentAssistant.status = 'done'
+  messages.value.splice(assistantIndex + 1, 0, steeringMessage)
+  const continuationMessage = createChatMessage('assistant', '', 'streaming')
+  if (continuationMessageId) continuationMessage.id = continuationMessageId
+  messages.value.splice(assistantIndex + 2, 0, continuationMessage)
+  const reactiveContinuation = messages.value[assistantIndex + 2]
+  if (!reactiveContinuation) return null
+  assistantContinuationMessages.set(currentAssistant.id, reactiveContinuation)
+  return reactiveContinuation
+}
+
+// 按服务端稳定助手段 ID 或排队时记录的锚点解析 steering 的真实边界。
+function resolveSteeringBoundaryAssistant(
+  event: AgentStreamEvent,
+  steeringMessage: AgentChatMessage,
+  assistantMessage: AgentChatMessage | null,
+) {
+  const serverAssistantId = String(event.assistant_message_id || '')
+  if (serverAssistantId) {
+    const serverAssistant = messages.value.find(
+      message => message.role === 'assistant' && message.id === serverAssistantId,
+    )
+    if (serverAssistant) return resolveAssistantContinuation(serverAssistant)
+  }
+
+  const anchorAssistantId = steeringMessage.steeringAnchorAssistantId
+  if (anchorAssistantId) {
+    const anchorAssistant = messages.value.find(
+      message => message.role === 'assistant' && message.id === anchorAssistantId,
+    )
+    if (anchorAssistant) return resolveAssistantContinuation(anchorAssistant)
+  }
+
+  return resolveAssistantContinuation(assistantMessage) || assistantMessage
+}
+
+// 按事件携带的助手段身份路由主流事件；迟到事件不能被当前 continuation 吞并。
+function resolveStreamEventAssistant(event: AgentStreamEvent, assistantMessage: AgentChatMessage | null) {
+  const eventAssistantId = String(event.assistant_message_id || '')
+  if (eventAssistantId) {
+    const eventAssistant = messages.value.find(
+      message => message.role === 'assistant' && message.id === eventAssistantId,
+    )
+    if (eventAssistant) return eventAssistant
+  }
+
+  return resolveAssistantContinuation(assistantMessage) || assistantMessage
+}
+
 // 将运行中补充消息的排队或应用状态更新到本地用户消息，并在应用点切分时间线。
 function applySteeringEvent(event: AgentStreamEvent, assistantMessage: AgentChatMessage | null) {
   const messageId = String(event.message_id || '')
@@ -1664,65 +1816,54 @@ function applySteeringEvent(event: AgentStreamEvent, assistantMessage: AgentChat
         item.content === eventContent,
     )
   }
-  if (!message && event.status === 'queued' && pendingSteeringDraft) {
-    message = pendingSteeringDraft
-    pendingSteeringDraft = null
-    pendingSteeringMessages.set(messageId, message)
-  }
-  if (!message && event.status === 'applied' && pendingSteeringDraft) {
-    message = pendingSteeringDraft
-    pendingSteeringDraft = null
-    pendingSteeringMessages.set(messageId, message)
+  if (!message) {
+    // ACK 与主流 applied 可能交错；按提交顺序接住尚未绑定稳定 ID 的草稿。
+    const matchingDraft = [...pendingSteeringDrafts].find(draft => !eventContent || draft.content === eventContent)
+    if (matchingDraft) {
+      message = matchingDraft
+      pendingSteeringDrafts.delete(matchingDraft)
+      pendingSteeringMessages.set(messageId, message)
+    }
   }
   if (!message) {
     const content = eventContent
     const attachments = Array.isArray(displayMessage?.attachments) ? displayMessage.attachments : []
     const status = event.status === 'queued' ? 'queued' : 'applied'
-    message = addMessage('user', content, 'done', attachments, undefined, status, messageId)
+    message = insertSteeringMessageAtBoundary(content, attachments, undefined, status)
+    message.steeringMessageId = messageId
     pendingSteeringMessages.set(messageId, message)
   }
   if (!message) return assistantMessage
 
   if (event.status === 'applied') {
+    pendingSteeringDrafts.delete(message)
     message.steeringStatus = 'applied'
     message.steeringMessageId = messageId
     const displayMessage = event.display_message
     if (typeof displayMessage?.content === 'string') message.content = displayMessage.content
     if (Array.isArray(displayMessage?.attachments)) message.attachments = displayMessage.attachments
     const continuation = steeringContinuationMessages.get(messageId)
-    if (continuation) return continuation
-
-    // 短 ACK 只负责显示已排队状态，没有主流助手对象，等待主流应用事件再切分。
-    if (!assistantMessage || !messages.value.includes(assistantMessage)) {
+    if (continuation) {
+      pendingSteeringMessages.delete(messageId)
+      acknowledgedSteeringMessages.delete(messageId)
       refreshMessageList()
       persistState()
-      return assistantMessage
+      return continuation
     }
 
-    const messageIndex = messages.value.indexOf(message)
-    const assistantIndex = messages.value.indexOf(assistantMessage)
-    if (assistantIndex < 0) return assistantMessage
-    if (messageIndex >= 0 && messageIndex < assistantIndex) {
-      const existingContinuation = messages.value[messageIndex + 1]
-      if (existingContinuation?.role === 'assistant' && existingContinuation.status === 'streaming') {
-        steeringContinuationMessages.set(messageId, existingContinuation)
-        return existingContinuation
-      }
+    // applied 事件本身就是后端真实的模型边界；无论本地排队气泡当前位于何处，
+    // 都在此处重新定位并切分助手段。ACK 流没有助手引用时由 helper 回退到当前流段。
+    const boundaryAssistant = resolveSteeringBoundaryAssistant(event, message, assistantMessage)
+    const nextAssistant = splitAssistantAtSteeringBoundary(
+      message,
+      assistantMessage,
+      boundaryAssistant,
+      String(event.continuation_message_id || '') || undefined,
+    )
+    if (nextAssistant) {
+      steeringContinuationMessages.set(messageId, nextAssistant)
     }
-    if (messageIndex >= 0) messages.value.splice(messageIndex, 1)
-    // 删除已存在的本地占位后重新读取索引；占位位于助手之前时，原索引会向左偏移。
-    const currentAssistantIndex = messages.value.indexOf(assistantMessage)
-    if (currentAssistantIndex < 0) return assistantMessage
-    assistantMessage.status = 'done'
-    messages.value.splice(currentAssistantIndex + 1, 0, message)
-    const continuationMessage = createChatMessage('assistant', '', 'streaming')
-    messages.value.splice(currentAssistantIndex + 2, 0, continuationMessage)
-    // 从响应式数组重新取出 continuation；直接保存刚插入的原对象会让后续工具
-    // 状态变更无法触发 Vue 更新，表现为工具已执行但界面仍停在空的思考气泡。
-    const nextAssistant = messages.value[currentAssistantIndex + 2]
-    if (!nextAssistant) return assistantMessage
-    steeringContinuationMessages.set(messageId, nextAssistant)
-    if (acknowledgedSteeringMessages.has(messageId)) {
+    if (nextAssistant && acknowledgedSteeringMessages.has(messageId)) {
       pendingSteeringMessages.delete(messageId)
       acknowledgedSteeringMessages.delete(messageId)
     }
@@ -1730,10 +1871,16 @@ function applySteeringEvent(event: AgentStreamEvent, assistantMessage: AgentChat
     message.steeringMessageId = messageId
     // 应用事件可能先于 ACK 抵达；已应用的状态不能被迟到 ACK 降级。
     if (message.steeringStatus !== 'applied') message.steeringStatus = 'queued'
-    if (pendingSteeringDraft && pendingSteeringDraft !== message) {
-      messages.value = messages.value.filter(item => item !== pendingSteeringDraft)
+    if (message.steeringStatus === 'applied') {
+      // applied 先到时，用户请求随后才创建的本地草稿是同一条消息的重复占位。
+      const duplicateDraft = [...pendingSteeringDrafts].find(draft => !eventContent || draft.content === eventContent)
+      if (duplicateDraft) {
+        messages.value = messages.value.filter(item => item !== duplicateDraft)
+        pendingSteeringDrafts.delete(duplicateDraft)
+      }
+    } else {
+      pendingSteeringDrafts.delete(message)
     }
-    pendingSteeringDraft = null
     acknowledgedSteeringMessages.add(messageId)
     if (message.steeringStatus === 'applied') {
       pendingSteeringMessages.delete(messageId)
@@ -1749,26 +1896,27 @@ function applySteeringEvent(event: AgentStreamEvent, assistantMessage: AgentChat
 // 将单个 SSE 事件应用到正在流式输出的助手消息。
 function applyStreamEvent(event: AgentStreamEvent, assistantMessage: AgentChatMessage | null) {
   if (event.type === 'steering') {
-    return applySteeringEvent(event, assistantMessage)
+    return applySteeringEvent(event, resolveAssistantContinuation(assistantMessage) || assistantMessage)
   }
-  if (!assistantMessage) return null
+  const routedAssistantMessage = resolveStreamEventAssistant(event, assistantMessage)
+  if (!routedAssistantMessage) return null
 
   switch (event.type) {
     case 'delta':
-      appendAssistantTextSegment(assistantMessage, event.content || '')
-      emit('assistant-preview', assistantMessage.content)
+      appendAssistantTextSegment(routedAssistantMessage, event.content || '')
+      emit('assistant-preview', routedAssistantMessage.content)
       break
     case 'tool':
-      applyToolLifecycleEvent(event, assistantMessage)
+      applyToolLifecycleEvent(event, routedAssistantMessage)
       break
     case 'attachment':
       if (event.attachment?.url) {
-        assistantMessage.attachments.push(event.attachment)
+        routedAssistantMessage.attachments.push(event.attachment)
       }
       break
     case 'choice':
       if (event.choice?.id) {
-        assistantMessage.choices.push({
+        routedAssistantMessage.choices.push({
           ...event.choice,
           status: 'pending',
         })
@@ -1778,24 +1926,38 @@ function applyStreamEvent(event: AgentStreamEvent, assistantMessage: AgentChatMe
       applyMessageUpdate(event)
       break
     case 'done':
-      if (assistantMessage.status !== 'error') {
-        assistantMessage.status = 'done'
+      if (routedAssistantMessage.status !== 'error') {
+        routedAssistantMessage.status = 'done'
       }
-      markToolsDone(assistantMessage)
+      markToolsDone(routedAssistantMessage)
       break
     case 'error':
-      assistantMessage.status = 'error'
+      routedAssistantMessage.status = 'error'
       // 后端流式错误已经以 AI 消息展示，避免底部提示条重复且持续占位。
-      if (!assistantMessage.content) {
-        appendAssistantTextSegment(assistantMessage, event.message_i18n || event.message || t('agentAssistant.error'))
+      if (!routedAssistantMessage.content) {
+        appendAssistantTextSegment(
+          routedAssistantMessage,
+          event.message_i18n || event.message || t('agentAssistant.error'),
+        )
       }
-      emit('assistant-preview', assistantMessage.content)
-      markToolsDone(assistantMessage)
+      emit('assistant-preview', routedAssistantMessage.content)
+      markToolsDone(routedAssistantMessage)
       break
     case 'start':
       if (event.session_id) {
         sessionId.value = event.session_id
         if (pendingStreamRecovery.value) pendingStreamRecovery.value.sessionId = event.session_id
+      }
+      if (event.assistant_message_id && routedAssistantMessage) {
+        const previousAssistantId = routedAssistantMessage.id
+        routedAssistantMessage.id = event.assistant_message_id
+        messages.value.forEach(message => {
+          if (message.steeringAnchorAssistantId === previousAssistantId) {
+            message.steeringAnchorAssistantId = event.assistant_message_id
+          }
+        })
+        refreshMessageList()
+        persistState()
       }
       break
     default:
@@ -1806,7 +1968,7 @@ function applyStreamEvent(event: AgentStreamEvent, assistantMessage: AgentChatMe
   nextTick(() => {
     scheduleMessageScrollerUpdate({ toBottom: messageScrollerShouldFollow })
   })
-  return assistantMessage
+  return routedAssistantMessage
 }
 
 // 将同一条助手消息的连续文本增量合并到一个动画帧，语义事件到来前会同步冲刷。
@@ -1852,11 +2014,13 @@ function queueStreamEvent(event: AgentStreamEvent, assistantMessage: AgentChatMe
     return applyStreamEvent(event, assistantMessage)
   }
 
-  if (pendingStreamDeltaMessage && pendingStreamDeltaMessage !== assistantMessage) flushPendingStreamDelta()
-  pendingStreamDeltaMessage = assistantMessage
+  const routedAssistantMessage = resolveStreamEventAssistant(event, assistantMessage)
+  if (!routedAssistantMessage) return null
+  if (pendingStreamDeltaMessage && pendingStreamDeltaMessage !== routedAssistantMessage) flushPendingStreamDelta()
+  pendingStreamDeltaMessage = routedAssistantMessage
   pendingStreamDelta += event.content || ''
   schedulePendingStreamDeltaFlush()
-  return assistantMessage
+  return routedAssistantMessage
 }
 
 // 拆分 SSE event name 与 data，确保受保护 frame 在普通事件解析前完成分流。
@@ -2225,14 +2389,7 @@ async function streamAgentMessage(
       ownsRunner = false
       shouldSaveClientSnapshot = false
       if (!isSecretConfirmation && echoUser) {
-        pendingSteeringDraft = addMessage(
-          'user',
-          displayContent || content,
-          'done',
-          userAttachments,
-          choiceSelection,
-          'queued',
-        )
+        insertSteeringMessageAtBoundary(displayContent || content, userAttachments, choiceSelection)
       }
     } else {
       ownsRunner = true
@@ -2254,7 +2411,6 @@ async function streamAgentMessage(
     const streamResult = await readAgentStream(response, assistantMessage, streamProtectedDeliveryGeneration)
     assistantMessage = streamResult.assistantMessage
     if (!ownsRunner && steeringResponse) {
-      pendingSteeringDraft = null
       return
     }
     shouldFollowBottomAfterStream = isMessageScrollerNearBottom()
@@ -2620,9 +2776,11 @@ function startNewSession() {
   stopGeneration()
   sessionId.value = createSessionId()
   messages.value = []
+  pendingSteeringDrafts.clear()
   pendingSteeringMessages.clear()
   acknowledgedSteeringMessages.clear()
   steeringContinuationMessages.clear()
+  assistantContinuationMessages.clear()
   streamError.value = ''
   historyMenuOpen.value = false
   clearPendingAttachments()
@@ -3004,7 +3162,7 @@ onScopeDispose(() => {
                 <div v-else class="agent-assistant-tool">
                   <VIcon
                     :icon="
-                      segment.tool.status === 'running' && message.status === 'streaming'
+                      segment.tool.status === 'running'
                         ? 'line-md:loading-twotone-loop'
                         : segment.tool.status === 'error'
                           ? 'mdi-alert-circle-outline'

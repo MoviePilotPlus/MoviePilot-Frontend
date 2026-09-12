@@ -554,6 +554,231 @@ describe('AgentAssistantPanel stream recovery', () => {
     wrapper.unmount()
   })
 
+  it('routes late tool events to the assistant segment that produced them', async () => {
+    const primaryStream = createControllableAgentStream()
+    let streamCalls = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/message/agent/stream') && init?.method === 'POST') {
+        streamCalls += 1
+        if (streamCalls === 1) return primaryStream.response
+
+        return createAgentStreamResponse(
+          [
+            legacySseFrame({
+              type: 'steering',
+              status: 'queued',
+              message_id: 'steering-late-tool',
+              content: '补充：继续执行',
+            }),
+            legacySseFrame({ type: 'done' }),
+          ],
+          { 'X-MoviePilot-Agent-Control': 'steering' },
+        )
+      }
+
+      return createAgentResponse([])
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mountPanel()
+    await wrapper.find('textarea').setValue('执行工具链')
+    await wrapper.find('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    primaryStream.emit(
+      legacySseFrame({
+        type: 'start',
+        session_id: 'web-agent:late-tool',
+        assistant_message_id: 'assistant-before-late-tool',
+      }),
+    )
+    primaryStream.emit(
+      legacySseFrame({
+        type: 'tool',
+        status: 'running',
+        tool_id: 'tool-before-late',
+        assistant_message_id: 'assistant-before-late-tool',
+        message: '边界前工具',
+      }),
+    )
+    await flushPromises()
+
+    await wrapper.find('textarea').setValue('补充：继续执行')
+    await wrapper.find('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    primaryStream.emit(
+      legacySseFrame({
+        type: 'steering',
+        status: 'applied',
+        message_id: 'steering-late-tool',
+        assistant_message_id: 'assistant-before-late-tool',
+        continuation_message_id: 'assistant-after-late-tool',
+        content: '补充：继续执行',
+      }),
+    )
+    // 这条事件在边界之后才到达，但仍属于边界前的助手段。
+    primaryStream.emit(
+      legacySseFrame({
+        type: 'tool',
+        status: 'running',
+        tool_id: 'tool-late-before',
+        assistant_message_id: 'assistant-before-late-tool',
+        message: '迟到的边界前工具',
+      }),
+    )
+    primaryStream.emit(
+      legacySseFrame({
+        type: 'tool',
+        status: 'running',
+        tool_id: 'tool-after-late',
+        assistant_message_id: 'assistant-after-late-tool',
+        message: '边界后工具',
+      }),
+    )
+    primaryStream.emit(
+      legacySseFrame({
+        type: 'done',
+        assistant_message_id: 'assistant-after-late-tool',
+      }),
+    )
+    primaryStream.close()
+    await flushPromises()
+
+    const renderedMessages = wrapper.findAll('.agent-assistant-message').map(message => ({
+      role: message.classes().includes('agent-assistant-message--user') ? 'user' : 'assistant',
+      text: message.text(),
+    }))
+    expect(renderedMessages.map(message => message.role)).toEqual(['user', 'assistant', 'user', 'assistant'])
+    expect(renderedMessages[1].text).toContain('边界前工具')
+    expect(renderedMessages[1].text).toContain('迟到的边界前工具')
+    expect(renderedMessages[1].text).not.toContain('边界后工具')
+    expect(renderedMessages[2].text).toContain('补充：继续执行')
+    expect(renderedMessages[3].text).toContain('边界后工具')
+    wrapper.unmount()
+  })
+
+  it('keeps queued steering at the end until the backend applies it between tool calls', async () => {
+    const primaryStream = createControllableAgentStream()
+    let streamCalls = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/message/agent/stream') && init?.method === 'POST') {
+        streamCalls += 1
+        if (streamCalls === 1) return primaryStream.response
+
+        return createAgentStreamResponse(
+          [
+            legacySseFrame({
+              type: 'steering',
+              status: 'queued',
+              message_id: 'steering-queued-boundary',
+              content: '补充：在下一个工具前处理',
+            }),
+            legacySseFrame({ type: 'done' }),
+          ],
+          { 'X-MoviePilot-Agent-Control': 'steering' },
+        )
+      }
+
+      return createAgentResponse([])
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mountPanel()
+    await wrapper.find('textarea').setValue('执行连续工具')
+    await wrapper.find('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    primaryStream.emit(
+      legacySseFrame({
+        type: 'start',
+        session_id: 'web-agent:stable-steering-boundary',
+        assistant_message_id: 'assistant-stable-boundary',
+      }),
+    )
+    await flushPromises()
+    primaryStream.emit(
+      legacySseFrame({
+        type: 'tool',
+        status: 'running',
+        tool_id: 'tool-before-queued',
+        tool_name: 'search',
+        message: '排队前工具',
+      }),
+    )
+    primaryStream.emit(legacySseFrame({ type: 'tool', status: 'done', tool_id: 'tool-before-queued' }))
+    await flushPromises()
+    primaryStream.emit(legacySseFrame({ type: 'delta', content: '排队前文本' }))
+
+    await wrapper.find('textarea').setValue('补充：在下一个工具前处理')
+    await wrapper.find('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    primaryStream.emit(
+      legacySseFrame({
+        type: 'tool',
+        status: 'running',
+        tool_id: 'tool-after-queued',
+        tool_name: 'download',
+        message: '排队后工具',
+      }),
+    )
+    await flushPromises()
+
+    const queuedMessages = wrapper.findAll('.agent-assistant-message').map(message => ({
+      role: message.classes().includes('agent-assistant-message--user') ? 'user' : 'assistant',
+      text: message.text(),
+    }))
+    expect(queuedMessages.map(message => message.role)).toEqual(['user', 'assistant', 'user'])
+    expect(queuedMessages[1].text).toContain('排队前工具')
+    expect(queuedMessages[1].text).toContain('排队前文本')
+    // queued ACK 尚未代表模型已经消费消息；这期间产生的工具事件仍属于当前助手段。
+    expect(queuedMessages[1].text).toContain('排队后工具')
+    expect(queuedMessages[2].text).toContain('补充：在下一个工具前处理')
+
+    primaryStream.emit(
+      legacySseFrame({
+        type: 'steering',
+        status: 'applied',
+        message_id: 'steering-queued-boundary',
+        content: '补充：在下一个工具前处理',
+        assistant_message_id: 'assistant-stable-boundary',
+        continuation_message_id: 'assistant-stable-continuation',
+        display_message: {
+          role: 'user',
+          content: '补充：在下一个工具前处理',
+          attachments: [],
+        },
+      }),
+    )
+    primaryStream.emit(
+      legacySseFrame({
+        type: 'tool',
+        status: 'running',
+        tool_id: 'tool-after-applied',
+        tool_name: 'refresh',
+        message: '消费补充消息后的工具',
+      }),
+    )
+    await flushPromises()
+
+    const renderedMessages = wrapper.findAll('.agent-assistant-message').map(message => ({
+      role: message.classes().includes('agent-assistant-message--user') ? 'user' : 'assistant',
+      text: message.text(),
+    }))
+    expect(renderedMessages.map(message => message.role)).toEqual(['user', 'assistant', 'user', 'assistant'])
+    expect(renderedMessages[1].text).toContain('排队后工具')
+    expect(renderedMessages[2].text).toContain('补充：在下一个工具前处理')
+    expect(renderedMessages[3].text).toContain('消费补充消息后的工具')
+    expect(JSON.parse(localStorage.getItem('moviepilot-agent-assistant-state') || '{}').messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'assistant-stable-boundary', status: 'done' }),
+        expect.objectContaining({ id: 'assistant-stable-continuation', status: 'streaming' }),
+      ]),
+    )
+
+    primaryStream.close()
+    await flushPromises()
+    wrapper.unmount()
+  })
+
   it('keeps a queued steering message when recovery replaces the view with a server snapshot', async () => {
     let visibilityState: DocumentVisibilityState = 'visible'
     vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibilityState)
@@ -712,6 +937,84 @@ describe('AgentAssistantPanel stream recovery', () => {
         steeringStatus: 'applied',
       }),
     )
+
+    primaryStream.close()
+    await flushPromises()
+    wrapper.unmount()
+  })
+
+  it('keeps multiple disconnected steering drafts in boundary order', async () => {
+    const primaryStream = createControllableAgentStream()
+    let streamCalls = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!String(input).endsWith('/message/agent/stream') || init?.method !== 'POST') {
+        return createAgentResponse([])
+      }
+
+      streamCalls += 1
+      if (streamCalls === 1) return primaryStream.response
+
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.error(new TypeError('Failed to fetch'))
+        },
+      })
+      return new Response(body, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream', 'X-MoviePilot-Agent-Control': 'steering' },
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mountPanel()
+    await wrapper.find('textarea').setValue('开始长任务')
+    await wrapper.find('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    await wrapper.find('textarea').setValue('第一条补充')
+    await wrapper.find('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    await wrapper.find('textarea').setValue('第二条补充')
+    await wrapper.find('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    const queuedMessages = wrapper
+      .findAll('.agent-assistant-message--user')
+      .filter(message => message.text().includes('补充'))
+    expect(queuedMessages).toHaveLength(2)
+    expect(queuedMessages[0].text()).toContain('第一条补充')
+    expect(queuedMessages[1].text()).toContain('第二条补充')
+
+    primaryStream.emit(
+      legacySseFrame({
+        type: 'steering',
+        status: 'applied',
+        message_id: 'steering-disconnected-1',
+      }),
+    )
+    primaryStream.emit(
+      legacySseFrame({
+        type: 'steering',
+        status: 'applied',
+        message_id: 'steering-disconnected-2',
+      }),
+    )
+    await flushPromises()
+
+    const renderedMessages = wrapper.findAll('.agent-assistant-message').map(message => ({
+      role: message.classes().includes('agent-assistant-message--user') ? 'user' : 'assistant',
+      text: message.text(),
+    }))
+    expect(renderedMessages.map(message => message.role)).toEqual([
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+    ])
+    expect(renderedMessages[2].text).toContain('第一条补充')
+    expect(renderedMessages[4].text).toContain('第二条补充')
 
     primaryStream.close()
     await flushPromises()
