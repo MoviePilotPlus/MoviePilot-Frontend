@@ -783,3 +783,15 @@ architecture 基线四刷新。
 - 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3330 过
   13F 与第 69 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
 - 后端 +35 另见后端仓记录。
+
+## 2026-09-12 合并（第 71 次记录，定时任务执行）
+
+- 前端增量 **18 提交 / 41 文件（+2449−480）**：#776 插件源绑定 UI（源选择
+  接口精化+安装流稳定化）、玻璃圆角统一系列（文件卡嵌套圆角移除/文件管理
+  面对齐/agent 气泡/弱清玻璃模糊分级三连）、自动分类设置简化与响应式
+  布局（AccountSettingClassification 大改 +546 行）、媒体源选项与结果
+  标签对齐、系统升级提示卡片优化。自动合并零冲突（types.ts 双方改动区
+  不相交），双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3345 过
+  13F 与第 70 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
+- 后端 +40 另见后端仓记录。
