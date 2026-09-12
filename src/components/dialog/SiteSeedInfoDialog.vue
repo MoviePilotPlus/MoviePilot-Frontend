@@ -327,6 +327,20 @@ onMounted(() => {
           />
           {{ loading ? '执行中...' : getActionName() }}
         </VBtn>
+        <!-- 更新种子：已发布过（有 torrent_id）即常驻可用——种子被站方禁用
+             需改信息重传时，下载/做种步骤可能走不通，不能等状态机推进到尾部 -->
+        <VBtn
+          v-if="siteSeed?.torrent_uploaded"
+          variant="elevated"
+          @click="handleSubmit('torrent_update')"
+          :disabled="loading"
+          color="secondary"
+          prepend-icon="mdi-refresh"
+          class="px-5"
+          size="small"
+        >
+          更新种子
+        </VBtn>
         <VBtn
           variant="elevated"
           @click="deleteSeed"
