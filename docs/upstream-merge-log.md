@@ -795,3 +795,14 @@ architecture 基线四刷新。
 - 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3345 过
   13F 与第 70 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
 - 后端 +40 另见后端仓记录。
+
+## 2026-09-13 合并（第 72 次记录，定时任务执行）
+
+- 前端增量 **5 提交 / 14 文件（+204−67）**：`cee32862` 版本 bump v3.0.1
+（package.json 版本冲突自动解，fork 同步 3.0.1）、`be050ef5` 订阅维护按
+  媒体类型 scoping、`4c4b6f85` 分类校验与主题可读性精化、`fa085d90` 文件
+  浏览器下圆角恢复、`6c9f7cd0` agent 实时工具摘要更新测试。自动合并零
+  冲突，双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3350 过
+  13F 与第 71 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
+- 后端 +20 另见后端仓记录。
