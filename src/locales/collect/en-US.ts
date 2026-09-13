@@ -55,6 +55,8 @@ const enUS = {
       screenshotTemplate: 'Screenshot Template',
       screenshotTemplateHint: 'Choose the screenshot collage style. Previews are illustrative.',
       screenshotGridEnabled: 'Enable Screenshot Collage',
+      screenshotCacheEnabled: 'Enable Screenshot Cache',
+      screenshotCacheEnabledHint: 'When enabled, cached screenshots for the same video are reused (skipping ffmpeg) and re-uploaded to the current image host; when disabled, screenshots are always regenerated',
       screenshotGridEnabledHint: 'On: 16 shots are composed into one grid image plus single images; Off: no collage, only the configured number of original screenshots',
       screenshotCount: 'Screenshot Count (single images)',
       screenshotCountHint: 'Number of original PNG screenshots; total count when collage is off, default 4',

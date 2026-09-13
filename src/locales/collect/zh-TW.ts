@@ -54,6 +54,8 @@ const zhTW = {
       screenshotTemplate: '截圖拼接模板',
       screenshotTemplateHint: '選擇截圖拼接圖的樣式，預覽圖為示意（實際以生成結果為準）',
       screenshotGridEnabled: '啟用截圖拼圖',
+      screenshotCacheEnabled: '啟用截圖快取',
+      screenshotCacheEnabledHint: '開啟後同一影片命中本機截圖快取則不再重新截圖（跳過 ffmpeg），直接用快取的原始圖重新上傳圖床；關閉則每次都重新截圖',
       screenshotGridEnabledHint: '開啟：16 張截圖拼成網格圖 + 若干單圖；關閉：不拼接，只擷取指定數量的原始截圖',
       screenshotCount: '截圖數量（單圖張數）',
       screenshotCountHint: 'PNG 原始截圖的張數；拼圖關閉時即截圖總數，預設 4',

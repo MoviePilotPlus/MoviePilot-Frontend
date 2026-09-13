@@ -119,6 +119,7 @@ const CollectSettings = ref<any>({
     SCREENSHOT_HDR_PROCESSOR: 'auto',
     SCREENSHOT_COUNT: 4,
     SCREENSHOT_GRID_ENABLED: true,
+    SCREENSHOT_CACHE_ENABLED: false,
     SCREENSHOT_COMPRESS_LIMIT: 5 * 1024 * 1024,
     SCREENSHOT_MIN_SIZE_LIMIT: 1800 * 1024,
     BANGUMI_API_BASE: '',
@@ -942,6 +943,14 @@ onDeactivated(() => {
                   v-model="CollectSettings.Basic.SCREENSHOT_GRID_ENABLED"
                   :label="t('setting.collect.screenshotGridEnabled')"
                   :hint="t('setting.collect.screenshotGridEnabledHint')"
+                  persistent-hint
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VSwitch
+                  v-model="CollectSettings.Basic.SCREENSHOT_CACHE_ENABLED"
+                  :label="t('setting.collect.screenshotCacheEnabled')"
+                  :hint="t('setting.collect.screenshotCacheEnabledHint')"
                   persistent-hint
                 />
               </VCol>

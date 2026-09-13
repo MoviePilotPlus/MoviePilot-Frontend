@@ -54,6 +54,8 @@ const zhCN = {
       screenshotTemplate: '截图拼接模板',
       screenshotTemplateHint: '选择截图拼接图的样式，预览图为示意（实际以生成结果为准）',
       screenshotGridEnabled: '启用截图拼图',
+      screenshotCacheEnabled: '启用截图缓存',
+      screenshotCacheEnabledHint: '开启后同一视频命中本地截图缓存则不再重新截图（跳过 ffmpeg），直接用缓存的原图重新上传图床；关闭则每次都重新截图',
       screenshotGridEnabledHint: '开启：16 张截图拼成网格图 + 若干单图；关闭：不拼接，只截取指定数量的原始截图',
       screenshotCount: '截图数量（单图张数）',
       screenshotCountHint: 'PNG 原始截图的张数；拼图关闭时即截图总数，默认 4',
