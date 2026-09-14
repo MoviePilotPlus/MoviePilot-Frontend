@@ -806,3 +806,16 @@ architecture 基线四刷新。
 - 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3350 过
   13F 与第 71 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
 - 后端 +20 另见后端仓记录。
+
+## 2026-09-13 合并（第 73 次记录，定时任务执行）
+
+- 前端增量 **17 提交 / 36 文件（+4210−939）**：**v3.0.2 版本 bump**、
+  #779 插件实例管理界面（日志等级/默认调用目标/启停+分身弹窗自动后缀
+  #782/#783/#780 三连修）、#784 Release 拉取 API 封装抽出、#785 孤儿文案
+  门禁并清 plugin 命名空间死键（新 locale-orphans.spec）、站点资源浏览
+  重设计、vite 代理取消修复（新 vite-proxy.test.mjs）、agent 长内容
+  收纳、锁配置超管用户名、默认壁纸禁用。自动合并零冲突（package.json
+  版本自动解，fork 同步 3.0.2），双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3416 过
+  13F 与第 72 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
+- 后端 +40 另见后端仓记录。
