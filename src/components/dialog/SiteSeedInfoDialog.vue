@@ -328,9 +328,10 @@ onMounted(() => {
           {{ loading ? '执行中...' : getActionName() }}
         </VBtn>
         <!-- 更新种子：已发布过（有 torrent_id）即常驻可用——种子被站方禁用
-             需改信息重传时，下载/做种步骤可能走不通，不能等状态机推进到尾部 -->
+             需改信息重传时，下载/做种步骤可能走不通，不能等状态机推进到尾部；
+             状态已到尾部时主按钮本身就是「更新种子」，勿重复渲染 -->
         <VBtn
-          v-if="siteSeed?.torrent_uploaded"
+          v-if="siteSeed?.torrent_uploaded && getCurrentAction() !== 'torrent_update'"
           variant="elevated"
           @click="handleSubmit('torrent_update')"
           :disabled="loading"
