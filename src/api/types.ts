@@ -1210,6 +1210,8 @@ export interface Plugin {
   is_instance?: boolean
   // 实例实现模式
   instance_mode?: 'virtual'
+  // 该实例是否为所属插件的默认调用目标
+  is_default_target?: boolean
 }
 
 /** 插件市场为已安装插件选择的当前更新候选。 */
@@ -1381,6 +1383,87 @@ export interface PluginReleaseVersionsResponse {
   current_version?: string | null
   // 可安装版本列表
   items: PluginReleaseVersion[]
+}
+
+/** 单个插件实例的日志等级设置与生效结果。 */
+export interface PluginInstanceLogLevel {
+  // 实例 ID
+  instance_id: string
+  // 该实例设置的日志等级覆盖，为空表示未设置或已过期
+  configured_level?: string | null
+  // 日志等级覆盖的失效时间，为空表示不过期
+  expires_at?: string | null
+  // 按过期回落判定后实际生效的日志等级
+  effective_level: string
+}
+
+/** 插件全部实例（含本体）的日志等级设置总览。 */
+export interface PluginInstanceLogLevelOverview {
+  // 插件 ID
+  plugin_id: string
+  // 该插件全部实例的日志等级设置，首项固定是本体自身
+  instances: PluginInstanceLogLevel[]
+}
+
+/** 设置插件实例日志等级覆盖的请求参数。 */
+export interface PluginInstanceLogLevelUpdateRequest {
+  // 目标日志等级，取值为 DEBUG、INFO、WARNING、ERROR、CRITICAL
+  level: string
+  // 覆盖失效时间，为空表示不过期
+  expires_at?: string | null
+}
+
+/** 启用或停用一个插件实例的请求参数。 */
+export interface PluginInstanceEnabledRequest {
+  // 目标启用状态；置假即停用，配置与展示信息原样留存
+  enabled: boolean
+}
+
+/**
+ * 创建或恢复一个插件分身的请求参数。
+ *
+ * 创建与恢复共用同一个端点：填上某个已停用分身的后缀，提交的就是恢复那一行。
+ */
+export interface PluginCloneRequest {
+  // 分身后缀；不传、为空或纯空白时由服务端自动分配一个未被占用的号
+  suffix?: string | null
+  // 分身展示名称；恢复场景留空表示沿用停用前登记的那份，新建场景留空即为空
+  name?: string
+  // 分身描述；留空的两种语义与 name 相同
+  description?: string
+  // 分身图标；留空的两种语义与 name 相同
+  icon?: string
+  // 该后缀名下有已停用的分身时，是否沿用它留存的业务参数；置假即丢弃旧配置按模板重建
+  restore_previous?: boolean
+}
+
+/**
+ * 创建或恢复插件分身的回执。
+ *
+ * 不填后缀时前端算不出服务端分配到的号，实例 ID 只能从这里取。
+ */
+export interface PluginCloneOutcome {
+  // 新建或恢复出的实例 ID
+  instance_id: string
+}
+
+/**
+ * 一个已停用、其设置仍留存可被恢复的分身实例。
+ *
+ * 启用中的分身不在此列：它们的配置正被使用，拿来「恢复」没有意义，摆进清单
+ * 只会让人以为能把一个活着的实例再创建一遍。
+ */
+export interface PluginRestorableInstance {
+  // 分身实例 ID
+  instance_id: string
+  // 该实例相对源插件 ID 的后缀，直接回填创建表单即可触发恢复
+  suffix: string
+  // 停用前登记的展示名称
+  plugin_name?: string | null
+  // 停用前登记的描述
+  plugin_desc?: string | null
+  // 是否留有业务参数
+  has_config: boolean
 }
 
 // 插件侧栏全页导航项（与后端 PluginSidebarNavItem 对齐）
