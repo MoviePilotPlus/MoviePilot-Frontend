@@ -819,3 +819,16 @@ architecture 基线四刷新。
 - 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 3416 过
   13F 与第 72 轮完全一致（全部已定性 Windows CRLF/环境族 IDENTICAL）。
 - 后端 +40 另见后端仓记录。
+
+## 2026-09-14 合并（第 74 次记录，定时任务执行）
+
+- 前端增量 **3 提交 / 11 文件（+242−42）**：`4e1eaf56` 订阅列表展示音乐
+  专辑音轨进度、`6269fa0e` #786 收紧文案孤儿门禁的引用与动态键判定
+  （locale-orphans.spec +120 行）、`a830b19c` dashboard 最近入库十条+
+  隐藏滚动。自动合并零冲突（types.ts/SubscribeListView.vue 双方改动区
+  不相交），双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 821+ 过
+  13F 与第 73 轮完全一致（frontend-workflow×3/format-changed×4/
+  TransferHistoryView×2/UserProfile×2/glassOverlay×1/app-glass-optical-
+  preload×1，全部已定性 Windows CRLF/symlink 环境族 IDENTICAL 放行）。
+- 后端 +18 另见后端仓记录。
