@@ -846,3 +846,14 @@ architecture 基线四刷新。
   TransferHistoryView×2/UserProfile×2/glassOverlay×1/app-glass-optical-
   preload×1，全部已定性 Windows CRLF/symlink 环境族 IDENTICAL 放行）。
 - 后端 +16 另见后端仓记录。
+
+## 2026-09-16 合并（第 77 次记录，定时任务执行）
+
+- 前端增量 **2 提交 / 3 文件（+107−2）**：#788 插件源移除后允许重装
+  （pluginSource.ts 修复 + PluginMarketDetailDialog 测试）。自动合并零
+  冲突，双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 13F 与
+  第 74/75 轮完全一致（format-changed×4/frontend-workflow×3/
+  TransferHistoryView×2/UserProfile×2/glassOverlay×1/app-glass-optical-
+  preload×1，已知 Windows 环境族 IDENTICAL 放行）。
+- 后端 +3 另见后端仓记录。
