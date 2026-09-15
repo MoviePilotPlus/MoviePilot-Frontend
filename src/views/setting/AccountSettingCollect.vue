@@ -123,6 +123,9 @@ const CollectSettings = ref<any>({
     SCREENSHOT_COMPRESS_LIMIT: 5 * 1024 * 1024,
     SCREENSHOT_MIN_SIZE_LIMIT: 1800 * 1024,
     BANGUMI_API_BASE: '',
+    DOUBAN_COOKIES: '',
+    DOUBAN_USE_PROXY: true,
+    DOUBAN_BROWSER_FALLBACK: true,
     TORRENT_AUTHOR: '',
     DOWNLOADER_DELETE_AFTER_DONE: true,
     SEED_SKIP_HASH_CHECK: false,
@@ -995,6 +998,34 @@ onDeactivated(() => {
                   placeholder="https://bgmapi.anibt.net/"
                   persistent-hint
                   prepend-inner-icon="mdi-api"
+                />
+              </VCol>
+              <VCol cols="12" md="12">
+                <VTextarea
+                  v-model="CollectSettings.Basic.DOUBAN_COOKIES"
+                  auto-grow
+                  :label="t('setting.collect.doubanCookies')"
+                  :hint="t('setting.collect.doubanCookiesHint')"
+                  :placeholder="t('setting.collect.doubanCookiesPlaceholder')"
+                  rows="2"
+                  persistent-hint
+                  prepend-inner-icon="mdi-cookie"
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VSwitch
+                  v-model="CollectSettings.Basic.DOUBAN_USE_PROXY"
+                  :label="t('setting.collect.doubanUseProxy')"
+                  :hint="t('setting.collect.doubanUseProxyHint')"
+                  persistent-hint
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VSwitch
+                  v-model="CollectSettings.Basic.DOUBAN_BROWSER_FALLBACK"
+                  :label="t('setting.collect.doubanBrowserFallback')"
+                  :hint="t('setting.collect.doubanBrowserFallbackHint')"
+                  persistent-hint
                 />
               </VCol>
               <VCol cols="12" md="6">
