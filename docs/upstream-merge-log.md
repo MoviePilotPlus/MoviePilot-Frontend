@@ -832,3 +832,17 @@ architecture 基线四刷新。
   TransferHistoryView×2/UserProfile×2/glassOverlay×1/app-glass-optical-
   preload×1，全部已定性 Windows CRLF/symlink 环境族 IDENTICAL 放行）。
 - 后端 +18 另见后端仓记录。
+
+## 2026-09-15 合并（第 75 次记录，定时任务执行）
+
+- 前端增量 **8 提交 / 26 文件（+770−151）**：`d3745758` Bangumi 图片代理
+  设置、`964d3ca6` 订阅跨源查找带视频元数据、`e803cf0e`/`b7bca5ed`
+  workflow 任务卡与分享卡材质对齐（新 src/@core/utils/workflowGradient.ts）、
+  `11d50240` webpush 用户触发授权流、`b901d58b` passkey 结构化注册选项、
+  `2d96d092` 资源标题 hover 态移除、**v3.0.3 版本 bump**（package.json
+  唯一冲突点自动解，fork 同步 3.0.3）。双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 分批合计
+  过 13F 与第 74 轮完全一致（format-changed×4/frontend-workflow×3/
+  TransferHistoryView×2/UserProfile×2/glassOverlay×1/app-glass-optical-
+  preload×1，全部已定性 Windows CRLF/symlink 环境族 IDENTICAL 放行）。
+- 后端 +16 另见后端仓记录。
