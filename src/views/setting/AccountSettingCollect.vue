@@ -460,6 +460,82 @@ async function syncSiteSchemas() {
 // 顺序即优先级，主流程取第一个启用的图床）
 const hostingOrder = ref<{ key: string; [field: string]: any }[]>([])
 
+// ===== PTGen 简介抓取线路（拖拽排序：顺序即镜像线路优先级）=====
+// 线路池固定三条：douban 直连页 / iyuu 镜像 / wmdb 镜像；douban 始终最先
+// （数据最全），拖拽只影响镜像线路（iyuu/wmdb）的尝试顺序与启用开关
+interface PtgenSourceItem {
+  key: string
+  active: boolean
+  base_url?: string
+  [field: string]: unknown
+}
+const ptgenSourceOrder = ref<PtgenSourceItem[]>([])
+const defaultPtgenSourceOrder = ['douban', 'iyuu', 'wmdb']
+
+function ptgenSourceLabel(key: string) {
+  const keyMap: Record<string, string> = {
+    douban: 'setting.collect.ptgenSourceDouban',
+    iyuu: 'setting.collect.ptgenSourceIyuu',
+    wmdb: 'setting.collect.ptgenSourceWmdb',
+  }
+  return t(keyMap[key] || key)
+}
+
+function ptgenSourceSubLabel(key: string) {
+  const keyMap: Record<string, string> = {
+    douban: 'setting.collect.ptgenSourceDoubanDesc',
+    iyuu: 'setting.collect.ptgenSourceIyuuDesc',
+    wmdb: 'setting.collect.ptgenSourceWmdbDesc',
+  }
+  return t(keyMap[key] || '')
+}
+
+async function loadPtgenSourceSetting() {
+  try {
+    const result: { value?: unknown } = await api.get('system/setting/PtgenSourceParams')
+    // 同 system/setting/{key} 信封：data 是 {value: 配置}，未配置为 null
+    const stored = result?.value
+    const storedObj = (typeof stored === 'object' && stored !== null && !Array.isArray(stored))
+      ? stored as Record<string, unknown>
+      : {}
+    const rawOrder = Array.isArray(storedObj.order) ? storedObj.order : []
+    const storedOrder = rawOrder.filter(
+      (k): k is string => typeof k === 'string' && defaultPtgenSourceOrder.includes(k),
+    )
+    const mergedOrder = [...storedOrder, ...defaultPtgenSourceOrder.filter(k => !storedOrder.includes(k))]
+    ptgenSourceOrder.value = mergedOrder.map(key => {
+      const section = (typeof storedObj[key] === 'object' && storedObj[key] !== null)
+        ? storedObj[key] as Record<string, unknown>
+        : {}
+      return {
+        key,
+        active: section.active !== false,
+        base_url: (typeof section.base_url === 'string' && section.base_url) || '',
+      }
+    })
+  } catch (error) {
+    console.log(error)
+    ptgenSourceOrder.value = defaultPtgenSourceOrder.map(key => ({ key, active: true, base_url: '' }))
+  }
+}
+
+async function savePtgenSourceSetting() {
+  try {
+    const payload: Record<string, unknown> = {
+      order: ptgenSourceOrder.value.map(item => item.key),
+    }
+    for (const item of ptgenSourceOrder.value) {
+      const { key, ...fields } = item
+      payload[key] = fields
+    }
+    await api.post('system/setting/PtgenSourceParams', payload)
+    $toast.success(t('setting.collect.ptgenSourceSaveSuccess'))
+  } catch (error) {
+    console.log(error)
+    $toast.error(t('setting.collect.saveFailed'))
+  }
+}
+
 // 图床显示名（词条键映射）
 function hostingLabel(key: string) {
   const keyMap: Record<string, string> = {
@@ -771,6 +847,7 @@ onMounted(() => {
   queryBilibiliCookie()
   loadSystemFonts()
   loadImageHostingSetting()
+  loadPtgenSourceSetting()
   loadMediaServerSetting()
   loadSystemSettings()
   loadSiteList()
@@ -1361,6 +1438,80 @@ onDeactivated(() => {
           <VForm @submit.prevent="() => {}">
             <div class="d-flex flex-wrap gap-4 mt-4">
               <VBtn type="submit" @click="saveImageHostingSetting" prepend-icon="mdi-content-save">
+                {{ t('common.save') }}
+              </VBtn>
+            </div>
+          </VForm>
+        </VCardText>
+      </VCard>
+    </VCol>
+  </VRow>
+  <VRow>
+    <VCol cols="12">
+      <VCard>
+        <VCardItem>
+          <VCardTitle>{{ t('setting.collect.ptgenSource') }}</VCardTitle>
+          <VCardSubtitle>{{ t('setting.collect.ptgenSourceDesc') }}</VCardSubtitle>
+        </VCardItem>
+        <VCardText>
+          <VForm @submit.prevent="() => {}">
+            <div class="text-medium-emphasis text-body-2 mb-3">
+              {{ t('setting.collect.ptgenSourceOrderHint') }}
+            </div>
+            <!-- 简介抓取线路拖拽排序列表：顺序=优先级，douban 直连始终最先 -->
+            <draggable
+              v-model="ptgenSourceOrder"
+              handle=".cursor-move"
+              item-key="key"
+              tag="div"
+              :component-data="{ 'class': 'd-flex flex-column gap-3' }"
+            >
+              <template #item="{ element }">
+                <VCard variant="tonal" class="pa-3">
+                  <VRow align="center" dense>
+                    <VCol cols="auto" class="cursor-move">
+                      <VIcon icon="mdi-drag" />
+                    </VCol>
+                    <VCol cols="12" sm="auto" class="text-subtitle-1 font-weight-bold">
+                      {{ ptgenSourceLabel(element.key) }}
+                    </VCol>
+                    <VCol cols="12" sm="6" class="text-body-2 text-medium-emphasis">
+                      {{ ptgenSourceSubLabel(element.key) }}
+                    </VCol>
+                    <VCol cols="12" sm="auto" offset-sm="auto">
+                      <VSwitch
+                        v-model="element.active"
+                        :label="t('setting.collect.active')"
+                        color="primary"
+                        density="compact"
+                        hide-details
+                        :disabled="element.key === 'douban'"
+                      />
+                    </VCol>
+                  </VRow>
+                  <!-- IYUU 自建反代地址（可选） -->
+                  <VRow v-if="element.key === 'iyuu'" dense class="mt-1">
+                    <VCol cols="12" md="8">
+                      <VTextField
+                        v-model="element.base_url"
+                        :label="t('setting.collect.ptgenSourceIyuuBaseUrl')"
+                        :hint="t('setting.collect.ptgenSourceIyuuBaseUrlHint')"
+                        placeholder="https://api.iyuu.cn/index.php"
+                        persistent-hint
+                        density="compact"
+                        prepend-inner-icon="mdi-api"
+                      />
+                    </VCol>
+                  </VRow>
+                </VCard>
+              </template>
+            </draggable>
+          </VForm>
+        </VCardText>
+        <VCardText>
+          <VForm @submit.prevent="() => {}">
+            <div class="d-flex flex-wrap gap-4 mt-4">
+              <VBtn type="submit" @click="savePtgenSourceSetting" prepend-icon="mdi-content-save">
                 {{ t('common.save') }}
               </VBtn>
             </div>
