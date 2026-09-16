@@ -106,8 +106,6 @@ const CollectSettings = ref<any>({
   Basic: {
     MEDIA_DIR: '',
     DOWNLOAD_DIR: '',
-    PTGEN_URL: '',
-    SECOND_PTGEN_URL: '',
     DOWNLOADER_SLEEP_TIME: 60,
     DOWNLOADER_THREAD_COUNT: 1,
     DOWNLOADER_SPEED: '10M',
@@ -461,21 +459,19 @@ async function syncSiteSchemas() {
 const hostingOrder = ref<{ key: string; [field: string]: any }[]>([])
 
 // ===== PTGen 简介抓取线路（拖拽排序：顺序即镜像线路优先级）=====
-// 线路池固定三条：douban 直连页 / iyuu 镜像 / wmdb 镜像；douban 始终最先
-// （数据最全），拖拽只影响镜像线路（iyuu/wmdb）的尝试顺序与启用开关
+// 线路池固定两条：douban 直连页（数据最全，始终最先）/ wmdb 镜像（可开关）；
+// 历史 iyuu 线路已下线（服务方停止提供数据），存量配置残留键会被后端忽略
 interface PtgenSourceItem {
   key: string
   active: boolean
-  base_url?: string
   [field: string]: unknown
 }
 const ptgenSourceOrder = ref<PtgenSourceItem[]>([])
-const defaultPtgenSourceOrder = ['douban', 'iyuu', 'wmdb']
+const defaultPtgenSourceOrder = ['douban', 'wmdb']
 
 function ptgenSourceLabel(key: string) {
   const keyMap: Record<string, string> = {
     douban: 'setting.collect.ptgenSourceDouban',
-    iyuu: 'setting.collect.ptgenSourceIyuu',
     wmdb: 'setting.collect.ptgenSourceWmdb',
   }
   return t(keyMap[key] || key)
@@ -484,7 +480,6 @@ function ptgenSourceLabel(key: string) {
 function ptgenSourceSubLabel(key: string) {
   const keyMap: Record<string, string> = {
     douban: 'setting.collect.ptgenSourceDoubanDesc',
-    iyuu: 'setting.collect.ptgenSourceIyuuDesc',
     wmdb: 'setting.collect.ptgenSourceWmdbDesc',
   }
   return t(keyMap[key] || '')
@@ -510,12 +505,11 @@ async function loadPtgenSourceSetting() {
       return {
         key,
         active: section.active !== false,
-        base_url: (typeof section.base_url === 'string' && section.base_url) || '',
       }
     })
   } catch (error) {
     console.log(error)
-    ptgenSourceOrder.value = defaultPtgenSourceOrder.map(key => ({ key, active: true, base_url: '' }))
+    ptgenSourceOrder.value = defaultPtgenSourceOrder.map(key => ({ key, active: true }))
   }
 }
 
@@ -939,26 +933,6 @@ onDeactivated(() => {
                   placeholder="1"
                   persistent-hint
                   prepend-inner-icon="mdi-fan"
-                />
-              </VCol>
-              <VCol cols="12" md="6">
-                <VTextField
-                  v-model="CollectSettings.Basic.PTGEN_URL"
-                  :label="t('setting.collect.ptgenUrl')"
-                  :hint="t('setting.collect.ptgenUrlHint')"
-                  placeholder="1"
-                  persistent-hint
-                  prepend-inner-icon="mdi-apple-safari"
-                />
-              </VCol>
-              <VCol cols="12" md="6">
-                <VTextField
-                  v-model="CollectSettings.Basic.SECOND_PTGEN_URL"
-                  :label="t('setting.collect.secondPtgenUrl')"
-                  :hint="t('setting.collect.secondPtgenUrlHint')"
-                  placeholder="1"
-                  persistent-hint
-                  prepend-inner-icon="mdi-google-chrome"
                 />
               </VCol>
               <VCol cols="12" md="6">
@@ -1486,20 +1460,6 @@ onDeactivated(() => {
                         density="compact"
                         hide-details
                         :disabled="element.key === 'douban'"
-                      />
-                    </VCol>
-                  </VRow>
-                  <!-- IYUU 自建反代地址（可选） -->
-                  <VRow v-if="element.key === 'iyuu'" dense class="mt-1">
-                    <VCol cols="12" md="8">
-                      <VTextField
-                        v-model="element.base_url"
-                        :label="t('setting.collect.ptgenSourceIyuuBaseUrl')"
-                        :hint="t('setting.collect.ptgenSourceIyuuBaseUrlHint')"
-                        placeholder="https://api.iyuu.cn/index.php"
-                        persistent-hint
-                        density="compact"
-                        prepend-inner-icon="mdi-api"
                       />
                     </VCol>
                   </VRow>
