@@ -5,9 +5,7 @@ on:
   pull_request:
     branches:
       - v3_plus
-  push:
-    branches:
-      - v3_plus
+  # push 直推不触发（GitHub Actions 额度所限；本地 CI 预演 + PR 验证兜底）
 
 permissions:
   contents: read
