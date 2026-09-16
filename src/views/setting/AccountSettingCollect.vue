@@ -458,20 +458,24 @@ async function syncSiteSchemas() {
 // 顺序即优先级，主流程取第一个启用的图床）
 const hostingOrder = ref<{ key: string; [field: string]: any }[]>([])
 
-// ===== PTGen 简介抓取线路（拖拽排序：顺序即镜像线路优先级）=====
-// 线路池固定两条：douban 直连页（数据最全，始终最先）/ wmdb 镜像（可开关）；
-// 历史 iyuu 线路已下线（服务方停止提供数据），存量配置残留键会被后端忽略
+// ===== PTGen 简介抓取线路（拖拽排序：顺序即兜底线路优先级）=====
+// 线路池固定三条：douban 直连页（数据最全，始终最先）/ ptgen_refactor
+// （PT-Gen-Refactor 远端服务，直连源站解析）/ wmdb 镜像；历史 iyuu 线路已
+// 下线（服务方停止提供数据），存量配置残留键会被后端忽略
 interface PtgenSourceItem {
   key: string
   active: boolean
+  base_url?: string
+  secret?: string
   [field: string]: unknown
 }
 const ptgenSourceOrder = ref<PtgenSourceItem[]>([])
-const defaultPtgenSourceOrder = ['douban', 'wmdb']
+const defaultPtgenSourceOrder = ['douban', 'ptgen_refactor', 'wmdb']
 
 function ptgenSourceLabel(key: string) {
   const keyMap: Record<string, string> = {
     douban: 'setting.collect.ptgenSourceDouban',
+    ptgen_refactor: 'setting.collect.ptgenSourceRefactor',
     wmdb: 'setting.collect.ptgenSourceWmdb',
   }
   return t(keyMap[key] || key)
@@ -480,6 +484,7 @@ function ptgenSourceLabel(key: string) {
 function ptgenSourceSubLabel(key: string) {
   const keyMap: Record<string, string> = {
     douban: 'setting.collect.ptgenSourceDoubanDesc',
+    ptgen_refactor: 'setting.collect.ptgenSourceRefactorDesc',
     wmdb: 'setting.collect.ptgenSourceWmdbDesc',
   }
   return t(keyMap[key] || '')
@@ -505,11 +510,13 @@ async function loadPtgenSourceSetting() {
       return {
         key,
         active: section.active !== false,
+        base_url: (typeof section.base_url === 'string' && section.base_url) || '',
+        secret: (typeof section.secret === 'string' && section.secret) || '',
       }
     })
   } catch (error) {
     console.log(error)
-    ptgenSourceOrder.value = defaultPtgenSourceOrder.map(key => ({ key, active: true }))
+    ptgenSourceOrder.value = defaultPtgenSourceOrder.map(key => ({ key, active: true, base_url: '', secret: '' }))
   }
 }
 
@@ -1460,6 +1467,30 @@ onDeactivated(() => {
                         density="compact"
                         hide-details
                         :disabled="element.key === 'douban'"
+                      />
+                    </VCol>
+                  </VRow>
+                  <!-- PT-Gen-Refactor 自建部署参数（官方实例留空用内置默认） -->
+                  <VRow v-if="element.key === 'ptgen_refactor'" dense class="mt-1">
+                    <VCol cols="12" md="7">
+                      <VTextField
+                        v-model="element.base_url"
+                        :label="t('setting.collect.ptgenSourceRefactorBaseUrl')"
+                        :hint="t('setting.collect.ptgenSourceRefactorBaseUrlHint')"
+                        placeholder="https://pt-gen.hares.dpdns.org"
+                        persistent-hint
+                        density="compact"
+                        prepend-inner-icon="mdi-api"
+                      />
+                    </VCol>
+                    <VCol cols="12" md="5">
+                      <VTextField
+                        v-model="element.secret"
+                        :label="t('setting.collect.ptgenSourceRefactorSecret')"
+                        :hint="t('setting.collect.ptgenSourceRefactorSecretHint')"
+                        persistent-hint
+                        density="compact"
+                        prepend-inner-icon="mdi-key-variant"
                       />
                     </VCol>
                   </VRow>
