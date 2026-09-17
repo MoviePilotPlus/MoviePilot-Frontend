@@ -8,17 +8,29 @@ const testingGuidePath = resolve(process.cwd(), 'docs/testing.md')
 const codeQualityGuidePath = resolve(process.cwd(), 'docs/code-quality.md')
 const prettierIgnorePath = resolve(process.cwd(), '.prettierignore')
 
+/**
+ * 读取文本并归一化换行。
+ *
+ * Windows 检出（core.autocrlf）把工作区文件写成 CRLF，而断言里的多行针是 LF——
+ * 归一化后本地与 Linux CI 判定一致，避免平台差造成的假红。
+ */
+function readText(path: string) {
+  return readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
+}
+
 describe('前端测试 workflow', () => {
-  it('在 PR 与 v3 push 上运行，并将变更文件格式检查限制为 PR', () => {
-    const workflow = readFileSync(workflowPath, 'utf8')
+  it('在 PR 与手动触发上运行，并将变更文件格式检查限制为 PR', () => {
+    const workflow = readText(workflowPath)
     const formatJob = workflow.match(/\n {2}format:\n(?<job>[\s\S]*?)(?=\n {2}[\w-]+:\n|$)/)?.groups?.job
     const lintJob = workflow.match(/\n {2}lint:\n(?<job>[\s\S]*?)(?=\n {2}[\w-]+:\n|$)/)?.groups?.job
     const typecheckJob = workflow.match(/\n {2}typecheck:\n(?<job>[\s\S]*?)(?=\n {2}[\w-]+:\n|$)/)?.groups?.job
     const testJob = workflow.match(/\n {2}typecheck-and-tests:\n(?<job>[\s\S]*?)(?=\n {2}[\w-]+:\n|$)/)?.groups?.job
 
     expect(workflow).toContain('permissions:\n  contents: read')
-    expect(workflow).toContain('pull_request:\n    branches:\n      - v3')
-    expect(workflow).toContain('push:\n    branches:\n      - v3')
+    expect(workflow).toContain('workflow_dispatch:')
+    expect(workflow).toContain('pull_request:\n    branches:\n      - v3_plus')
+    // fork 侧关闭 push 直推（Actions 额度控制），触发块只留 PR 与手动两路
+    expect(workflow).not.toContain('push:\n    branches:')
     expect(workflow).toContain('group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}')
     expect(formatJob).toBeDefined()
     expect(formatJob).toContain("if: github.event_name == 'pull_request'")
@@ -48,7 +60,7 @@ describe('前端测试 workflow', () => {
   })
 
   it('全量门禁仅依据已验证的 PR 复用结果跳过，且全部 PR 门禁成功才记录证明', () => {
-    const workflow = readFileSync(workflowPath, 'utf8')
+    const workflow = readText(workflowPath)
     const reuseJob = workflow.match(/\n {2}reuse:\n(?<job>[\s\S]*?)(?=\n {2}[\w-]+:\n|$)/)?.groups?.job
     const proofJob = workflow.match(/\n {2}proof:\n(?<job>[\s\S]*?)(?=\n {2}[\w-]+:\n|$)/)?.groups?.job
 
@@ -78,13 +90,13 @@ describe('前端测试 workflow', () => {
   })
 
   it('文档使用当前测试 job 名称和触发范围', () => {
-    const testingGuide = readFileSync(testingGuidePath, 'utf8')
-    const codeQualityGuide = readFileSync(codeQualityGuidePath, 'utf8')
+    const testingGuide = readText(testingGuidePath)
+    const codeQualityGuide = readText(codeQualityGuidePath)
 
     expect(testingGuide).toContain('`yarn test:run` 默认并行执行四个 Vitest shard')
     expect(testingGuide).toContain('`yarn test:run --serial`')
     expect(testingGuide).toContain('传入测试文件或名称过滤条件时自动使用单进程')
-    expect(testingGuide).toContain('推送到 `v3`')
+    expect(testingGuide).toContain('面向 `v3_plus` 的 Pull Request 和手动触发时运行')
     expect(testingGuide).toContain('只在 Pull Request 事件运行')
     expect(codeQualityGuide).toContain('`lint` 与 `typecheck` job 分别执行 ESLint 和类型检查')
     expect(codeQualityGuide).toContain('本地默认并行执行四个 Vitest shard')
@@ -96,7 +108,7 @@ describe('前端测试 workflow', () => {
   })
 
   it('V3 前端发布只由 v3 分支上的版本变更触发', () => {
-    const workflow = readFileSync(releaseWorkflowPath, 'utf8')
+    const workflow = readText(releaseWorkflowPath)
 
     expect(workflow).toContain('name: Build Moviepilot-Frontend v3')
     expect(workflow).toContain('permissions:\n  contents: write')
@@ -127,7 +139,7 @@ describe('前端测试 workflow', () => {
   })
 
   it('全仓格式检查排除仓内 linked worktree', () => {
-    const prettierIgnore = readFileSync(prettierIgnorePath, 'utf8')
+    const prettierIgnore = readText(prettierIgnorePath)
 
     expect(prettierIgnore).toContain('/.worktrees/')
   })
