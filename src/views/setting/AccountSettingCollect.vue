@@ -1221,10 +1221,12 @@ onDeactivated(() => {
 
               <!-- 背景 -->
               <div class="d-flex align-center gap-2 mb-2">
-                <span class="text-caption font-weight-bold text-medium-emphasis">背景</span>
+                <span class="text-caption font-weight-bold text-medium-emphasis flex-shrink-0 text-no-wrap">背景</span>
+                <!-- 标签须 flex-shrink-0：.v-divider 是 flex:1 1 100%，basis 100%，
+                     会在窄列里把同行文字压到换行；收缩全部由分割线承担 -->
                 <VDivider class="flex-grow-1" />
               </div>
-              <VBtnGroup divided density="compact" class="mb-2" style="width:100%">
+              <VBtnGroup divided density="compact" class="mb-4" style="width:100%">
                 <VBtn v-for="bt in ['solid','blur','frosted','gradient']" :key="bt" size="x-small"
                       :variant="tplConfig.background.type===bt?'flat':'outlined'" :color="tplConfig.background.type===bt?'primary':''"
                       style="flex:1" @click="tplConfig.background.type=bt">
@@ -1260,7 +1262,7 @@ onDeactivated(() => {
 
               <!-- 拼图 -->
               <div class="d-flex align-center gap-2 mb-2 mt-3">
-                <span class="text-caption font-weight-bold text-medium-emphasis">拼图</span>
+                <span class="text-caption font-weight-bold text-medium-emphasis flex-shrink-0 text-no-wrap">拼图</span>
                 <VDivider class="flex-grow-1" />
               </div>
               <VRow dense class="mb-1" no-gutters>
@@ -1295,7 +1297,7 @@ onDeactivated(() => {
 
               <!-- 元数据 -->
               <div class="d-flex align-center gap-2 mb-2 mt-3">
-                <span class="text-caption font-weight-bold text-medium-emphasis">元数据</span>
+                <span class="text-caption font-weight-bold text-medium-emphasis flex-shrink-0 text-no-wrap">元数据</span>
                 <VDivider class="flex-grow-1" />
               </div>
               <VRow dense class="mb-1" no-gutters>
@@ -1326,7 +1328,7 @@ onDeactivated(() => {
 
               <!-- 字体 -->
               <div class="d-flex align-center gap-2 mb-2 mt-3">
-                <span class="text-caption font-weight-bold text-medium-emphasis">字体</span>
+                <span class="text-caption font-weight-bold text-medium-emphasis flex-shrink-0 text-no-wrap">字体</span>
                 <VDivider class="flex-grow-1" />
               </div>
               <VRow dense class="mb-1" no-gutters>
