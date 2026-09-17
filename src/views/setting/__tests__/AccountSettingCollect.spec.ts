@@ -278,6 +278,53 @@ describe('AccountSettingCollect', () => {
     expect(hostingCard.element.querySelectorAll('.cursor-move').length).toBeGreaterThanOrEqual(3)
   })
 
+  it('图床卡片渲染优先级序号与描述行，停用卡整卡降透明，凭据段进浅底子面板', async () => {
+    mocks.apiGet.mockImplementation((endpoint: string) => {
+      if (endpoint === 'system/setting/ImageHostingParams')
+        return settingEnvelope({
+          order: ['ipic', 'imgbb', 'pixhost'],
+          ipic: { active: true },
+          imgbb: { apikey: 'bb-key', active: false },
+          pixhost: { active: true },
+        })
+      if (endpoint === 'system/env') return systemEnvFixture
+      if (endpoint === 'system/setting/MediaServers') return settingEnvelope(null)
+      if (endpoint === 'system/setting/TEAM_PARAMS') return settingEnvelope(teamParamsFixture)
+      if (endpoint.startsWith('system/setting/')) return settingEnvelope(null)
+      if (endpoint === 'site/' || endpoint === 'siteschema/') return []
+      throw new Error(`Unexpected GET ${endpoint}`)
+    })
+
+    await renderCollectSettings()
+
+    const hostingCard = getCardByTitle('图床设置')
+    const text = hostingCard.element.textContent ?? ''
+    // 优先级徽标按拖拽顺序编号（顺序 = 实际取用优先级）
+    expect(text).toMatch(/优先级\s*1/)
+    expect(text).toMatch(/优先级\s*3/)
+    // 每个图床带一句话定位描述
+    expect(text).toContain('免账号，单图上限 10MB')
+    // 停用的 imgbb 整卡降透明（唯一停用项）
+    expect(hostingCard.element.querySelectorAll('.opacity-60').length).toBe(1)
+    // 凭据段进浅底子面板，与头行分层
+    expect(hostingCard.element.querySelectorAll('.bg-surface-lighten-1').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('线路卡片渲染优先级序号；refactor 参数段独占子面板；豆瓣开关恒禁用', async () => {
+    await renderCollectSettings()
+
+    const sourceCard = getCardByTitle('简介抓取线路')
+    const text = sourceCard.element.textContent ?? ''
+    // 默认序 douban → ptgen_refactor → wmdb
+    expect(text).toMatch(/优先级\s*1/)
+    expect(text).toMatch(/优先级\s*3/)
+    // 仅 refactor 行有参数子面板
+    expect(sourceCard.element.querySelectorAll('.bg-surface-lighten-1').length).toBe(1)
+    // 豆瓣恒启用：开关 disabled
+    const switches = sourceCard.element.querySelectorAll('.v-switch input')
+    expect(Array.from(switches).some(el => (el as HTMLInputElement).disabled)).toBe(true)
+  })
+
   it('保存 Cookie 时 POST 原值到对应 system/setting 键', async () => {
     await renderCollectSettings()
 

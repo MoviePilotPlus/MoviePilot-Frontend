@@ -549,6 +549,18 @@ function hostingLabel(key: string) {
   return t(keyMap[key] || key)
 }
 
+// 图床一句话定位（与 ptgen 线路卡片描述行对齐）
+function hostingSubLabel(key: string) {
+  const keyMap: Record<string, string> = {
+    ipic: 'setting.collect.hostingIpicDesc',
+    imgbb: 'setting.collect.hostingImgbbDesc',
+    panda: 'setting.collect.hostingPandaDesc',
+    imgbox: 'setting.collect.hostingImgboxDesc',
+    pixhost: 'setting.collect.hostingPixhostDesc',
+  }
+  return t(keyMap[key] || '')
+}
+
 // 从 CollectSettings.ImageHosting 合成拖拽列表（顺序 + 各图床凭据/开关）；
 // 字段以引用共享，行内编辑直接写回 ImageHosting
 function syncHostingOrder() {
@@ -1197,7 +1209,7 @@ onDeactivated(() => {
               <!-- 工具栏 -->
               <div class="d-flex align-center gap-2 mb-2 flex-wrap">
                 <VSelect v-model="activePreset" :items="Object.keys(TPL_PRESETS)" density="compact"
-                         label="预设" variant="outlined" hide-details style="max-width:110px"
+                         label="预设" variant="outlined" hide-details style="max-width:140px"
                          @update:model-value="loadPreset" />
                 <VSwitch v-model="realtimePreview" label="实时" density="compact" hide-details color="primary" />
                 <VSpacer />
@@ -1208,7 +1220,10 @@ onDeactivated(() => {
               </div>
 
               <!-- 背景 -->
-              <div class="text-body-2 font-weight-bold mb-1">背景</div>
+              <div class="d-flex align-center gap-2 mb-2">
+                <span class="text-caption font-weight-bold text-medium-emphasis">背景</span>
+                <VDivider class="flex-grow-1" />
+              </div>
               <VBtnGroup divided density="compact" class="mb-2" style="width:100%">
                 <VBtn v-for="bt in ['solid','blur','frosted','gradient']" :key="bt" size="x-small"
                       :variant="tplConfig.background.type===bt?'flat':'outlined'" :color="tplConfig.background.type===bt?'primary':''"
@@ -1231,35 +1246,38 @@ onDeactivated(() => {
                   <div class="d-flex align-center gap-1">
                     <span class="text-caption" style="min-width:28px">模糊</span>
                     <VSlider v-model="tplConfig.background.blur" :min="0" :max="80" density="compact" hide-details thumb-size="14" class="flex-grow-1" />
-                    <input v-model.number="tplConfig.background.blur" type="number" style="width:50px;text-align:center;font-size:15px;font-weight:bold;border:1px solid #666;border-radius:4px;padding:4px 2px;background:#fff;color:#000 !important" />
+                    <VTextField v-model.number="tplConfig.background.blur" type="number" density="compact" variant="outlined" hide-details class="flex-shrink-0" style="width:72px" />
                   </div>
                 </VCol>
                 <VCol v-if="tplConfig.background.type==='frosted'" cols="6" class="pl-1">
                   <div class="d-flex align-center gap-1">
                     <span class="text-caption" style="min-width:28px">压暗</span>
                     <VSlider v-model="tplConfig.background.scrim_alpha" :min="0" :max="255" density="compact" hide-details thumb-size="14" class="flex-grow-1" />
-                    <input v-model.number="tplConfig.background.scrim_alpha" type="number" style="width:50px;text-align:center;font-size:15px;font-weight:bold;border:1px solid #666;border-radius:4px;padding:4px 2px;background:#fff;color:#000 !important" />
+                    <VTextField v-model.number="tplConfig.background.scrim_alpha" type="number" density="compact" variant="outlined" hide-details class="flex-shrink-0" style="width:72px" />
                   </div>
                 </VCol>
               </VRow>
 
               <!-- 拼图 -->
-              <div class="text-body-2 font-weight-bold mb-1 mt-2">拼图</div>
+              <div class="d-flex align-center gap-2 mb-2 mt-3">
+                <span class="text-caption font-weight-bold text-medium-emphasis">拼图</span>
+                <VDivider class="flex-grow-1" />
+              </div>
               <VRow dense class="mb-1" no-gutters>
                 <VCol cols="6" class="pr-1"><div class="d-flex align-center gap-1">
                   <span class="text-caption" style="min-width:28px">间距</span>
                   <VSlider v-model="tplConfig.grid.gap" :min="0" :max="30" density="compact" hide-details thumb-size="14" class="flex-grow-1" />
-                  <input v-model.number="tplConfig.grid.gap" type="number" style="width:50px;text-align:center;font-size:15px;font-weight:bold;border:1px solid #666;border-radius:4px;padding:4px 2px;background:#fff;color:#000 !important" />
+                  <VTextField v-model.number="tplConfig.grid.gap" type="number" density="compact" variant="outlined" hide-details class="flex-shrink-0" style="width:72px" />
                 </div></VCol>
                 <VCol cols="6" class="pl-1"><div class="d-flex align-center gap-1">
                   <span class="text-caption" style="min-width:28px">圆角</span>
                   <VSlider v-model="tplConfig.grid.corner_radius" :min="0" :max="30" density="compact" hide-details thumb-size="14" class="flex-grow-1" />
-                  <input v-model.number="tplConfig.grid.corner_radius" type="number" style="width:50px;text-align:center;font-size:15px;font-weight:bold;border:1px solid #666;border-radius:4px;padding:4px 2px;background:#fff;color:#000 !important" />
+                  <VTextField v-model.number="tplConfig.grid.corner_radius" type="number" density="compact" variant="outlined" hide-details class="flex-shrink-0" style="width:72px" />
                 </div></VCol>
                 <VCol cols="6" class="pr-1"><div class="d-flex align-center gap-1">
                   <span class="text-caption" style="min-width:28px">描边</span>
                   <VSlider v-model="tplConfig.grid.border_width" :min="0" :max="5" density="compact" hide-details thumb-size="14" class="flex-grow-1" />
-                  <input v-model.number="tplConfig.grid.border_width" type="number" style="width:50px;text-align:center;font-size:15px;font-weight:bold;border:1px solid #666;border-radius:4px;padding:4px 2px;background:#fff;color:#000 !important" />
+                  <VTextField v-model.number="tplConfig.grid.border_width" type="number" density="compact" variant="outlined" hide-details class="flex-shrink-0" style="width:72px" />
                 </div></VCol>
                 <VCol cols="6" class="pl-1">
                   <VMenu :close-on-content-click="false" location="bottom start">
@@ -1276,7 +1294,10 @@ onDeactivated(() => {
               <VSwitch v-model="tplConfig.grid.show_timestamp" label="截图时间戳" density="compact" hide-details class="mb-1" />
 
               <!-- 元数据 -->
-              <div class="text-body-2 font-weight-bold mb-1 mt-2">元数据</div>
+              <div class="d-flex align-center gap-2 mb-2 mt-3">
+                <span class="text-caption font-weight-bold text-medium-emphasis">元数据</span>
+                <VDivider class="flex-grow-1" />
+              </div>
               <VRow dense class="mb-1" no-gutters>
                 <VCol cols="4" class="pr-1"><VSelect v-model="tplConfig.metadata.position"
                   :items="[{title:'顶部',value:'top'},{title:'底部',value:'bottom'},{title:'叠加',value:'overlay'},{title:'左侧',value:'left'}]"
@@ -1295,7 +1316,7 @@ onDeactivated(() => {
                   </VMenu>
                 </VCol>
               </VRow>
-              <div class="d-flex gap-2 flex-wrap mt-1">
+              <div class="grid grid-cols-2 gap-x-2 gap-y-1 mt-1">
                 <VSwitch v-model="tplConfig.metadata.hierarchy" label="标题放大" density="compact" hide-details />
                 <VSwitch v-model="tplConfig.metadata.label_prefix" label="File:" density="compact" hide-details />
                 <VSwitch v-model="tplConfig.metadata.outline" label="深色描边" density="compact" hide-details />
@@ -1304,7 +1325,10 @@ onDeactivated(() => {
               </div>
 
               <!-- 字体 -->
-              <div class="text-body-2 font-weight-bold mb-1 mt-2">字体</div>
+              <div class="d-flex align-center gap-2 mb-2 mt-3">
+                <span class="text-caption font-weight-bold text-medium-emphasis">字体</span>
+                <VDivider class="flex-grow-1" />
+              </div>
               <VRow dense class="mb-1" no-gutters>
                 <VCol cols="6" class="pr-1">
                   <VAutocomplete v-model="tplConfig.font.primary" :items="systemFonts" clearable
@@ -1362,54 +1386,64 @@ onDeactivated(() => {
               tag="div"
               :component-data="{ 'class': 'd-flex flex-column gap-3' }"
             >
-              <template #item="{ element }">
-                <VCard variant="tonal" class="pa-3">
-                  <VRow align="center" dense>
-                    <VCol cols="auto" class="cursor-move">
-                      <VIcon icon="mdi-drag" />
-                    </VCol>
-                    <VCol cols="12" sm="auto" class="text-subtitle-1 font-weight-bold">
-                      {{ hostingLabel(element.key) }}
-                    </VCol>
-                    <VCol cols="12" sm="auto" offset-sm="auto">
-                      <VSwitch
-                        v-model="element.active"
-                        :label="t('setting.collect.active')"
-                        color="primary"
-                        density="compact"
-                        hide-details
-                      />
-                    </VCol>
-                  </VRow>
-                  <!-- 各图床凭据字段（免账号图床无凭据段） -->
-                  <VRow v-if="element.key === 'imgbb' || element.key === 'panda'" dense class="mt-1">
-                    <VCol cols="12" md="6">
-                      <VTextField
-                        v-model="element.apikey"
-                        :label="t('setting.collect.apikey')"
-                        prepend-inner-icon="mdi-key"
-                        density="compact"
-                      />
-                    </VCol>
-                  </VRow>
-                  <VRow v-else-if="element.key === 'imgbox'" dense class="mt-1">
-                    <VCol cols="12" md="6">
-                      <VTextField
-                        v-model="element.username"
-                        :label="t('setting.collect.username')"
-                        prepend-inner-icon="mdi-account"
-                        density="compact"
-                      />
-                    </VCol>
-                    <VCol cols="12" md="6">
-                      <VTextField
-                        v-model="element.password"
-                        :label="t('setting.collect.password')"
-                        prepend-inner-icon="mdi-account-key"
-                        density="compact"
-                      />
-                    </VCol>
-                  </VRow>
+              <template #item="{ element, index }">
+                <VCard
+                  variant="tonal"
+                  class="pa-3"
+                  :class="{ 'opacity-60': !element.active }"
+                >
+                  <div class="d-flex align-center gap-4">
+                    <VIcon icon="mdi-drag-vertical" color="grey" class="cursor-move" />
+                    <VChip size="x-small" variant="tonal" color="primary" label class="flex-shrink-0">
+                      {{ t('setting.collect.priorityLabel') }} {{ index + 1 }}
+                    </VChip>
+                    <div class="flex-grow-1 min-width-0">
+                      <div class="text-subtitle-2 font-weight-bold">{{ hostingLabel(element.key) }}</div>
+                      <div class="text-caption text-medium-emphasis">{{ hostingSubLabel(element.key) }}</div>
+                    </div>
+                    <VSwitch
+                      v-model="element.active"
+                      color="primary"
+                      density="compact"
+                      hide-details
+                      class="flex-shrink-0"
+                    />
+                  </div>
+                  <!-- 各图床凭据字段（免账号图床无凭据段）；浅底子面板与头行分层 -->
+                  <div v-if="element.key === 'imgbb' || element.key === 'panda'" class="mt-2 pa-3 rounded-lg bg-surface-lighten-1">
+                    <VTextField
+                      v-model="element.apikey"
+                      :label="t('setting.collect.apikey')"
+                      prepend-inner-icon="mdi-key"
+                      density="compact"
+                      variant="outlined"
+                      hide-details
+                    />
+                  </div>
+                  <div v-else-if="element.key === 'imgbox'" class="mt-2 pa-3 rounded-lg bg-surface-lighten-1">
+                    <VRow dense no-gutters>
+                      <VCol cols="12" md="6" class="pr-md-1 pb-1 pb-md-0">
+                        <VTextField
+                          v-model="element.username"
+                          :label="t('setting.collect.username')"
+                          prepend-inner-icon="mdi-account"
+                          density="compact"
+                          variant="outlined"
+                          hide-details
+                        />
+                      </VCol>
+                      <VCol cols="12" md="6" class="pl-md-1">
+                        <VTextField
+                          v-model="element.password"
+                          :label="t('setting.collect.password')"
+                          prepend-inner-icon="mdi-account-key"
+                          density="compact"
+                          variant="outlined"
+                          hide-details
+                        />
+                      </VCol>
+                    </VRow>
+                  </div>
                 </VCard>
               </template>
             </draggable>
@@ -1447,53 +1481,56 @@ onDeactivated(() => {
               tag="div"
               :component-data="{ 'class': 'd-flex flex-column gap-3' }"
             >
-              <template #item="{ element }">
-                <VCard variant="tonal" class="pa-3">
-                  <VRow align="center" dense>
-                    <VCol cols="auto" class="cursor-move">
-                      <VIcon icon="mdi-drag" />
-                    </VCol>
-                    <VCol cols="12" sm="auto" class="text-subtitle-1 font-weight-bold">
-                      {{ ptgenSourceLabel(element.key) }}
-                    </VCol>
-                    <VCol cols="12" sm="6" class="text-body-2 text-medium-emphasis">
-                      {{ ptgenSourceSubLabel(element.key) }}
-                    </VCol>
-                    <VCol cols="12" sm="auto" offset-sm="auto">
-                      <VSwitch
-                        v-model="element.active"
-                        :label="t('setting.collect.active')"
-                        color="primary"
-                        density="compact"
-                        hide-details
-                        :disabled="element.key === 'douban'"
-                      />
-                    </VCol>
-                  </VRow>
-                  <!-- PT-Gen-Refactor 自建部署参数（官方实例留空用内置默认） -->
-                  <VRow v-if="element.key === 'ptgen_refactor'" dense class="mt-1">
-                    <VCol cols="12" md="7">
-                      <VTextField
-                        v-model="element.base_url"
-                        :label="t('setting.collect.ptgenSourceRefactorBaseUrl')"
-                        :hint="t('setting.collect.ptgenSourceRefactorBaseUrlHint')"
-                        placeholder="https://pt-gen.hares.dpdns.org"
-                        persistent-hint
-                        density="compact"
-                        prepend-inner-icon="mdi-api"
-                      />
-                    </VCol>
-                    <VCol cols="12" md="5">
-                      <VTextField
-                        v-model="element.secret"
-                        :label="t('setting.collect.ptgenSourceRefactorSecret')"
-                        :hint="t('setting.collect.ptgenSourceRefactorSecretHint')"
-                        persistent-hint
-                        density="compact"
-                        prepend-inner-icon="mdi-key-variant"
-                      />
-                    </VCol>
-                  </VRow>
+              <template #item="{ element, index }">
+                <VCard
+                  variant="tonal"
+                  class="pa-3"
+                  :class="{ 'opacity-60': !element.active }"
+                >
+                  <div class="d-flex align-center gap-4">
+                    <VIcon icon="mdi-drag-vertical" color="grey" class="cursor-move" />
+                    <VChip size="x-small" variant="tonal" color="primary" label class="flex-shrink-0">
+                      {{ t('setting.collect.priorityLabel') }} {{ index + 1 }}
+                    </VChip>
+                    <div class="flex-grow-1 min-width-0">
+                      <div class="text-subtitle-2 font-weight-bold">{{ ptgenSourceLabel(element.key) }}</div>
+                      <div class="text-caption text-medium-emphasis">{{ ptgenSourceSubLabel(element.key) }}</div>
+                    </div>
+                    <VSwitch
+                      v-model="element.active"
+                      color="primary"
+                      density="compact"
+                      hide-details
+                      :disabled="element.key === 'douban'"
+                      class="flex-shrink-0"
+                    />
+                  </div>
+                  <!-- PT-Gen-Refactor 自建部署参数（官方实例留空用内置默认）；浅底子面板与头行分层 -->
+                  <div v-if="element.key === 'ptgen_refactor'" class="mt-2 pa-3 rounded-lg bg-surface-lighten-1">
+                    <VRow dense no-gutters>
+                      <VCol cols="12" md="7" class="pr-md-1 pb-1 pb-md-0">
+                        <VTextField
+                          v-model="element.base_url"
+                          :label="t('setting.collect.ptgenSourceRefactorBaseUrl')"
+                          :hint="t('setting.collect.ptgenSourceRefactorBaseUrlHint')"
+                          placeholder="https://pt-gen.hares.dpdns.org"
+                          persistent-hint
+                          density="compact"
+                          prepend-inner-icon="mdi-api"
+                        />
+                      </VCol>
+                      <VCol cols="12" md="5" class="pl-md-1">
+                        <VTextField
+                          v-model="element.secret"
+                          :label="t('setting.collect.ptgenSourceRefactorSecret')"
+                          :hint="t('setting.collect.ptgenSourceRefactorSecretHint')"
+                          persistent-hint
+                          density="compact"
+                          prepend-inner-icon="mdi-key-variant"
+                        />
+                      </VCol>
+                    </VRow>
+                  </div>
                 </VCard>
               </template>
             </draggable>
