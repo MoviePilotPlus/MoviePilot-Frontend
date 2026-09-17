@@ -310,7 +310,7 @@ describe('AccountSettingCollect', () => {
     expect(hostingCard.element.querySelectorAll('.collect-subpanel').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('线路卡片渲染优先级序号；refactor 参数段独占子面板；豆瓣开关恒禁用', async () => {
+  it('线路卡片渲染优先级序号；refactor 参数段独占子面板；三条线路开关均可用', async () => {
     await renderCollectSettings()
 
     const sourceCard = getCardByTitle('简介抓取线路')
@@ -320,9 +320,10 @@ describe('AccountSettingCollect', () => {
     expect(text).toMatch(/优先级\s*3/)
     // 仅 refactor 行有参数子面板
     expect(sourceCard.element.querySelectorAll('.collect-subpanel').length).toBe(1)
-    // 豆瓣恒启用：开关 disabled
+    // 豆瓣直连 2026-09-17 起可关：无任何 disabled 开关
     const switches = sourceCard.element.querySelectorAll('.v-switch input')
-    expect(Array.from(switches).some(el => (el as HTMLInputElement).disabled)).toBe(true)
+    expect(switches.length).toBe(3)
+    expect(Array.from(switches).every(el => !(el as HTMLInputElement).disabled)).toBe(true)
   })
 
   it('保存 Cookie 时 POST 原值到对应 system/setting 键', async () => {

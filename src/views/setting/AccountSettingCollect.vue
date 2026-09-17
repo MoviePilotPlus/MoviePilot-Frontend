@@ -1503,7 +1503,6 @@ onDeactivated(() => {
                       color="primary"
                       density="compact"
                       hide-details
-                      :disabled="element.key === 'douban'"
                       class="flex-shrink-0"
                     />
                   </div>
