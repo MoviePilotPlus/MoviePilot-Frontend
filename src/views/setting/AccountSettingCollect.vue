@@ -1397,7 +1397,7 @@ onDeactivated(() => {
                     <VChip size="x-small" variant="tonal" color="primary" label class="flex-shrink-0">
                       {{ t('setting.collect.priorityLabel') }} {{ index + 1 }}
                     </VChip>
-                    <div class="flex-grow-1 min-width-0">
+                    <div class="flex-grow-1 min-w-0">
                       <div class="text-subtitle-2 font-weight-bold">{{ hostingLabel(element.key) }}</div>
                       <div class="text-caption text-medium-emphasis">{{ hostingSubLabel(element.key) }}</div>
                     </div>
@@ -1410,7 +1410,7 @@ onDeactivated(() => {
                     />
                   </div>
                   <!-- 各图床凭据字段（免账号图床无凭据段）；浅底子面板与头行分层 -->
-                  <div v-if="element.key === 'imgbb' || element.key === 'panda'" class="mt-2 pa-3 rounded-lg bg-surface-lighten-1">
+                  <div v-if="element.key === 'imgbb' || element.key === 'panda'" class="mt-2 pa-3 rounded-lg collect-subpanel">
                     <VTextField
                       v-model="element.apikey"
                       :label="t('setting.collect.apikey')"
@@ -1420,7 +1420,7 @@ onDeactivated(() => {
                       hide-details
                     />
                   </div>
-                  <div v-else-if="element.key === 'imgbox'" class="mt-2 pa-3 rounded-lg bg-surface-lighten-1">
+                  <div v-else-if="element.key === 'imgbox'" class="mt-2 pa-3 rounded-lg collect-subpanel">
                     <VRow dense no-gutters>
                       <VCol cols="12" md="6" class="pr-md-1 pb-1 pb-md-0">
                         <VTextField
@@ -1492,7 +1492,7 @@ onDeactivated(() => {
                     <VChip size="x-small" variant="tonal" color="primary" label class="flex-shrink-0">
                       {{ t('setting.collect.priorityLabel') }} {{ index + 1 }}
                     </VChip>
-                    <div class="flex-grow-1 min-width-0">
+                    <div class="flex-grow-1 min-w-0">
                       <div class="text-subtitle-2 font-weight-bold">{{ ptgenSourceLabel(element.key) }}</div>
                       <div class="text-caption text-medium-emphasis">{{ ptgenSourceSubLabel(element.key) }}</div>
                     </div>
@@ -1506,7 +1506,7 @@ onDeactivated(() => {
                     />
                   </div>
                   <!-- PT-Gen-Refactor 自建部署参数（官方实例留空用内置默认）；浅底子面板与头行分层 -->
-                  <div v-if="element.key === 'ptgen_refactor'" class="mt-2 pa-3 rounded-lg bg-surface-lighten-1">
+                  <div v-if="element.key === 'ptgen_refactor'" class="mt-2 pa-3 rounded-lg collect-subpanel">
                     <VRow dense no-gutters>
                       <VCol cols="12" md="7" class="pr-md-1 pb-1 pb-md-0">
                         <VTextField
@@ -1971,4 +1971,12 @@ onDeactivated(() => {
 </template>
 
 <style scoped>
+/*
+ * 拖拽卡片的展开参数子面板：与头行分层。
+ * 不能写 bg-surface-lighten-1 —— Vuetify 3 已移除 lighten/darken 变体类，
+ * 该 class 不产出任何 CSS（静默失效），故用主题变量直接上色适配明暗主题。
+ */
+.collect-subpanel {
+  background: rgba(var(--v-theme-on-surface), 0.04);
+}
 </style>
