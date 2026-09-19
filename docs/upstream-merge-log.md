@@ -857,3 +857,15 @@ architecture 基线四刷新。
   TransferHistoryView×2/UserProfile×2/glassOverlay×1/app-glass-optical-
   preload×1，已知 Windows 环境族 IDENTICAL 放行）。
 - 后端 +3 另见后端仓记录。
+
+## 2026-09-16 合并（第 78 次记录，定时任务执行）
+
+- 前端增量 **4 提交 / 6 文件（+154−9）**：`1ffa42ae` #790 插件安装统计按
+  插件 ID 大小写不敏感匹配、`c18aac8f` **v3.0.4 版本 bump**（package.json
+  唯一冲突点自动解，fork 同步 3.0.4）、`f5906f8c` ReorganizeDialog 修复、
+  `07a0b4dc` 站点资源条目布局修复。双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 10F ⊆ 上轮
+  13F 已知 Windows 环境族（format-changed×4/TransferHistoryView×2/
+  UserProfile×2/glassOverlay×1/app-glass-optical-preload×1；
+  **frontend-workflow×3 本轮转绿**=已知 CRLF 抖动族回落，非新变化）。
+- 后端 +46 另见后端仓记录。
