@@ -691,8 +691,10 @@ const doubanCandidates = computed<DoubanCandidate[]>(() => {
 })
 
 function isCurrentDouban(item: DoubanCandidate): boolean {
-  const currentId = (mediaDetail.value as any)?.douban_info?.id
-  return !!currentId && String(item.id) === String(currentId)
+  // 选中态跟表单走（addForm.douban_id 初始即 mediaDetail.douban_id，点选后实时更新）；
+  // 只看 douban_info 会一直钉在自动匹配的那条上（2026-09-20 实录）
+  const selectedId = addForm.value.douban_id || (mediaDetail.value as any)?.douban_info?.id
+  return !!selectedId && String(item.id) === String(selectedId)
 }
 
 // 一键改选豆瓣候选：更新表单 ID 并重新拉取简介

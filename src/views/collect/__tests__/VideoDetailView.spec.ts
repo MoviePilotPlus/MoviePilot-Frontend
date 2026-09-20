@@ -84,4 +84,51 @@ describe('VideoDetailView（冒烟）', () => {
       expect(mocks.apiGet).toHaveBeenCalledWith('system/setting/TEAM_PARAMS')
     })
   })
+
+  it('豆瓣候选：选中态跟表单 ID 走，点选非默认候选后对勾迁移', async () => {
+    // 先装候选 mock 再渲染（renderDetailView 内部会触发 detail 请求）
+    // 带豆瓣候选与自动匹配项（douban_info=1394968，候选里还有 4926002）
+    mocks.apiGet.mockImplementation((endpoint: string) => {
+      if (endpoint === 'tencent/detail') {
+        return {
+          ...mediaDetailFixture,
+          new_pic_vt: 'https://img.example/poster.jpg',
+          year: '2005',
+          douban_id: '1394968',
+          douban_info: { id: '1394968', title: '举起手来！', year: '2005' },
+          douban_list: [
+            { id: '1394968', title: '举起手来！', year: '2005' },
+            { id: '4926002', title: '举起手来2', year: '2010' },
+          ],
+        }
+      }
+      if (endpoint === 'system/setting/TEAM_PARAMS') return { value: [] }
+      if (endpoint === 'site/') return []
+      if (endpoint.startsWith('collect/status/')) return {}
+      if (endpoint.startsWith('collect/ptgen/info')) return {}
+      throw new Error(`Unexpected GET ${endpoint}`)
+    })
+
+    const rendered = await renderDetailView()
+    const { container } = rendered
+    await waitFor(() => {
+      expect(container.querySelector('.douban-candidate-strip')).toBeTruthy()
+    })
+    const strip = container.querySelector('.douban-candidate-strip') as HTMLElement
+    expect(strip.querySelectorAll('.douban-candidate').length).toBe(2)
+    // 初始：自动匹配项（1394968）带选中态
+    const cards = Array.from(strip.querySelectorAll('.douban-candidate')) as HTMLElement[]
+    const activeIdx = cards.findIndex(card => card.classList.contains('douban-candidate--active'))
+    expect(activeIdx).toBeGreaterThanOrEqual(0)
+    expect(cards[activeIdx].querySelector('.douban-candidate__title')?.textContent).toContain('举起手来！')
+
+    // 点选另一条候选 → 选中态迁移（对勾/描边跟 addForm.douban_id 走）
+    const target = cards.find(card => !card.classList.contains('douban-candidate--active')) as HTMLElement
+    target.click()
+    await waitFor(() => {
+      const actives = cards.filter(card => card.classList.contains('douban-candidate--active'))
+      expect(actives).toHaveLength(1)
+      expect(actives[0].querySelector('.douban-candidate__title')?.textContent).toContain('举起手来2')
+    })
+  })
 })
