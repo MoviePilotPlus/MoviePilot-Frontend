@@ -57,6 +57,31 @@ describe('PWA 启动屏资源', () => {
     expect(indexHtml).not.toContain('name="x5-orientation"')
   })
 
+  it('原生启动图不叠加网页接力层，普通浏览器继续使用网页动态加载层', () => {
+    const detectionStart = indexHtml.indexOf('function hasActiveNativeLaunchScreen()')
+    const detectionEnd = indexHtml.indexOf('const launchThemePalettes', detectionStart)
+    const detectionSource = indexHtml.slice(detectionStart, detectionEnd)
+
+    expect(detectionStart).toBeGreaterThanOrEqual(0)
+    expect(detectionEnd).toBeGreaterThan(detectionStart)
+    expect(detectionSource).toContain("'(display-mode: standalone)'")
+    expect(detectionSource).toContain("'(display-mode: fullscreen)'")
+    expect(detectionSource).toContain("'(display-mode: minimal-ui)'")
+    expect(detectionSource).toContain("'(display-mode: window-controls-overlay)'")
+    expect(detectionSource).toContain('window.navigator.standalone === true')
+    expect(detectionSource).toContain("document.referrer.startsWith('android-app://')")
+    expect(indexHtml).toContain('dataset.nativeLaunchScreen')
+    expect(indexHtml).toContain('function removeNativeLoadingLayer()')
+    expect(indexHtml).toContain("if (document.documentElement.dataset.nativeLaunchScreen !== 'true') return")
+    expect(indexHtml).toContain("document.getElementById('loading-bg')?.remove()")
+    expect(indexHtml).toContain("document.documentElement.removeAttribute('data-launch-loading')")
+    expect(indexHtml).not.toContain("html[data-native-launch-screen='true'] #loading-bg")
+    expect(indexHtml).toContain("if (document.documentElement.dataset.nativeLaunchScreen === 'true') return")
+    expect(indexHtml).toContain(
+      '<body style="margin: 0; overscroll-behavior: none; -webkit-overflow-scrolling: touch">',
+    )
+  })
+
   it('让原生启动图和网页启动层共享物理屏幕中心', () => {
     const generatorSource = readFileSync(resolve(projectRoot, 'scripts/generate-pwa-splash.mjs'), 'utf8')
     expect(generatorSource).toContain('left: Math.round((width - logoSize) / 2)')

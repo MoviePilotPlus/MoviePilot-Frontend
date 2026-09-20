@@ -14,11 +14,13 @@ import PWAInstallPrompt from '@/components/pwa/PWAInstallPrompt.vue'
 import SharedDialogHost from '@/components/dialog/SharedDialogHost.vue'
 import {
   applyStoredThemeCustomizerAppearance,
+  restoreThemeCustomizerSettingsFromServer,
   themeCustomizerPrimaryColors,
   useEffectiveGlassSettings,
 } from '@/composables/useThemeCustomizer'
 import {
   applyStoredTransparencySettings,
+  restoreTransparencySettingsFromServer,
   TRANSPARENCY_SETTINGS_CHANGED_EVENT,
   type TransparencyGlassQuality,
   type TransparencySettings,
@@ -318,6 +320,7 @@ let backgroundRetryTimer: number | null = null
 let backgroundRequestController: AbortController | null = null
 let backgroundCrossfadeTimer: number | null = null
 let authenticatedStateTimer: number | null = null
+let initialBackgroundLoadPromise: Promise<void> | null = null
 let backgroundLoadVersion = 0
 let backgroundRecoveryAttemptedVersion = -1
 let backgroundRotationVersion = 0
@@ -396,9 +399,15 @@ provideGlassFixedShellBackplate({
 
 applyTransparentBackgroundSettings()
 
-void router.isReady().then(() => {
-  isInitialRouteReady.value = true
-})
+/** 首路由完成导航后才允许玻璃材质接管页面，异常导航也要释放启动屏屏障。 */
+const initialRouteReadyPromise = router
+  .isReady()
+  .catch(error => {
+    console.warn('[Launch] Initial route readiness failed', error)
+  })
+  .finally(() => {
+    isInitialRouteReady.value = true
+  })
 
 let prefersColorSchemeMediaQuery: MediaQueryList | null = null
 
@@ -828,10 +837,32 @@ async function initializeAuthenticatedState() {
     globalLoadingStateManager.setLoadingState('global-settings', true)
     await globalSettingsStore.initialize()
     await globalSettingsStore.loadUserSettings()
+    // 清理站点数据后本地外观设置会丢失，这里用服务端副本恢复用户选择；
+    // 本地已有设置时该调用直接返回，不会覆盖当前会话外观。
+    await Promise.all([
+      restoreThemeCustomizerSettingsFromServer(vuetifyTheme),
+      restoreTransparencySettingsFromServer(),
+    ]).catch(error => {
+      console.warn('[Theme] 从服务端恢复外观设置失败', error)
+    })
     await Promise.all([loadMediaSources(), loadModuleCatalog(), loadStorageCatalog()])
   } finally {
     globalLoadingStateManager.setLoadingState('global-settings', false)
   }
+}
+
+/** 等待首路由、首屏基础数据和首张壁纸完成，再交接给已渲染的应用外壳。 */
+async function waitForInitialContentReady() {
+  await initialRouteReadyPromise
+  // 背景请求会同时触发全局设置初始化，先等它结束，避免登录态初始化读到进行中的半成品状态。
+  if (initialBackgroundLoadPromise) await initialBackgroundLoadPromise
+  await initializeAuthenticatedState().catch(error => {
+    console.warn('[Launch] Authenticated state initialization failed', error)
+  })
+  // 路由页面可能还有自己的异步首屏任务；等这些任务释放启动门后再交接给真实页面。
+  await globalLoadingStateManager.waitForAllComplete()
+  await nextTick()
+  await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()))
 }
 
 // 延迟初始化登录态数据，避开登录成功后的即时路由跳转窗口。
@@ -896,10 +927,8 @@ async function removeLoadingWithStateCheck() {
     // PWA/App 模式会影响布局和底部导航，必须在启动屏退场前稳定下来。
     await waitForLaunchTask(initializePWA(), getRemainingLaunchBudget(), 'PWA detection')
 
-    // 用户设置不影响首帧布局，交给应用外壳出现后继续加载。
-    void initializeAuthenticatedState().catch(error => {
-      console.warn('[Launch] Authenticated state initialization failed', error)
-    })
+    // 首屏基础数据和首张壁纸完成后再交接给应用外壳，避免先露出纯背景。
+    await waitForInitialContentReady()
 
     // 快速缓存命中时至少保留短暂的稳定画面，避免 iOS 只闪过一帧。
     await waitForMinimumLaunchVisibility()
@@ -971,7 +1000,8 @@ watch(
   shouldLoad => {
     stopBackgroundLoading()
     if (shouldLoad) {
-      void loadBackgroundImages(backgroundLoadVersion)
+      const loadPromise = loadBackgroundImages(backgroundLoadVersion)
+      if (!initialBackgroundLoadPromise) initialBackgroundLoadPromise = loadPromise
     } else if (!isBackdropTheme.value) {
       backgroundImages.value = []
     }
