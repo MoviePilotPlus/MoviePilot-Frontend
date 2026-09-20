@@ -2917,6 +2917,26 @@ export interface PtgenInfo {
   season?: number
 }
 
+// 豆瓣候选条目（视频源详情 douban_list/douban_info）
+export interface DoubanCandidate {
+  // 标题
+  title?: string
+  // 副信息（地区/类型/主演）
+  card_subtitle?: string
+  // 封面
+  cover_url?: string
+  // 年份
+  year?: string
+  // 豆瓣 ID
+  id?: string
+  // 评分
+  rating?: string
+  // 类型 Movie/TV
+  type?: string
+  // 类型名（电影/电视剧）
+  type_name?: string
+}
+
 // 视频源搜索结果
 export interface VideoInfo {
   // 名称

@@ -4,7 +4,7 @@ import { useToast } from 'vue-toastification'
 
 import api from '@/api'
 import { tagOptions, mediaCateOptions, categoryOptions } from '@/api/constants'
-import type { VideoInfo, CollectCreate, Site, PtgenInfo, VideoEpisode } from '@/api/types'
+import type { VideoInfo, CollectCreate, Site, PtgenInfo, VideoEpisode, DoubanCandidate } from '@/api/types'
 import GroupTile from '@/components/GroupTitle.vue'
 import EpisodeCard from '@/components/cards/EpisodeCard.vue'
 import VirtualSlideView from '@/components/slide/VirtualSlideView.vue'
@@ -678,6 +678,30 @@ const getBackdropUrl: Ref<string> = computed(() => {
   return url
 })
 
+// 豆瓣候选列表（douban_list 全量 + 当前 douban_info 高亮），供人工核对/一键修正
+const doubanCandidates = computed<DoubanCandidate[]>(() => {
+  const detail = mediaDetail.value as any
+  const list: DoubanCandidate[] = Array.isArray(detail?.douban_list) ? detail.douban_list : []
+  const current = detail?.douban_info
+  // 当前选中项也在候选里补进头部（douban_list 有时不含已选条目）
+  if (current?.id && !list.some(item => String(item.id) === String(current.id))) {
+    return [current, ...list]
+  }
+  return list
+})
+
+function isCurrentDouban(item: DoubanCandidate): boolean {
+  const currentId = (mediaDetail.value as any)?.douban_info?.id
+  return !!currentId && String(item.id) === String(currentId)
+}
+
+// 一键改选豆瓣候选：更新表单 ID 并重新拉取简介
+function selectDoubanCandidate(item: DoubanCandidate) {
+  if (!item.id || isCurrentDouban(item)) return
+  addForm.value.douban_id = String(item.id)
+  onClickDouban()
+}
+
 const doubanHint = computed(() => {
   if (mediaDetail.value.douban_id) {
     return `${mediaDetail.value.douban_info.title}(${mediaDetail.value.douban_info.year})`
@@ -1187,6 +1211,39 @@ function handleIgnore() {
                   />
                 </template>
               </VTextField>
+              <!-- 豆瓣候选：封面/标题/年份，直观人工核对与一键改选（2026-09-20） -->
+              <div v-if="doubanCandidates.length" class="douban-candidate-strip mt-2">
+                <div
+                  v-for="item in doubanCandidates"
+                  :key="`${item.id}-${item.year}`"
+                  class="douban-candidate"
+                  :class="{ 'douban-candidate--active': isCurrentDouban(item) }"
+                  :title="`${item.title} (${item.year})${item.card_subtitle ? ' · ' + item.card_subtitle : ''}`"
+                  @click="selectDoubanCandidate(item)"
+                >
+                  <VImg
+                    :src="item.cover_url"
+                    cover
+                    class="douban-candidate__poster"
+                    aspect-ratio="2/3"
+                  >
+                    <template #placeholder>
+                      <div class="douban-candidate__placeholder" />
+                    </template>
+                  </VImg>
+                  <div class="douban-candidate__meta">
+                    <div class="douban-candidate__title">{{ item.title }}</div>
+                    <div class="douban-candidate__year">{{ item.year }}</div>
+                  </div>
+                  <VIcon
+                    v-if="isCurrentDouban(item)"
+                    icon="mdi-check-circle"
+                    color="success"
+                    size="small"
+                    class="douban-candidate__check"
+                  />
+                </div>
+              </div>
             </v-col>
             <!-- IMDB ID输入框 -->
             <v-col cols="12" md="12">
@@ -1997,5 +2054,66 @@ a.crew-name {
   height: 18px;
   width: auto;
   object-fit: contain;
+}
+
+/* 豆瓣候选横条：封面/标题/年份，点击改选（2026-09-20） */
+.douban-candidate-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-block: 4px;
+  max-inline-size: 100%;
+}
+.douban-candidate {
+  position: relative;
+  inline-size: 76px;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(var(--v-theme-surface-variant), 0.25);
+  transition: border-color 0.15s ease;
+}
+.douban-candidate:hover {
+  border-color: rgba(var(--v-theme-primary), 0.6);
+}
+.douban-candidate--active {
+  border-color: rgb(var(--v-theme-primary));
+}
+.douban-candidate__poster {
+  inline-size: 100%;
+  aspect-ratio: 2 / 3;
+}
+.douban-candidate__placeholder {
+  inline-size: 100%;
+  aspect-ratio: 2 / 3;
+  background: rgba(var(--v-theme-surface-variant), 0.4);
+}
+.douban-candidate__meta {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline: 0;
+  padding: 2px 4px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);
+  color: #fff;
+}
+.douban-candidate__title {
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.douban-candidate__year {
+  font-size: 10px;
+  line-height: 13px;
+  opacity: 0.85;
+}
+.douban-candidate__check {
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-end: 2px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
 }
 </style>
