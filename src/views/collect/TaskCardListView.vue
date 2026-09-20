@@ -254,7 +254,7 @@ function loadMore({ done }: { done: any }) {
     <template #loading />
     <template #empty />
     <div class="grid gap-3 grid-downloading-card">
-      <TaskCard v-for="item in displayDataList" :key="`${item.id}`" :info="item" v-memo="[progress[item.id]]"
+      <TaskCard v-for="item in displayDataList" :key="`${item.id}`" :info="item" v-memo="[item, progress[item.id]]"
         :progress="progress[item.id]" @remove="remove" />
     </div>
   </VInfiniteScroll>

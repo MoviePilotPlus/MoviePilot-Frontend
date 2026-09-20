@@ -87,7 +87,7 @@ onActivated(() => {
     <template #item="{ item }">
       <TaskCard
         :info="item"
-        v-memo="[progress[item.id]]"
+        v-memo="[item, progress[item.id]]"
         :progress="progress[item.id]"
         height="11rem"
         width="20rem"
