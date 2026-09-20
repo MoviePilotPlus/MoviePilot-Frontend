@@ -869,3 +869,19 @@ architecture 基线四刷新。
   UserProfile×2/glassOverlay×1/app-glass-optical-preload×1；
   **frontend-workflow×3 本轮转绿**=已知 CRLF 抖动族回落，非新变化）。
 - 后端 +46 另见后端仓记录。
+
+## 2026-09-16 合并（第 79 次记录，定时任务执行）
+
+- 前端增量 **19 提交 / 28 文件（+798−27）**：`72efa698` **v3.0.5 bump**
+  （package.json 唯一冲突点自动解，fork 同步 3.0.5）、`c408c80c` #792 外观
+  设置持久化到服务端用户配置（新 themeSettingsPersistence）、`d703a0ab`
+  WebAgent 输入框玻璃滤镜对齐、`2a911744`/`5c4aafd4`/`20022770` 启动闪屏
+  三连修（原生 splash relay 移除/首屏内容等待/加载器跳过）、`17782558`
+  MCP 服务器弹窗水合、**Codex CI 四件套**（codex-ci/events/fix/run，
+  均为 workflow_run/PR/手动触发，无 push 触发不占额度）。零冲突（除
+  package.json 版本自动解），双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 10F 与第 78
+  轮完全一致（format-changed×4/TransferHistoryView×2/UserProfile×2/
+  glassOverlay×1/app-glass-optical-preload×1，已知 Windows 环境族
+  IDENTICAL 放行）。
+- 后端 +22 另见后端仓记录。
