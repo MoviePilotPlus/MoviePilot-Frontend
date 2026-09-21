@@ -120,6 +120,7 @@ const CollectSettings = ref<any>({
     SCREENSHOT_CACHE_ENABLED: false,
     SCREENSHOT_COMPRESS_LIMIT: 5 * 1024 * 1024,
     SCREENSHOT_MIN_SIZE_LIMIT: 1800 * 1024,
+    SCREENSHOT_QUALITY_CHECK: true,
     BANGUMI_API_BASE: '',
     DOUBAN_COOKIES: '',
     DOUBAN_USE_PROXY: true,
@@ -1058,6 +1059,14 @@ onDeactivated(() => {
                   placeholder="1843200"
                   persistent-hint
                   prepend-inner-icon="mdi-image-size-select-small"
+                />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VSwitch
+                  v-model="CollectSettings.Basic.SCREENSHOT_QUALITY_CHECK"
+                  :label="t('setting.collect.screenshotQualityCheck')"
+                  :hint="t('setting.collect.screenshotQualityCheckHint')"
+                  persistent-hint
                 />
               </VCol>
               <VCol cols="12" md="6">

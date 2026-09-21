@@ -351,6 +351,20 @@ describe('AccountSettingCollect', () => {
     })
   })
 
+  it('截图质量校验开关随基础设置整组提交，默认开启', async () => {
+    await renderCollectSettings()
+
+    const basicCard = getCardByTitle('基础设置')
+    expect(basicCard.getByText('截图质量校验')).toBeTruthy()
+    await fireEvent.click(basicCard.getByRole('button', { name: /保存/ }))
+    await waitFor(() => {
+      const call = mocks.apiPost.mock.calls.find(([path]) => path === 'system/env')
+      expect(call).toBeTruthy()
+      const payload = call?.[1] as Record<string, unknown>
+      expect(payload.SCREENSHOT_QUALITY_CHECK).toBe(true)
+    })
+  })
+
   it('优酷下载线路保存独立 POST，不夹带基础设置键', async () => {
     await renderCollectSettings()
 

@@ -59,6 +59,8 @@ const zhTW = {
       screenshotCompressLimitHint: '超過則保解析度壓縮；預設 5242880（5MB），勿超過圖床單圖上限（pixhost 為 10MB）',
       screenshotMinSizeLimit: '截圖單張大小下限（位元組）',
       screenshotMinSizeLimitHint: '壓縮後低於下限時提高色數重壓（SSD 審種檢 2160p 不低於 1800KB），0 表示不啟用，預設 1843200（1800KB）',
+      screenshotQualityCheck: '截圖品質校驗',
+      screenshotQualityCheckHint: '開啟時執行體積下限+色深升檔+換點重試的全套校驗（SSD 審種口徑）；小解析度或簡單畫面影片頻繁換點重試導致截圖很慢時可關閉，關閉後只做超上限壓縮',
       bangumiApiBase: 'Bangumi API 反代地址',
       bangumiApiBaseHint: 'api.bgm.tv 國內直連不通時配置自建反代（如 https://bgmapi.anibt.net/）；留空走官方+公共鏡像並行探測',
       doubanCookies: '豆瓣 Cookies',

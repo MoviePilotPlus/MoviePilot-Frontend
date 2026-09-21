@@ -60,6 +60,8 @@ const enUS = {
       screenshotCompressLimitHint: 'Compress while keeping resolution above this; default 5242880 (5MB), do not exceed image hosting limits (pixhost 10MB)',
       screenshotMinSizeLimit: 'Screenshot Min Size (bytes)',
       screenshotMinSizeLimitHint: 'Re-compress with more colors when below this limit (SSD requires 2160p ≥ 1800KB); 0 disables, default 1843200 (1800KB)',
+      screenshotQualityCheck: 'Screenshot Quality Check',
+      screenshotQualityCheckHint: 'Enable full validation (min size + 48-bit depth boost + timestamp retry, SSD review rules); disable to speed up small-resolution or simple-scene videos that retry excessively — only max-size compression remains',
       bangumiApiBase: 'Bangumi API Mirror URL',
       bangumiApiBaseHint: 'Self-hosted reverse proxy when api.bgm.tv is unreachable (e.g. https://bgmapi.anibt.net/); empty = official + public mirror probing',
       doubanCookies: 'Douban Cookies',

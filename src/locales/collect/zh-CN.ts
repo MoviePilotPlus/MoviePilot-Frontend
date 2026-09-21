@@ -59,6 +59,8 @@ const zhCN = {
       screenshotCompressLimitHint: '超过则保分辨率压缩；默认 5242880（5MB），勿超过图床单图上限（pixhost 为 10MB）',
       screenshotMinSizeLimit: '截图单张大小下限（字节）',
       screenshotMinSizeLimitHint: '压缩后低于下限时提高色数重压（SSD 审种检 2160p 不低于 1800KB），0 表示不启用，默认 1843200（1800KB）',
+      screenshotQualityCheck: '截图质量校验',
+      screenshotQualityCheckHint: '开启时执行体积下限+色深升档+换点重试的全套校验（SSD 审种口径）；小分辨率或简单画面视频频繁换点重试导致截图很慢时可关闭，关闭后只做超上限压缩',
       bangumiApiBase: 'Bangumi API 反代地址',
       bangumiApiBaseHint: 'api.bgm.tv 国内直连不通时配置自建反代（如 https://bgmapi.anibt.net/）；留空走官方+公共镜像并行探测',
       doubanCookies: '豆瓣 Cookies',
