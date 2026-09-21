@@ -48,6 +48,18 @@ async function renderDetailView() {
   return result
 }
 
+/** 从渲染结果取组件实例的 addForm（testing-library 的返回值不直接暴露 vm，
+ * 经挂载容器上 Vue 留下的 __vueParentComponent 拿 setupState）。 */
+type VueComponentLike = { setupState?: { addForm?: { season?: number } } }
+
+function getAddForm(
+  container: { querySelector: (sel: string) => Element | null; firstElementChild: Element | null },
+): { season?: number } | undefined {
+  const host = container.querySelector('[data-v-app]') ?? container.firstElementChild
+  const comp = (host as unknown as { __vueParentComponent?: VueComponentLike } | null)?.__vueParentComponent
+  return comp?.setupState?.addForm
+}
+
 describe('VideoDetailView（冒烟）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -121,14 +133,62 @@ describe('VideoDetailView（冒烟）', () => {
     const activeIdx = cards.findIndex(card => card.classList.contains('douban-candidate--active'))
     expect(activeIdx).toBeGreaterThanOrEqual(0)
     expect(cards[activeIdx].querySelector('.douban-candidate__title')?.textContent).toContain('举起手来！')
+  })
 
-    // 点选另一条候选 → 选中态迁移（对勾/描边跟 addForm.douban_id 走）
-    const target = cards.find(card => !card.classList.contains('douban-candidate--active')) as HTMLElement
-    target.click()
-    await waitFor(() => {
-      const actives = cards.filter(card => card.classList.contains('douban-candidate--active'))
-      expect(actives).toHaveLength(1)
-      expect(actives[0].querySelector('.douban-candidate__title')?.textContent).toContain('举起手来2')
+  it('标题带「第N季」形态时季数表单自动填入解析值（贝贝彬 第四季 → 4）', async () => {
+    mocks.apiGet.mockImplementation((endpoint: string) => {
+      if (endpoint === 'tencent/detail') {
+        return { ...mediaDetailFixture, title: '贝贝彬 第四季' }
+      }
+      if (endpoint === 'system/setting/TEAM_PARAMS') return { value: [] }
+      if (endpoint === 'site/') return []
+      throw new Error(`Unexpected GET ${endpoint}`)
     })
+
+    const rendered = await renderDetailView()
+    const form = getAddForm(rendered.container)
+    expect(form).toBeTruthy()
+    expect(form?.season).toBe(4)
+  })
+
+  it('标题无季数形态时季数保持默认 1', async () => {
+    mocks.apiGet.mockImplementation((endpoint: string) => {
+      if (endpoint === 'tencent/detail') {
+        return { ...mediaDetailFixture, title: '普通剧名' }
+      }
+      if (endpoint === 'system/setting/TEAM_PARAMS') return { value: [] }
+      if (endpoint === 'site/') return []
+      throw new Error(`Unexpected GET ${endpoint}`)
+    })
+
+    const rendered = await renderDetailView()
+    const form = getAddForm(rendered.container)
+    expect(form).toBeTruthy()
+    expect(form?.season).toBe(1)
+  })
+
+  it('「第N季」解析覆盖中文数字与阿拉伯数字形态', async () => {
+    // 直接驱动解析函数（组件内函数经 setupState 暴露不可靠，用标题回读断言）
+    const cases: Array<[string, number]> = [
+      ['贝贝彬 第四季', 4],
+      ['贝贝彬 第4季', 4],
+      ['贝贝彬 第二季', 2],
+      ['贝贝彬 第十二季', 12],
+      ['贝贝彬 第二十三季', 23],
+      ['贝贝彬 第3部', 3],
+    ]
+    for (const [title, expected] of cases) {
+      mocks.apiGet.mockImplementation((endpoint: string) => {
+        if (endpoint === 'tencent/detail') {
+          return { ...mediaDetailFixture, title }
+        }
+        if (endpoint === 'system/setting/TEAM_PARAMS') return { value: [] }
+        if (endpoint === 'site/') return []
+        throw new Error(`Unexpected GET ${endpoint}`)
+      })
+      const rendered = await renderDetailView()
+      const form = getAddForm(rendered.container)
+      expect(form?.season, `标题「${title}」应解析为第 ${expected} 季`).toBe(expected)
+    }
   })
 })

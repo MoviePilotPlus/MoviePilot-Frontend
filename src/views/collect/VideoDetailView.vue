@@ -275,6 +275,13 @@ async function getMediaDetail() {
       },
     })
     componentLoaded.value = true
+    // 标题携带季数形态（贝贝彬 第四季/第4季/第二季）时自动填入季数表单——
+    // 豆瓣/PTGen 能解析到季时以其为准（getPtgen 回填会覆盖）
+    const parsedSeason = parseSeasonFromTitle(
+      mediaDetail.value.title || mediaProps.title || '')
+    if (parsedSeason > 1) {
+      addForm.value.season = parsedSeason
+    }
     // 默认选中所有剧集
     let episodeIndex = 0
     mediaDetail.value.episode_list?.forEach(episode => {
@@ -550,7 +557,7 @@ function fill_subtile(sub_tile: string, title: string) {
   if (!title) return sub_tile
   // 分割标题和其他信息
   const [originalTitle, ...restParts] = sub_tile.split('|').map(p => p.trim())
-  // 检查原标题是否包含新标题
+  // 检查原图标题是否包含新标题
   if (!originalTitle.includes(title)) {
     // 合并新旧标题
     const mergedTitle = `${title}/${originalTitle}`
@@ -560,6 +567,28 @@ function fill_subtile(sub_tile: string, title: string) {
 
   // 保持原标题格式不变
   return sub_tile
+}
+// 中文季数数字（一二三…十、廿等支持到 99 以内的常见形态）
+const CN_SEASON_DIGITS: Record<string, number> = {
+  零: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
+}
+/** 从标题解析季数：第N季/第N部（阿拉伯或中文数字），未命中返回 1。 */
+function parseSeasonFromTitle(title: string): number {
+  if (!title) return 1
+  const match = title.match(/第\s*([0-9一二三四五六七八九十]+)\s*[季部]/)
+  if (!match) return 1
+  const raw = match[1]
+  if (/^[0-9]+$/.test(raw)) return Number(raw)
+  // 中文数字：十/十X/X十/X十Y 四段形态
+  if (raw === '十') return 10
+  const complex = raw.match(/^([一二三四五六七八九]?)十([一二三四五六七八九]?)$/)
+  if (complex) {
+    const tens = CN_SEASON_DIGITS[complex[1] ?? ''] ?? 1
+    const ones = CN_SEASON_DIGITS[complex[2] ?? ''] ?? 0
+    return tens * 10 + ones
+  }
+  if (CN_SEASON_DIGITS[raw] !== undefined) return CN_SEASON_DIGITS[raw]
+  return 1
 }
 // 表单校验
 function validateForm() {
