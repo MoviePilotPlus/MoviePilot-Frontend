@@ -885,3 +885,20 @@ architecture 基线四刷新。
   glassOverlay×1/app-glass-optical-preload×1，已知 Windows 环境族
   IDENTICAL 放行）。
 - 后端 +22 另见后端仓记录。
+
+## 2026-09-22 合并（第 80 次记录，定时任务执行）
+
+- 前端增量 **22 提交 / 70 文件（+3561−2343）**：`225026dd` **v3.0.8 bump**
+  （含 v3.0.6/3.0.7 两 tag，package.json 自动解 fork 同步 3.0.8）、
+  GitHub Token 授权引导（新 useGithubTokenAuth + GithubTokenSetupCard）、
+  **插件卡片 GIL 回退标注 + v3t 不支持说明**（#798/#795/usePluginInstallBlock）、
+  插件统计改索引消市场页卡顿（#794）、web-agent 机器人宠物手势/睡意外观
+  系列（含一次 Revert+重做）、route enter 入场动画移除、PWA 插件联邦缓存
+  绕过（#6748）、整理/玻璃质量默认值（#797）、QQ 身份绑定。
+  三文件冲突面（package.json/types.ts/common.scss）全部自动合并零冲突，
+  双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 10F 与
+  78/79 轮完全一致（format-changed×4/TransferHistoryView×2/UserProfile×2/
+  glassOverlay×1/app-glass-optical-preload×1，已知 Windows 环境族
+  IDENTICAL 放行）。
+- 后端 +45 另见后端仓记录。
