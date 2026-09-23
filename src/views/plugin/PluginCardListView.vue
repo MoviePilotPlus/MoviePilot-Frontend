@@ -35,6 +35,7 @@ import { useDynamicHeaderTab } from '@/composables/useDynamicHeaderTab'
 import { useKeepAliveRefresh, type KeepAliveRefreshContext } from '@/composables/useKeepAliveRefresh'
 import { openSharedDialog } from '@/composables/useSharedDialog'
 import { usePluginRuntimeStore, usePluginSidebarNavStore, useUserStore } from '@/stores'
+import { resolvePluginInstallBlock } from '@/composables/usePluginInstallBlock'
 import { buildUserPermissionContext, hasPermission } from '@/utils/permission'
 
 // 国际化
@@ -236,15 +237,27 @@ const PluginAppDialog = ref(false)
 const PluginStatistics = ref<{ [key: string]: number }>({})
 
 /**
- * 按插件 ID 大小写不敏感地读取安装统计。
+ * 安装统计的「小写插件 ID → 统计字典原始键」索引。
  *
  * 中心端按 plugin_id 字符串精确聚合，插件 ID 历史上发生过大小写变更时
  * 会留下互不匹配的旧键，导致市场页安装次数显示为 0。
+ * 统计字典每次刷新会被整体替换，索引只需在键集合变化时重建一次，
+ * 不必让每个卡片、每次排序比较都重新扫描全部键。
  */
+const pluginStatisticKeyIndex = computed(() => {
+  const index = new Map<string, string>()
+  Object.keys(PluginStatistics.value).forEach(key => {
+    const normalizedKey = key.toLowerCase()
+    // 同一小写 ID 存在多个键时保留先出现的键，与线性扫描的匹配结果一致。
+    if (!index.has(normalizedKey)) index.set(normalizedKey, key)
+  })
+  return index
+})
+
+/** 按插件 ID 大小写不敏感地读取安装统计。 */
 function lookupPluginStatistic(pluginId: string | undefined): number {
-  const target = (pluginId || '0').toLowerCase()
-  const key = Object.keys(PluginStatistics.value).find(candidate => candidate.toLowerCase() === target)
-  return key ? (PluginStatistics.value[key] ?? 0) : 0
+  const key = pluginStatisticKeyIndex.value.get((pluginId || '0').toLowerCase())
+  return key === undefined ? 0 : (PluginStatistics.value[key] ?? 0)
 }
 
 // 插件评分
@@ -896,8 +909,10 @@ async function installPlugin(
     return
   }
 
-  if (!releaseVersion && item?.system_version_compatible === false) {
-    $toast.error(item.system_version_message || t('plugin.incompatibleSystemVersion'))
+  // 安装/更新前的统一兜底判据：运行时不兼容优先于主程序版本不兼容，与卡片和弹窗保持一致
+  const installBlock = resolvePluginInstallBlock(item)
+  if (!releaseVersion && installBlock) {
+    $toast.error(installBlock.message || t(installBlock.fallbackKey))
     return
   }
 
@@ -1248,6 +1263,10 @@ function mergeMarketMetadataIntoInstalled() {
     plugin.system_version = marketPlugin.system_version
     plugin.system_version_compatible = marketPlugin.system_version_compatible
     plugin.system_version_message = marketPlugin.system_version_message
+    // 运行时兼容性由市场条目携带；已安装快照缺少该判据时更新按钮无法禁用，因此一并投影。
+    // 服务端未返回这两个字段时保留已安装快照的原值，避免把未知误写成"兼容"。
+    if (marketPlugin.runtime_compatible !== undefined) plugin.runtime_compatible = marketPlugin.runtime_compatible
+    if (marketPlugin.runtime_message !== undefined) plugin.runtime_message = marketPlugin.runtime_message
   })
 }
 
@@ -1509,8 +1528,12 @@ watch([marketList, filterForm, activeSort, PluginStatistics, PluginRatings], () 
   // 排序
   const sortKey = activeSort.value || 'count'
   if (sortKey === 'count') {
+    // 每个插件在一次排序中会被反复比较，统计值先统一取出再比较。
+    const statisticCounts = new Map(
+      sortedUninstalledList.value.map(plugin => [plugin.id, lookupPluginStatistic(plugin.id)]),
+    )
     sortedUninstalledList.value = sortedUninstalledList.value.sort((a, b) => {
-      return lookupPluginStatistic(b.id) - lookupPluginStatistic(a.id)
+      return (statisticCounts.get(b.id) ?? 0) - (statisticCounts.get(a.id) ?? 0)
     })
   } else if (sortKey === 'average_rating') {
     sortedUninstalledList.value = sortedUninstalledList.value.sort((a, b) => {

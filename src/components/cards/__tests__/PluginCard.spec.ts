@@ -247,6 +247,39 @@ describe('PluginCard lifecycle actions', () => {
     expect(container.querySelector('.plugin-card__runtime-state')).toBeNull()
   })
 
+  it('attributes a free-threaded GIL fallback to the plugin ahead of the restart badge', async () => {
+    const { container, pinia } = await renderWithProviders(PluginCard, { props: { plugin } })
+    const runtimeStore = usePluginRuntimeStore(pinia)
+    runtimeStore.summary = {
+      failed_count: 0,
+      generation: 3,
+      pending_count: 0,
+      ready: true,
+      restart_required_plugin_ids: ['DemoPlugin'],
+      gil_enabled_plugin_ids: ['DemoPlugin'],
+    }
+
+    expect(await screen.findByText('GIL 回退（v3t）')).toBeInTheDocument()
+    expect(screen.queryByText('重启后生效')).toBeNull()
+    expect(container.querySelector('.plugin-card')).not.toHaveClass('plugin-card--runtime-blocked')
+  })
+
+  it('does not mark other plugins when a different plugin caused the GIL fallback', async () => {
+    const { pinia } = await renderWithProviders(PluginCard, { props: { plugin } })
+    const runtimeStore = usePluginRuntimeStore(pinia)
+    runtimeStore.summary = {
+      failed_count: 0,
+      generation: 3,
+      pending_count: 0,
+      ready: true,
+      restart_required_plugin_ids: [],
+      gil_enabled_plugin_ids: ['OtherPlugin'],
+    }
+    await Promise.resolve()
+
+    expect(screen.queryByText('GIL 回退（v3t）')).toBeNull()
+  })
+
   it('shows the same card-level busy state for updates without opening a progress dialog', async () => {
     const updatablePlugin = { ...plugin, has_update: true }
     const { container } = await renderWithProviders(PluginCard, {
@@ -398,6 +431,25 @@ describe('PluginCard lifecycle actions', () => {
     await versionEvents.update()
 
     expect(mocks.toastError).toHaveBeenCalledWith('需要更高版本')
+    expect(mocks.apiGet).not.toHaveBeenCalledWith('plugin/install/DemoPlugin', expect.anything())
+  })
+
+  it('blocks an update on a runtime the plugin declares unsupported', async () => {
+    // v3t 上不兼容的原因要如实说明，不能被报成主程序版本问题
+    const updatablePlugin = {
+      ...plugin,
+      has_update: true,
+      runtime_compatible: false,
+      runtime_message: '插件声明不支持 free-threaded 运行时（v3t）',
+    }
+    const { container } = await renderWithProviders(PluginCard, { props: { plugin: updatablePlugin } })
+
+    await fireEvent.click(container.querySelector<HTMLButtonElement>('.v-card .v-btn')!)
+    await fireEvent.click(await screen.findByText('更新'))
+    const versionEvents = mocks.openSharedDialog.mock.calls[0][2] as { update: () => Promise<void> }
+    await versionEvents.update()
+
+    expect(mocks.toastError).toHaveBeenCalledWith('插件声明不支持 free-threaded 运行时（v3t）')
     expect(mocks.apiGet).not.toHaveBeenCalledWith('plugin/install/DemoPlugin', expect.anything())
   })
 
@@ -761,6 +813,17 @@ describe('PluginCard lifecycle actions', () => {
       },
     })
     expect(screen.getByText('插件加载失败，请查看日志')).toBeInTheDocument()
+  })
+
+  it('explains an incompatible runtime instead of leaving a silent card', async () => {
+    // 已安装插件在 v3t 上被跳过加载时，卡片必须说明不支持，而不是既不运行也不解释
+    await renderWithProviders(PluginCard, {
+      props: {
+        plugin: { ...plugin, runtime_status: 'incompatible_runtime' },
+        runtimeSettling: false,
+      },
+    })
+    expect(screen.getByText('插件不支持当前运行时（v3t）')).toBeInTheDocument()
   })
 
   it('shows a retry action for startup synchronization failures', async () => {

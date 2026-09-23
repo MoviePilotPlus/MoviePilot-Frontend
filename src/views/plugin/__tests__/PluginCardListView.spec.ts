@@ -318,6 +318,7 @@ const PluginAppCardStub = defineComponent({
   name: 'PluginAppCard',
   props: {
     plugin: { type: Object as PropType<Plugin>, required: true },
+    count: { type: Number, default: undefined },
     installHandler: Function as PropType<() => unknown>,
   },
   emits: ['install'],
@@ -325,6 +326,7 @@ const PluginAppCardStub = defineComponent({
     return () =>
       h('article', { 'data-testid': `market-${props.plugin.id}` }, [
         h('span', `market:${props.plugin.plugin_name}`),
+        h('output', { 'aria-label': `market-count-${props.plugin.id}` }, String(props.count ?? '')),
         h('output', { 'aria-label': `rating-${props.plugin.id}` }, String(props.plugin.average_rating ?? '')),
         h(
           'button',
@@ -1897,6 +1899,85 @@ describe('PluginCardListView search installation', () => {
     await waitForRequestsToFinish()
   })
 
+  it('blocks an installed update when the market entry reports a runtime incompatibility', async () => {
+    let installRequests = 0
+    await renderList({
+      installed: () => [
+        createPlugin({
+          id: 'RuntimeBlockedPlugin',
+          installed: true,
+          plugin_name: '运行时不兼容插件',
+          plugin_version: '1.0.0',
+        }),
+      ],
+      market: () => [
+        createPlugin({
+          has_update: true,
+          id: 'RuntimeBlockedPlugin',
+          installed: true,
+          plugin_name: '运行时不兼容插件',
+          plugin_version: '2.0.0',
+          runtime_compatible: false,
+          runtime_message: '插件声明不支持 free-threaded 运行时（v3t）',
+        }),
+      ],
+    })
+    await waitFor(() => expect(screen.getByLabelText('update-RuntimeBlockedPlugin')).toHaveTextContent('true'))
+    await waitForRequestsToFinish()
+    server.use(
+      http.get(apiUrls.install('RuntimeBlockedPlugin'), () => {
+        installRequests += 1
+        return apiJson({})
+      }),
+    )
+
+    await fireEvent.click(screen.getByRole('button', { name: 'update-plugin-RuntimeBlockedPlugin' }))
+
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith('插件声明不支持 free-threaded 运行时（v3t）'))
+    expect(installRequests).toBe(0)
+    await waitForRequestsToFinish()
+  })
+
+  it('keeps the installed runtime verdict when the market entry omits the runtime fields', async () => {
+    let installRequests = 0
+    await renderList({
+      installed: () => [
+        createPlugin({
+          id: 'RuntimeKnownPlugin',
+          installed: true,
+          plugin_name: '已知不兼容插件',
+          plugin_version: '1.0.0',
+          runtime_compatible: false,
+        }),
+      ],
+      market: () => [
+        createPlugin({
+          has_update: true,
+          id: 'RuntimeKnownPlugin',
+          installed: true,
+          plugin_name: '已知不兼容插件',
+          plugin_version: '2.0.0',
+        }),
+      ],
+    })
+    await waitFor(() => expect(screen.getByLabelText('update-RuntimeKnownPlugin')).toHaveTextContent('true'))
+    await waitForRequestsToFinish()
+    server.use(
+      http.get(apiUrls.install('RuntimeKnownPlugin'), () => {
+        installRequests += 1
+        return apiJson({})
+      }),
+    )
+
+    await fireEvent.click(screen.getByRole('button', { name: 'update-plugin-RuntimeKnownPlugin' }))
+
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith('插件声明不支持 free-threaded 运行时（v3t），无法安装'),
+    )
+    expect(installRequests).toBe(0)
+    await waitForRequestsToFinish()
+  })
+
   it('deduplicates concurrent installation requests for the same plugin', async () => {
     const installGate = createDeferred<void>()
     let installRequests = 0
@@ -2497,5 +2578,53 @@ describe('PluginCardListView folders and persistence', () => {
     await waitForRequestsToFinish()
 
     expect(screen.getByLabelText('statistic-IqiyiDiscover')).toHaveTextContent('714')
+  })
+
+  it('matches market install statistics case-insensitively', async () => {
+    await renderList({
+      market: () => [createPlugin({ id: 'IqiyiDiscover', plugin_name: '爱奇艺探索' })],
+      statistic: () => ({ IQiyiDiscover: 714 }),
+    })
+    getHeaderConfig().modelValue.value = 'market'
+    await nextTick()
+
+    await waitFor(() => expect(screen.getByLabelText('market-count-IqiyiDiscover')).toHaveTextContent('714'))
+    await waitForRequestsToFinish()
+  })
+
+  it('keeps the first statistics key when market statistics keys differ only by case', async () => {
+    await renderList({
+      market: () => [createPlugin({ id: 'IqiyiDiscover', plugin_name: '爱奇艺探索' })],
+      statistic: () => ({ IQiyiDiscover: 714, IqiyiDiscover: 3 }),
+    })
+    getHeaderConfig().modelValue.value = 'market'
+    await nextTick()
+
+    await waitFor(() => expect(screen.getByLabelText('market-count-IqiyiDiscover')).toHaveTextContent('714'))
+    await waitForRequestsToFinish()
+  })
+
+  it('orders the market list by the case-insensitive install statistic', async () => {
+    await renderList({
+      market: () => [
+        createPlugin({ id: 'Alpha', plugin_name: '低安装量插件' }),
+        createPlugin({ id: 'Beta', plugin_name: '高安装量插件' }),
+        createPlugin({ id: 'Gamma', plugin_name: '中安装量插件' }),
+      ],
+      statistic: () => ({ ALPHA: 5, beta: 90, Gamma: 40 }),
+    })
+    getHeaderConfig().modelValue.value = 'market'
+    await nextTick()
+
+    await waitFor(() => {
+      const labels = [...document.querySelectorAll('[data-testid^="market-"]')].map(node => node.textContent)
+      expect(labels).toEqual([
+        expect.stringContaining('market:高安装量插件'),
+        expect.stringContaining('market:中安装量插件'),
+        expect.stringContaining('market:低安装量插件'),
+      ])
+    })
+    expect(screen.getByLabelText('market-count-Beta')).toHaveTextContent('90')
+    await waitForRequestsToFinish()
   })
 })

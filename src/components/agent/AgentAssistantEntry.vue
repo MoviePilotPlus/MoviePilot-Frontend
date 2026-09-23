@@ -11,6 +11,7 @@ import { useI18n } from 'vue-i18n'
 import AgentPetStage from './pet/AgentPetStage.vue'
 import type { AgentPetActionName, AgentPetIntent } from './pet/types'
 import { useAgentPetMachine } from './pet/useAgentPetMachine'
+import { useAgentPetInteractions } from './pet/useAgentPetInteractions'
 import { AGENT_ASSISTANT_LAYER_Z_INDEX } from '@/constants/agentAssistant'
 
 interface AgentAssistantEntryBubble {
@@ -70,7 +71,6 @@ const FAB_BUBBLE_ARROW_MARGIN = 28
 const FAB_BUBBLE_EDGE_ARROW_OFFSET = 38
 const FAB_BUBBLE_UNDOCK_POSITION_SYNC_DELAY = 260
 const FAB_RIGHT_EDGE_RESIZE_FOLLOW_DISTANCE = 128
-const FAB_DRAG_SUPPRESS_CLICK_DELAY = 450
 
 type FabBubblePlacement = 'bottom' | 'left' | 'right' | 'top'
 
@@ -188,7 +188,6 @@ const fabDragging = ref(false)
 let fabIdleTimer: number | null = null
 let fabDragState: FabDragState | null = null
 let fabSuppressNextClick = false
-let fabSuppressNextClickTimer: number | null = null
 let fabPointerFrame = 0
 let fabPendingPointerPoint: FabPointerPoint | null = null
 let fabBubblePositionFrame = 0
@@ -228,6 +227,12 @@ const {
   scheduleAutoDock: scheduleFabAutoDock,
   shouldAutoDock: shouldFabAutoDock,
   thinking: () => props.thinking,
+})
+
+const petInteractions = useAgentPetInteractions({
+  enabled: () => props.active && props.motionActive && !props.thinking && !fabDocked.value,
+  currentAction: () => fabRandomAction.value,
+  play: playAgentPetAction,
 })
 
 // 生成气泡唯一 ID，避免通知、toast 和预览气泡在堆叠中冲突。
@@ -820,8 +825,8 @@ function updateFabPointerFromPoint(point: FabPointerPoint) {
   const nextStyle = {
     '--agent-assistant-body-x': `${(normalizedX * 0.42).toFixed(2)}px`,
     '--agent-assistant-body-y': `${(normalizedY * 0.18).toFixed(2)}px`,
-    '--agent-assistant-eye-x': `${(normalizedX * 5).toFixed(2)}px`,
-    '--agent-assistant-eye-y': `${(normalizedY * 3.4).toFixed(2)}px`,
+    '--agent-assistant-eye-x': `${(normalizedX * 3.2).toFixed(2)}px`,
+    '--agent-assistant-eye-y': `${(normalizedY * 1.8).toFixed(2)}px`,
     '--agent-assistant-head-x': `${(normalizedX * 0.85).toFixed(2)}px`,
     '--agent-assistant-head-y': `${(normalizedY * 0.42).toFixed(2)}px`,
     '--agent-assistant-pointer-x': `${(normalizedX * 5).toFixed(2)}px`,
@@ -873,22 +878,14 @@ function clearFabIdleTimer() {
   fabIdleTimer = null
 }
 
-// 清理拖拽后抑制点击的恢复计时器。
-function clearFabSuppressNextClickTimer() {
-  if (fabSuppressNextClickTimer === null) return
-
-  window.clearTimeout(fabSuppressNextClickTimer)
-  fabSuppressNextClickTimer = null
-}
-
-// 拖拽结束后短暂抑制下一次点击，避免误打开面板。
+// 手势结束后持续拦截合成点击，直到下一次独立按下，兼容延迟和 detail=0 的点击。
 function suppressNextFabClick() {
   fabSuppressNextClick = true
-  clearFabSuppressNextClickTimer()
-  fabSuppressNextClickTimer = window.setTimeout(() => {
-    fabSuppressNextClick = false
-    fabSuppressNextClickTimer = null
-  }, FAB_DRAG_SUPPRESS_CLICK_DELAY)
+}
+
+// 键盘激活是独立操作，不沿用上一次拖拽的点击拦截状态。
+function handleFabTriggerKeyDown(event: KeyboardEvent) {
+  if (event.key === 'Enter' || event.key === ' ') fabSuppressNextClick = false
 }
 
 // 在入口靠近右侧边缘且空闲时安排自动贴边收起。
@@ -897,6 +894,9 @@ function scheduleFabAutoDock() {
   if (
     !props.active ||
     !props.motionActive ||
+    props.thinking ||
+    fabPressed.value ||
+    fabDragging.value ||
     fabDocked.value ||
     hasKeepOpenFabBubbles.value ||
     fabRandomAction.value ||
@@ -906,7 +906,16 @@ function scheduleFabAutoDock() {
 
   fabIdleTimer = window.setTimeout(() => {
     fabIdleTimer = null
-    if (!props.active || !props.motionActive || fabDocked.value || hasKeepOpenFabBubbles.value || !shouldFabAutoDock())
+    if (
+      !props.active ||
+      !props.motionActive ||
+      props.thinking ||
+      fabPressed.value ||
+      fabDragging.value ||
+      fabDocked.value ||
+      hasKeepOpenFabBubbles.value ||
+      !shouldFabAutoDock()
+    )
       return
 
     if (fabRandomAction.value) {
@@ -1039,6 +1048,18 @@ function upsertFabBubble(bubble: AgentAssistantEntryBubble, options: { autoClose
   if (!hadBubbles) fabBubblePositioned.value = false
   fabBubbles.value = [bubble, ...existingBubbles].slice(0, FAB_MAX_BUBBLES)
   setFabDocked(false)
+  // 只在新气泡到达时回应；同一回复的流式更新不重复重启动作。
+  if (bubble.kind === 'assistant') {
+    playAgentPetAction('nod', { allowWhileThinking: true })
+  } else {
+    petInteractions.react(
+      bubble.variant === 'success'
+        ? 'happy-jump'
+        : bubble.variant === 'error' || bubble.variant === 'warning'
+          ? 'confused'
+          : 'peek',
+    )
+  }
   nextTick(() => {
     syncFabBubbleResizeObserver()
     syncFabBubblePosition()
@@ -1207,6 +1228,8 @@ function setFabDocked(docked: boolean) {
 
 // 清理拖拽状态和触摸移动拦截。
 function clearFabDragState() {
+  petInteractions.cancel()
+  clearFabRandomAction()
   fabDragState = null
   fabDragging.value = false
   fabPressed.value = false
@@ -1225,6 +1248,7 @@ function releaseFabPointerCapture(event: PointerEvent) {
 // 取消当前拖拽并根据位置恢复自动贴边策略。
 function cancelFabDrag() {
   const wasDragging = fabDragging.value
+  if (fabDragState) suppressNextFabClick()
 
   clearFabDragState()
   if (!wasDragging) {
@@ -1285,10 +1309,10 @@ function isPressedDragPointer(event: PointerEvent) {
 
 // 处理入口触发区按下事件并初始化拖拽状态。
 function handleFabTriggerPointerDown(event: PointerEvent) {
+  if (event.button !== 0 || event.isPrimary === false) return
   guardFabPointerEvent(event)
   if (fabSuppressNextClick) {
     fabSuppressNextClick = false
-    clearFabSuppressNextClickTimer()
   }
   fabPressed.value = true
   pauseFabAutoDock()
@@ -1304,6 +1328,7 @@ function handleFabTriggerPointerDown(event: PointerEvent) {
     startY: dragStartPosition.y,
     moved: false,
   }
+  petInteractions.begin(event.clientX, event.clientY)
   try {
     ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
   } catch {
@@ -1315,6 +1340,8 @@ function handleFabTriggerPointerDown(event: PointerEvent) {
 function handleFabTriggerPointerMove(event: PointerEvent) {
   guardFabPointerEvent(event, { preventTouchDefault: true })
   updateFabPointer(event)
+  if (fabDragState && fabDragState.pointerId !== event.pointerId) return
+  petInteractions.move(event.clientX, event.clientY, event.pointerType)
   if (!fabDragState || fabDragState.pointerId !== event.pointerId) return
   if (!isPressedDragPointer(event)) {
     releaseFabPointerCapture(event)
@@ -1349,6 +1376,7 @@ function handleFabTriggerPointerMove(event: PointerEvent) {
 
 // 处理入口拖拽释放并决定是否贴边收起。
 function handleFabTriggerPointerUp(event: PointerEvent) {
+  if (!fabDragState || fabDragState.pointerId !== event.pointerId) return
   guardFabPointerEvent(event)
   fabPressed.value = false
   const dragState = fabDragState
@@ -1365,8 +1393,10 @@ function handleFabTriggerPointerUp(event: PointerEvent) {
   fabDragState = null
   teardownFabTouchMoveGuard()
   releaseFabPointerCapture(event)
+  const consumed = petInteractions.end()
 
   if (!wasDragging) {
+    if (consumed) suppressNextFabClick()
     scheduleFabAutoDock()
     return
   }
@@ -1409,17 +1439,13 @@ function handleWindowFabPointerEnd(event: PointerEvent) {
 // 处理入口点击，贴边时先展开，否则打开助手面板。
 function handleFabTriggerClick(event: MouseEvent) {
   event.stopPropagation()
-  if (fabSuppressNextClick && event.detail !== 0) {
-    fabSuppressNextClick = false
-    clearFabSuppressNextClickTimer()
-    return
-  }
+  if (fabSuppressNextClick) return
 
   fabSuppressNextClick = false
-  clearFabSuppressNextClickTimer()
 
   if (fabDocked.value) {
     setFabDocked(false)
+    petInteractions.react('wake', 0)
     return
   }
 
@@ -1429,13 +1455,30 @@ function handleFabTriggerClick(event: MouseEvent) {
 
 // 处理指针离开入口时的自动贴边排队。
 function handleFabPointerLeave() {
+  petInteractions.leave()
   if (!fabDocked.value && shouldFabAutoDock()) scheduleFabAutoDock()
 }
 
 // 处理指针进入入口时暂停自动贴边。
-function handleFabPointerEnter() {
+function handleFabPointerEnter(event: PointerEvent) {
   pauseFabAutoDock()
+  petInteractions.enter(event.pointerType)
 }
+
+// 扫描表示正在处理；完成后点头回应，不把取消或失败误画成成功庆祝。
+watch(
+  () => props.thinking,
+  thinking => {
+    if (!props.active || !props.motionActive) return
+    if (thinking) {
+      setFabDocked(false)
+      playAgentPetAction('scan', { allowWhileThinking: true })
+    } else if (!fabPressed.value && !fabDragging.value) {
+      clearFabRandomAction()
+      petInteractions.react('nod', 0)
+    }
+  },
+)
 
 onMounted(() => {
   nextTick(resetFabPosition)
@@ -1456,6 +1499,9 @@ watch(
     setAgentAssistantBubbleEntryActive(active)
 
     if (active) {
+      setFabDocked(false)
+      if (props.thinking) playAgentPetAction('scan', { allowWhileThinking: true })
+      else petInteractions.react('wake', 0)
       if (shouldFabAutoDock()) scheduleFabAutoDock()
       nextTick(() => {
         syncFabBubbleResizeObserver()
@@ -1465,6 +1511,7 @@ watch(
     }
 
     clearBubbles()
+    cancelFabDrag()
     clearFabIdleTimer()
     clearFabRandomAction()
     resetFabPointer()
@@ -1481,11 +1528,11 @@ watch(
 
     clearFabIdleTimer()
     resetFabPointer()
+    cancelFabDrag()
   },
 )
 
 onScopeDispose(clearFabIdleTimer)
-onScopeDispose(clearFabSuppressNextClickTimer)
 onScopeDispose(resetFabBubbles)
 onScopeDispose(teardownFabBubblePositioning)
 onScopeDispose(clearFabBubbleUndockPositionTimer)
@@ -1523,6 +1570,7 @@ defineExpose({
       'is-dragging': fabDragging,
       'is-pressed': fabPressed,
       'is-thinking': props.thinking,
+      'is-motion-paused': !props.motionActive,
       'is-bubble-visible': hasFabBubbles,
       'is-bubble-positioned': fabBubblePositioned,
       [`is-action-${fabRandomAction}`]: fabRandomAction,
@@ -1571,12 +1619,13 @@ defineExpose({
       class="agent-assistant-fab__trigger"
       type="button"
       :aria-label="t('agentAssistant.title')"
-      :title="t('agentAssistant.title')"
       @pointerdown="handleFabTriggerPointerDown"
       @pointermove="handleFabTriggerPointerMove"
       @pointerup="handleFabTriggerPointerUp"
       @pointercancel="handleFabTriggerPointerCancel"
       @lostpointercapture="handleFabTriggerLostPointerCapture"
+      @keydown="handleFabTriggerKeyDown"
+      @contextmenu.prevent
       @click="handleFabTriggerClick"
     >
       <AgentPetStage :action="fabRandomAction" :intent="agentPetIntent" :thinking="props.thinking" />
@@ -1645,6 +1694,7 @@ defineExpose({
   pointer-events: auto;
   text-align: start;
   touch-action: none;
+  -webkit-touch-callout: none;
 }
 
 .agent-assistant-fab.is-dragging .agent-assistant-fab__trigger {

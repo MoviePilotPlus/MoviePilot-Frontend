@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { useToast } from 'vue-toastification'
 import { useConfirm } from '@/composables/useConfirm'
+import { resolvePluginInstallBlock } from '@/composables/usePluginInstallBlock'
 import api from '@/api'
 import { getApiBusinessErrorMessage } from '@/api/client'
 import type { Plugin, PluginRating, PluginSourceTransition } from '@/api/types'
@@ -79,9 +80,17 @@ const sourceBindingRequired = computed(() => props.plugin?.source_binding_status
 const restartRequired = computed(() =>
   Boolean(props.plugin?.id && pluginRuntimeStore.summary?.restart_required_plugin_ids.includes(props.plugin.id)),
 )
+// 该插件的加载使 free-threaded 运行时回退到 GIL；进程级事实，重启后由后端重新观察
+const gilFallback = computed(() =>
+  Boolean(props.plugin?.id && pluginRuntimeStore.summary?.gil_enabled_plugin_ids?.includes(props.plugin.id)),
+)
 const hasCardStatus = computed(
   () =>
-    sourceBindingRequired.value || restartRequired.value || Boolean(props.plugin?.has_update) || hasCardRating.value,
+    sourceBindingRequired.value ||
+    gilFallback.value ||
+    restartRequired.value ||
+    Boolean(props.plugin?.has_update) ||
+    hasCardRating.value,
 )
 const updateCandidate = computed(() => props.plugin?.update_candidate)
 const hasAlternativeUpdate = computed(() =>
@@ -103,12 +112,14 @@ const updateBadgeTitle = computed(() => {
   })
 })
 const runtimeStatus = computed(() => props.plugin?.runtime_status)
+// 兼容性判据挡住更新时给出原因，与市场详情弹窗共用同一套判定顺序
+const installBlock = computed(() => resolvePluginInstallBlock(props.plugin))
 const runtimePending = computed(
   () => props.runtimeSettling && ['source_missing', 'dependency_pending', 'ready'].includes(runtimeStatus.value || ''),
 )
 const runtimeUnavailable = computed(
   () =>
-    ['sync_failed', 'blocked_by_policy', 'load_failed'].includes(runtimeStatus.value || '') ||
+    ['sync_failed', 'blocked_by_policy', 'load_failed', 'incompatible_runtime'].includes(runtimeStatus.value || '') ||
     (!props.runtimeSettling && ['source_missing', 'dependency_pending', 'ready'].includes(runtimeStatus.value || '')),
 )
 const runtimeActionsBlocked = computed(
@@ -127,7 +138,13 @@ const runtimeUnavailableStatusKeys: Partial<Record<NonNullable<Plugin['runtime_s
   ready: 'plugin.runtimeReady',
   blocked_by_policy: 'plugin.blockedByPolicy',
   load_failed: 'plugin.runtimeLoadFailed',
+  incompatible_runtime: 'plugin.incompatibleRuntimeStatus',
 }
+const runtimeStatusIcon = computed(() => {
+  if (runtimeStatus.value === 'blocked_by_policy') return 'mdi-shield-lock-outline'
+  if (runtimeStatus.value === 'incompatible_runtime') return 'mdi-lock-outline'
+  return 'mdi-alert-circle-outline'
+})
 const showRuntimeStatusDot = computed(() => !runtimeStatus.value || runtimeStatus.value === 'active')
 const runtimeStatusDotColor = computed(() => (props.plugin?.state ? 'success' : 'secondary'))
 const runtimeStatusText = computed(() => {
@@ -387,8 +404,8 @@ async function resetPlugin() {
 
 // 更新插件
 async function updatePlugin(releaseVersion?: string, repoUrl?: string) {
-  if (!releaseVersion && props.plugin?.system_version_compatible === false) {
-    $toast.error(props.plugin?.system_version_message || t('plugin.incompatibleSystemVersion'))
+  if (!releaseVersion && installBlock.value) {
+    $toast.error(installBlock.value.message || t(installBlock.value.fallbackKey))
     return
   }
 
@@ -909,11 +926,7 @@ watch(
                 aria-live="polite"
               >
                 <VProgressCircular v-if="props.installing || runtimePending" indeterminate size="22" width="2" />
-                <VIcon
-                  v-else
-                  :icon="runtimeStatus === 'blocked_by_policy' ? 'mdi-shield-lock-outline' : 'mdi-alert-circle-outline'"
-                  size="22"
-                />
+                <VIcon v-else :icon="runtimeStatusIcon" size="22" />
                 <span>{{ runtimeStatusText }}</span>
                 <VBtn
                   v-if="runtimeStatus === 'sync_failed'"
@@ -1022,6 +1035,15 @@ watch(
               <VIcon icon="mdi-shield-alert-outline" size="12" />
               {{ t('plugin.sourceBindingRequired') }}
               <VTooltip activator="parent" location="top">{{ t('plugin.sourceBindingRequiredHint') }}</VTooltip>
+            </div>
+            <div
+              v-else-if="gilFallback"
+              class="plugin-card__status plugin-card__status--restart"
+              :aria-label="t('plugin.gilFallbackBadge')"
+            >
+              <VIcon icon="mdi-speedometer-slow" size="13" />
+              {{ t('plugin.gilFallbackBadge') }}
+              <VTooltip activator="parent" location="top">{{ t('plugin.gilFallbackBadgeHint') }}</VTooltip>
             </div>
             <div
               v-else-if="restartRequired"
