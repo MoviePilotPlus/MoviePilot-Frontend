@@ -458,7 +458,7 @@ async function updateCollect(field: string) {
     if (field in collectDetail.value) {
       ;(collectDetail.value as Record<string, unknown>)[field] = addForm.value[field as keyof typeof addForm.value]
     }
-    // 保存成功后刷新快照，「保存」按钮随即隐藏
+    // 保存成功后刷新快照，「保存」按钮回到置灰态
     savedSnapshot.value[field] = addForm.value[field as keyof typeof addForm.value] as string | number
     $toast.success(`更新 ${field} 成功！`)
   } catch (error) {
@@ -466,7 +466,7 @@ async function updateCollect(field: string) {
   }
 }
 
-/** 字段值相对已保存快照是否发生变化（决定「保存」按钮显隐） */
+/** 字段值相对已保存快照是否发生变化（决定「保存」按钮可点/置灰） */
 function isFieldDirty(field: string) {
   return addForm.value[field as keyof typeof addForm.value] !== savedSnapshot.value[field]
 }
@@ -530,15 +530,15 @@ function fieldActions(field: string): FieldAction[] {
       },
     )
   }
-  if (isFieldDirty(field)) {
-    actions.push({
-      key: 'save',
-      icon: 'mdi-content-save',
-      label: '保存',
-      title: `保存${field}`,
-      onClick: () => updateCollect(field),
-    })
-  }
+  // 保存按钮常显（可发现性）：未修改时置灰，改过值才可点
+  actions.push({
+    key: 'save',
+    icon: 'mdi-content-save',
+    label: '保存',
+    title: isFieldDirty(field) ? `保存${field}` : '修改后可保存',
+    disabled: !isFieldDirty(field),
+    onClick: () => updateCollect(field),
+  })
   return actions
 }
 
