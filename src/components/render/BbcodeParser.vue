@@ -78,6 +78,7 @@ const parsedContent = computed(() => {
 <style scoped>
 .bbcode-content {
   /* 跟随 Vuetify 主题（深浅模式自适应），勿硬编码颜色 */
+  margin-top: 20px;
   color: rgb(var(--v-theme-on-surface));
   font-size: 12px;
   line-height: 1.6;
