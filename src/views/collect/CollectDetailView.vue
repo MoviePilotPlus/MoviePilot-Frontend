@@ -449,6 +449,11 @@ const updateTypeDebounced = useDebounceFn(async newType => {
 }, 500)
 
 async function updateCollect(field: string) {
+  // 未修改直接点保存：提示后跳过，按钮常显可点但不做无谓写库
+  if (!isFieldDirty(field)) {
+    $toast.info('字段未修改，无需保存')
+    return
+  }
   try {
     await api.put(`collect/`, {
       id: collectDetail.value.id,
@@ -458,7 +463,7 @@ async function updateCollect(field: string) {
     if (field in collectDetail.value) {
       ;(collectDetail.value as Record<string, unknown>)[field] = addForm.value[field as keyof typeof addForm.value]
     }
-    // 保存成功后刷新快照，「保存」按钮回到置灰态
+    // 保存成功后刷新快照，保存提示回到「未修改」文案
     savedSnapshot.value[field] = addForm.value[field as keyof typeof addForm.value] as string | number
     $toast.success(`更新 ${field} 成功！`)
   } catch (error) {
@@ -466,7 +471,7 @@ async function updateCollect(field: string) {
   }
 }
 
-/** 字段值相对已保存快照是否发生变化（决定「保存」按钮可点/置灰） */
+/** 字段值相对已保存快照是否发生变化（决定保存提示文案） */
 function isFieldDirty(field: string) {
   return addForm.value[field as keyof typeof addForm.value] !== savedSnapshot.value[field]
 }
@@ -530,13 +535,12 @@ function fieldActions(field: string): FieldAction[] {
       },
     )
   }
-  // 保存按钮常显（可发现性）：未修改时置灰，改过值才可点
+  // 保存按钮常显可点：未修改时点击由 updateCollect 提示跳过
   actions.push({
     key: 'save',
     icon: 'mdi-content-save',
     label: '保存',
-    title: isFieldDirty(field) ? `保存${field}` : '修改后可保存',
-    disabled: !isFieldDirty(field),
+    title: isFieldDirty(field) ? `保存${field}` : '保存（未修改）',
     onClick: () => updateCollect(field),
   })
   return actions
