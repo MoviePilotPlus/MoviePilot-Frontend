@@ -471,9 +471,11 @@ async function updateCollect(field: string) {
   }
 }
 
-/** 字段值相对已保存快照是否发生变化（决定保存提示文案） */
+/** 字段值相对已保存快照是否发生变化（决定保存提示文案）
+ *  文本框编辑会把数字值变成字符串（如 1 → "1"），必须按字符串归一比较，
+ *  否则改回原值仍判脏、保存按钮不回置灰 */
 function isFieldDirty(field: string) {
-  return addForm.value[field as keyof typeof addForm.value] !== savedSnapshot.value[field]
+  return String(addForm.value[field as keyof typeof addForm.value]) !== String(savedSnapshot.value[field] ?? '')
 }
 
 /** 字段尾部的操作按钮组（保存 / 获取信息 / 打开详情页） */
