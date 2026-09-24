@@ -7,6 +7,7 @@ import { tagOptions, categoryOptions, mediaCateOptions } from '@/api/constants'
 import type { Collect, CollectCreate, DownloadTask, SiteSeed, Site, PtgenInfo } from '@/api/types'
 import NoDataFound from '@/components/states/NoDataFound.vue'
 import GroupTile from '@/components/GroupTitle.vue'
+import AppFieldActions, { type FieldAction } from '@/components/AppFieldActions.vue'
 import TaskCardSlideView from '@/views/collect/TaskCardSlideView.vue'
 import { doneNProgress, startNProgress } from '@/api/nprogress'
 import { seedStatus } from '@/api/constants'
@@ -55,19 +56,8 @@ const showAddSiteSedd = ref(false)
 const showCollectOperation = ref(false)
 const ptgen = ref<PtgenInfo>({} as PtgenInfo)
 const isLoading = ref(false)
-const showSaveIcons = ref({
-  en_title: false,
-  cn_title: false,
-  overview: false,
-  douban_id: false,
-  imdb_id: false,
-  tmdb_id: false,
-  bangumi_id: false,
-  season: false,
-  year: false,
-  sub_title: false,
-  episodes_all: false,
-})
+// 基本信息字段的已保存值快照：addForm 与快照不一致时才展示「保存」按钮
+const savedSnapshot = ref<Record<string, string | number>>({})
 const operationType = ref('')
 // 本地是否存在，存在则包括Item信息
 const existsItemId = ref('1')
@@ -210,6 +200,20 @@ async function getDetail() {
     addForm.value.episodes_all = collectDetail.value.episodes_all ?? 1
     addForm.value.cate = collectDetail.value.cate ?? ''
     addForm.value.type = collectDetail.value.type ?? ''
+    // 以加载到的库内值为基准建立快照，「保存」按钮只在偏离快照时出现
+    savedSnapshot.value = {
+      douban_id: addForm.value.douban_id,
+      imdb_id: addForm.value.imdb_id,
+      tmdb_id: addForm.value.tmdb_id,
+      bangumi_id: addForm.value.bangumi_id,
+      sub_title: addForm.value.sub_title,
+      overview: addForm.value.overview,
+      cn_title: addForm.value.cn_title,
+      en_title: addForm.value.en_title,
+      year: addForm.value.year,
+      season: addForm.value.season,
+      episodes_all: addForm.value.episodes_all,
+    }
     // 等待 tags 更新完 watch 事件触发以后再设置加载完成，避免触发更新标签
     setTimeout(() => {
       isRefreshed.value = true
@@ -452,12 +456,90 @@ async function updateCollect(field: string) {
     })
     // 同步本地详情，避免刷新前展示旧值
     if (field in collectDetail.value) {
-      ;(collectDetail.value as any)[field] = addForm.value[field as keyof typeof addForm.value]
+      ;(collectDetail.value as Record<string, unknown>)[field] = addForm.value[field as keyof typeof addForm.value]
     }
+    // 保存成功后刷新快照，「保存」按钮随即隐藏
+    savedSnapshot.value[field] = addForm.value[field as keyof typeof addForm.value] as string | number
     $toast.success(`更新 ${field} 成功！`)
   } catch (error) {
     console.error(`${field} 更新失败:`, error)
   }
+}
+
+/** 字段值相对已保存快照是否发生变化（决定「保存」按钮显隐） */
+function isFieldDirty(field: string) {
+  return addForm.value[field as keyof typeof addForm.value] !== savedSnapshot.value[field]
+}
+
+/** 字段尾部的操作按钮组（保存 / 获取信息 / 打开详情页） */
+function fieldActions(field: string): FieldAction[] {
+  const actions: FieldAction[] = []
+  if (field === 'douban_id') {
+    actions.push(
+      { key: 'fetch', icon: 'mdi-magnify', label: '获取', title: '根据豆瓣 ID 获取信息', onClick: onClickDouban },
+      {
+        key: 'open',
+        icon: 'mdi-cloud-outline',
+        label: '详情',
+        title: '打开豆瓣详情页',
+        disabled: !addForm.value.douban_id,
+        onClick: () => openDoubanDetail(addForm.value.douban_id),
+      },
+    )
+  } else if (field === 'imdb_id') {
+    actions.push(
+      { key: 'fetch', icon: 'mdi-magnify', label: '获取', title: '根据 IMDB ID 获取信息', onClick: onClickImdb },
+      {
+        key: 'open',
+        icon: 'mdi-cloud-outline',
+        label: '详情',
+        title: '打开 IMDB 详情页',
+        disabled: !addForm.value.imdb_id,
+        onClick: () => openImdbDetail(addForm.value.imdb_id),
+      },
+    )
+  } else if (field === 'tmdb_id') {
+    actions.push(
+      {
+        key: 'fetch',
+        icon: 'mdi-magnify',
+        label: '获取',
+        title: '根据豆瓣/IMDB/Bangumi ID 获取TMDB',
+        disabled: !(addForm.value.douban_id || addForm.value.imdb_id || addForm.value.bangumi_id),
+        onClick: fetchTmdbId,
+      },
+      {
+        key: 'open',
+        icon: 'mdi-cloud-outline',
+        label: '详情',
+        title: '打开TMDB详情页',
+        disabled: !addForm.value.tmdb_id,
+        onClick: () => addForm.value.tmdb_id && openTmdbDetail(addForm.value.tmdb_id),
+      },
+    )
+  } else if (field === 'bangumi_id') {
+    actions.push(
+      { key: 'fetch', icon: 'mdi-magnify', label: '获取', title: '根据 Bangumi ID 获取信息', onClick: onClickBangumi },
+      {
+        key: 'open',
+        icon: 'mdi-cloud-outline',
+        label: '详情',
+        title: '打开Bangumi详情页',
+        disabled: !addForm.value.bangumi_id,
+        onClick: () => openBangumiDetail(addForm.value.bangumi_id),
+      },
+    )
+  }
+  if (isFieldDirty(field)) {
+    actions.push({
+      key: 'save',
+      icon: 'mdi-content-save',
+      label: '保存',
+      title: `保存${field}`,
+      onClick: () => updateCollect(field),
+    })
+  }
+  return actions
 }
 
 function onClickDouban() {
@@ -922,21 +1004,9 @@ watch(
               persistent-hint
               class="max-w mt-1 input-style"
               density="compact"
-              @focus="showSaveIcons.episodes_all = true"
-              @blur="showSaveIcons.episodes_all = false"
             >
               <template #append-inner>
-                <div class="absolute-icon-container">
-                  <transition name="fade">
-                    <v-icon
-                      v-if="showSaveIcons.episodes_all"
-                      icon="mdi-content-save"
-                      @mousedown.stop="updateCollect('episodes_all')"
-                      class="cursor-pointer save-icon"
-                      color="primary"
-                    />
-                  </transition>
-                </div>
+                <AppFieldActions :actions="fieldActions('episodes_all')" />
               </template>
             </VTextField>
           </v-col>
@@ -949,21 +1019,9 @@ watch(
               persistent-hint
               class="max-w mt-1 input-style"
               density="compact"
-              @focus="showSaveIcons.season = true"
-              @blur="showSaveIcons.season = false"
             >
               <template #append-inner>
-                <div class="absolute-icon-container">
-                  <transition name="fade">
-                    <v-icon
-                      v-if="showSaveIcons.season"
-                      icon="mdi-content-save"
-                      @mousedown.stop="updateCollect('season')"
-                      class="cursor-pointer save-icon"
-                      color="primary"
-                    />
-                  </transition>
-                </div>
+                <AppFieldActions :actions="fieldActions('season')" />
               </template>
             </VTextField>
           </v-col>
@@ -981,37 +1039,9 @@ watch(
               class="max-w mt-1"
               :loading="isLoading"
               density="compact"
-              @focus="showSaveIcons.douban_id = true"
-              @blur="showSaveIcons.douban_id = false"
             >
-              <template #prepend-inner>
-                <VIcon
-                  v-if="addForm.douban_id"
-                  icon="mdi-magnify"
-                  class="cursor-pointer text-lg mt-1"
-                  title="根据豆瓣 ID 获取信息"
-                  @click="onClickDouban"
-                />
-                <VIcon
-                  v-if="addForm.douban_id"
-                  icon="mdi-cloud-outline"
-                  class="cursor-pointer text-lg mt-1"
-                  title="打开豆瓣详情页"
-                  @click="openDoubanDetail(addForm.douban_id)"
-                />
-              </template>
               <template #append-inner>
-                <div class="absolute-icon-container">
-                  <transition name="fade">
-                    <v-icon
-                      v-if="showSaveIcons.douban_id"
-                      icon="mdi-content-save"
-                      @mousedown.stop="updateCollect('douban_id')"
-                      class="cursor-pointer save-icon"
-                      color="primary"
-                    />
-                  </transition>
-                </div>
+                <AppFieldActions :actions="fieldActions('douban_id')" />
               </template>
             </VTextField>
           </v-col>
@@ -1025,37 +1055,9 @@ watch(
               class="max-w mt-1"
               :loading="isLoading"
               density="compact"
-              @focus="showSaveIcons.imdb_id = true"
-              @blur="showSaveIcons.imdb_id = false"
             >
-              <template #prepend-inner>
-                <VIcon
-                  v-if="addForm.imdb_id"
-                  icon="mdi-magnify"
-                  class="cursor-pointer text-lg mt-1"
-                  title="根据 IMDB ID 获取信息"
-                  @click="onClickImdb"
-                />
-                <VIcon
-                  v-if="addForm.imdb_id"
-                  icon="mdi-cloud-outline"
-                  class="cursor-pointer text-lg mt-1"
-                  title="打开 IMDB 详情页"
-                  @click="openImdbDetail(addForm.imdb_id)"
-                />
-              </template>
               <template #append-inner>
-                <div class="absolute-icon-container">
-                  <transition name="fade">
-                    <v-icon
-                      v-if="showSaveIcons.imdb_id"
-                      icon="mdi-content-save"
-                      @mousedown.stop="updateCollect('imdb_id')"
-                      class="cursor-pointer save-icon"
-                      color="primary"
-                    />
-                  </transition>
-                </div>
+                <AppFieldActions :actions="fieldActions('imdb_id')" />
               </template>
             </VTextField>
           </v-col>
@@ -1069,37 +1071,9 @@ watch(
               class="max-w mt-1"
               :loading="isLoading"
               density="compact"
-              @focus="showSaveIcons.tmdb_id = true"
-              @blur="showSaveIcons.tmdb_id = false"
             >
-              <template #prepend-inner>
-                <VIcon
-                  v-if="addForm.douban_id || addForm.imdb_id || addForm.bangumi_id"
-                  icon="mdi-magnify"
-                  class="cursor-pointer text-lg mt-1"
-                  title="根据豆瓣/IMDB/Bangumi ID 获取TMDB"
-                  @click="fetchTmdbId"
-                />
-                <VIcon
-                  v-if="addForm.tmdb_id"
-                  icon="mdi-cloud-outline"
-                  class="cursor-pointer text-lg mt-1"
-                  title="打开TMDB详情页"
-                  @click="addForm.tmdb_id && openTmdbDetail(addForm.tmdb_id)"
-                />
-              </template>
               <template #append-inner>
-                <div class="absolute-icon-container">
-                  <transition name="fade">
-                    <v-icon
-                      v-if="showSaveIcons.tmdb_id"
-                      icon="mdi-content-save"
-                      @mousedown.stop="updateCollect('tmdb_id')"
-                      class="cursor-pointer save-icon"
-                      color="primary"
-                    />
-                  </transition>
-                </div>
+                <AppFieldActions :actions="fieldActions('tmdb_id')" />
               </template>
             </VTextField>
           </v-col>
@@ -1114,37 +1088,9 @@ watch(
               class="max-w mt-1"
               :loading="isLoading"
               density="compact"
-              @focus="showSaveIcons.bangumi_id = true"
-              @blur="showSaveIcons.bangumi_id = false"
             >
-              <template #prepend-inner>
-                <VIcon
-                  v-if="addForm.bangumi_id"
-                  icon="mdi-magnify"
-                  class="cursor-pointer text-lg mt-1"
-                  title="根据 Bangumi ID 获取信息"
-                  @click="onClickBangumi"
-                />
-                <VIcon
-                  v-if="addForm.bangumi_id"
-                  icon="mdi-cloud-outline"
-                  class="cursor-pointer text-lg mt-1"
-                  title="打开Bangumi详情页"
-                  @click="openBangumiDetail(addForm.bangumi_id)"
-                />
-              </template>
               <template #append-inner>
-                <div class="absolute-icon-container">
-                  <transition name="fade">
-                    <v-icon
-                      v-if="showSaveIcons.bangumi_id"
-                      icon="mdi-content-save"
-                      @mousedown.stop="updateCollect('bangumi_id')"
-                      class="cursor-pointer save-icon"
-                      color="primary"
-                    />
-                  </transition>
-                </div>
+                <AppFieldActions :actions="fieldActions('bangumi_id')" />
               </template>
             </VTextField>
           </v-col>
@@ -1162,21 +1108,9 @@ watch(
               class="max-w mt-1 input-style"
               :loading="isLoading"
               density="compact"
-              @focus="showSaveIcons.cn_title = true"
-              @blur="showSaveIcons.cn_title = false"
             >
               <template #append-inner>
-                <div class="absolute-icon-container">
-                  <transition name="fade">
-                    <v-icon
-                      v-if="showSaveIcons.cn_title"
-                      icon="mdi-content-save"
-                      @mousedown.stop="updateCollect('cn_title')"
-                      class="cursor-pointer save-icon"
-                      color="primary"
-                    />
-                  </transition>
-                </div>
+                <AppFieldActions :actions="fieldActions('cn_title')" />
               </template>
             </VTextField>
           </v-col>
@@ -1190,21 +1124,9 @@ watch(
               class="max-w mt-1 input-style"
               :loading="isLoading"
               density="compact"
-              @focus="showSaveIcons.en_title = true"
-              @blur="showSaveIcons.en_title = false"
             >
               <template #append-inner>
-                <div class="absolute-icon-container">
-                  <transition name="fade">
-                    <v-icon
-                      v-if="showSaveIcons.en_title"
-                      icon="mdi-content-save"
-                      @mousedown.stop="updateCollect('en_title')"
-                      class="cursor-pointer save-icon"
-                      color="primary"
-                    />
-                  </transition>
-                </div>
+                <AppFieldActions :actions="fieldActions('en_title')" />
               </template>
             </VTextField>
           </v-col>
@@ -1222,21 +1144,9 @@ watch(
               class="max-w mt-1 input-style"
               :loading="isLoading"
               density="compact"
-              @focus="showSaveIcons.year = true"
-              @blur="showSaveIcons.year = false"
             >
               <template #append-inner>
-                <div class="absolute-icon-container">
-                  <transition name="fade">
-                    <v-icon
-                      v-if="showSaveIcons.year"
-                      icon="mdi-content-save"
-                      @mousedown.stop="updateCollect('year')"
-                      class="cursor-pointer save-icon"
-                      color="primary"
-                    />
-                  </transition>
-                </div>
+                <AppFieldActions :actions="fieldActions('year')" />
               </template>
             </VTextField>
           </v-col>
@@ -1255,21 +1165,9 @@ watch(
               class="max-w mt-1 input-style"
               :loading="isLoading"
               density="compact"
-              @focus="showSaveIcons.sub_title = true"
-              @blur="showSaveIcons.sub_title = false"
             >
               <template #append-inner>
-                <div class="absolute-icon-container">
-                  <transition name="fade">
-                    <v-icon
-                      v-if="showSaveIcons.sub_title"
-                      icon="mdi-content-save"
-                      @mousedown.stop="updateCollect('sub_title')"
-                      class="cursor-pointer save-icon"
-                      color="primary"
-                    />
-                  </transition>
-                </div>
+                <AppFieldActions :actions="fieldActions('sub_title')" />
               </template>
             </VTextarea>
           </v-col>
@@ -1288,21 +1186,9 @@ watch(
               class="max-w mt-1 relative input-style"
               :loading="isLoading"
               density="compact"
-              @focus="showSaveIcons.overview = true"
-              @blur="showSaveIcons.overview = false"
             >
               <template #append-inner>
-                <div class="absolute-icon-container">
-                  <transition name="fade">
-                    <v-icon
-                      v-if="showSaveIcons.overview"
-                      icon="mdi-content-save"
-                      @mousedown.stop="updateCollect('overview')"
-                      class="cursor-pointer save-icon"
-                      color="primary"
-                    />
-                  </transition>
-                </div>
+                <AppFieldActions :actions="fieldActions('overview')" />
               </template>
             </VTextarea>
           </v-col>
@@ -1645,28 +1531,9 @@ a.crew-name {
 .relative {
   position: relative;
 }
-
-.absolute-icon-container {
-  position: absolute;
-  z-index: 2;
-  display: flex;
-  align-items: flex-start;
-  background: linear-gradient(90deg, transparent 0%, var(--v-theme-background) 70%);
-  block-size: 100%;
-  inline-size: 60px;
-  inset-block-start: 0;
-  inset-inline-end: 0;
-}
 </style>
 
 <style scoped>
-.save-icon {
-  position: absolute;
-  z-index: 3;
-  inset-block-start: 6px;
-  inset-inline-end: 2px;
-}
-
 .input-style {
   font-family:
     Rubik,

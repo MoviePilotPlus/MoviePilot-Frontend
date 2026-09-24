@@ -6,6 +6,7 @@ import api from '@/api'
 import { tagOptions, mediaCateOptions, categoryOptions } from '@/api/constants'
 import type { VideoInfo, CollectCreate, Site, PtgenInfo, VideoEpisode, DoubanCandidate } from '@/api/types'
 import GroupTile from '@/components/GroupTitle.vue'
+import AppFieldActions, { type FieldAction } from '@/components/AppFieldActions.vue'
 import EpisodeCard from '@/components/cards/EpisodeCard.vue'
 import VirtualSlideView from '@/components/slide/VirtualSlideView.vue'
 import SiteSearchDialog from '@/components/dialog/SiteSearchDialog.vue'
@@ -375,6 +376,58 @@ function onClickImdb() {
     const url = `https://www.imdb.com/title/${addForm.value.imdb_id}/`
     getPtgen(url)
   }
+}
+
+/** ID 字段尾部的操作按钮组（获取信息 / 打开详情页） */
+function idFieldActions(kind: 'douban' | 'imdb' | 'tmdb' | 'bangumi'): FieldAction[] {
+  if (kind === 'douban') {
+    return [
+      { key: 'fetch', icon: 'mdi-magnify', label: '获取', title: '根据豆瓣 ID 获取信息', disabled: !addForm.value.douban_id, onClick: onClickDouban },
+      {
+        key: 'open',
+        icon: 'mdi-cloud-outline',
+        label: '详情',
+        title: '打开豆瓣详情页',
+        disabled: !addForm.value.douban_id,
+        onClick: () => addForm.value.douban_id && openDoubanDetail(addForm.value.douban_id),
+      },
+    ]
+  }
+  if (kind === 'imdb') {
+    return [
+      { key: 'fetch', icon: 'mdi-magnify', label: '获取', title: '根据 IMDB ID 获取信息', disabled: !addForm.value.imdb_id, onClick: onClickImdb },
+      {
+        key: 'open',
+        icon: 'mdi-cloud-outline',
+        label: '详情',
+        title: '打开 IMDB 详情页',
+        disabled: !addForm.value.imdb_id,
+        onClick: () => addForm.value.imdb_id && openImdbDetail(addForm.value.imdb_id),
+      },
+    ]
+  }
+  if (kind === 'tmdb') {
+    return [
+      {
+        key: 'open',
+        icon: 'mdi-cloud-outline',
+        label: '详情',
+        title: '打开TMDB详情页',
+        disabled: !addForm.value.tmdb_id,
+        onClick: () => addForm.value.tmdb_id && openTmdbDetail(addForm.value.tmdb_id),
+      },
+    ]
+  }
+  return [
+    {
+      key: 'open',
+      icon: 'mdi-cloud-outline',
+      label: '详情',
+      title: '打开Bangumi详情页',
+      disabled: !addForm.value.bangumi_id,
+      onClick: () => addForm.value.bangumi_id && openBangumiDetail(addForm.value.bangumi_id),
+    },
+  ]
 }
 async function getPtgen(url: string) {
   try {
@@ -1230,16 +1283,9 @@ function handleIgnore() {
                 persistent-hint
                 class="max-w-sm mt-1"
                 density="compact"
-                append-inner-icon="mdi-magnify"
-                @click:append-inner="onClickDouban"
               >
-                <!-- 修复图标绑定逻辑：根据douban_id是否存在动态显示图标 -->
-                <template #prepend-inner v-if="addForm.douban_id">
-                  <VIcon
-                    icon="mdi-cloud-outline"
-                    class="cursor-pointer text-lg"
-                    @click="addForm.douban_id && openDoubanDetail(addForm.douban_id)"
-                  />
+                <template #append-inner>
+                  <AppFieldActions :actions="idFieldActions('douban')" />
                 </template>
               </VTextField>
               <!-- 豆瓣候选：封面/标题/年份，直观人工核对与一键改选（2026-09-20） -->
@@ -1288,15 +1334,9 @@ function handleIgnore() {
                 persistent-hint
                 class="max-w-sm mt-1"
                 density="compact"
-                append-inner-icon="mdi-magnify"
-                @click:append-inner="onClickImdb"
               >
-                <template #prepend-inner v-if="addForm.imdb_id">
-                  <VIcon
-                    icon="mdi-cloud-outline"
-                    class="cursor-pointer text-lg"
-                    @click="addForm.imdb_id && openImdbDetail(addForm.imdb_id)"
-                  />
+                <template #append-inner>
+                  <AppFieldActions :actions="idFieldActions('imdb')" />
                 </template>
               </VTextField>
             </v-col>
@@ -1312,12 +1352,8 @@ function handleIgnore() {
                 class="max-w-sm mt-1"
                 density="compact"
               >
-                <template #prepend-inner v-if="addForm.tmdb_id">
-                  <VIcon
-                    icon="mdi-cloud-outline"
-                    class="cursor-pointer text-lg"
-                    @click="addForm.tmdb_id && openTmdbDetail(addForm.tmdb_id)"
-                  />
+                <template #append-inner>
+                  <AppFieldActions :actions="idFieldActions('tmdb')" />
                 </template>
               </VTextField>
             </v-col>
@@ -1334,12 +1370,8 @@ function handleIgnore() {
                 class="max-w-sm mt-1"
                 density="compact"
               >
-                <template #prepend-inner v-if="addForm.bangumi_id">
-                  <VIcon
-                    icon="mdi-cloud-outline"
-                    class="cursor-pointer text-lg"
-                    @click="addForm.bangumi_id && openBangumiDetail(addForm.bangumi_id)"
-                  />
+                <template #append-inner>
+                  <AppFieldActions :actions="idFieldActions('bangumi')" />
                 </template>
               </VTextField>
             </v-col>
