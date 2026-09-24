@@ -535,12 +535,14 @@ function fieldActions(field: string): FieldAction[] {
       },
     )
   }
-  // 保存按钮常显可点：未修改时点击由 updateCollect 提示跳过
+  // 保存按钮：PC 未修改时置灰；移动端菜单项保持可点（置灰在菜单里同样难读，
+  // 未改点击由 updateCollect 提示跳过）
   actions.push({
     key: 'save',
     icon: 'mdi-content-save',
     label: '保存',
     title: isFieldDirty(field) ? `保存${field}` : '保存（未修改）',
+    pcDisabled: !isFieldDirty(field),
     onClick: () => updateCollect(field),
   })
   return actions

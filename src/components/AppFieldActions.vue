@@ -23,6 +23,8 @@ export interface FieldAction {
   title?: string
   /** 是否禁用（不传默认可用） */
   disabled?: boolean
+  /** 仅 PC 横排按钮禁用（移动端菜单仍可点，点击后自行提示） */
+  pcDisabled?: boolean
   /** 点击回调 */
   onClick: () => void
 }
@@ -77,7 +79,7 @@ function actionTitle(action: FieldAction) {
       :prepend-icon="action.icon"
       :title="actionTitle(action)"
       :aria-label="actionTitle(action)"
-      :disabled="action.disabled"
+      :disabled="action.disabled ?? action.pcDisabled"
       size="x-small"
       variant="text"
       density="comfortable"
