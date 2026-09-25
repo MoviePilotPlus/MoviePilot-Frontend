@@ -902,3 +902,17 @@ architecture 基线四刷新。
   glassOverlay×1/app-glass-optical-preload×1，已知 Windows 环境族
   IDENTICAL 放行）。
 - 后端 +45 另见后端仓记录。
+
+## 2026-09-25 合并（第 81 次记录，定时任务执行）
+
+- 前端增量 **14 提交 / 27 文件（+438−123）**：`b8897e12`/`3bd3a59c` 刮削
+  手动字段 v3.0.9 对齐 + TMDB 剧集组选择、网络测试官方图标系列
+  （b66b07e8/9e4b2af9/d7195a06/386ca754）、`c58d5fb1`/`a23fa3cf` webpush
+  iOS 手势内订阅 + 移动端权限状态可读、`67fd6dc6` 基础设置保存反馈、
+  `56a712b0`/`75e3275c` GitHub Token 手动入口保留、**v3.0.9 bump**
+  （package.json 自动解）。双亲验证通过。
+- 三件套：install --immutable ✅ lint ✅ typecheck ✅；test:run 10F 与
+  78/79/80 轮完全一致（format-changed×4/TransferHistoryView×2/
+  UserProfile×2/glassOverlay×1/app-glass-optical-preload×1，已知 Windows
+  环境族 IDENTICAL 放行）。
+- 后端 +20 另见后端仓记录。
