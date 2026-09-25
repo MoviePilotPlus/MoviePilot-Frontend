@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import api from '@/api'
 import { getLogoUrl } from '@/utils/imageUtils'
+import moviePilotLogo from '@images/logo.png'
 import tvdb from '@images/logos/thetvdb.jpeg'
 import { useI18n } from 'vue-i18n'
 
@@ -18,20 +19,31 @@ interface TargetItem {
   id: string
   icon: string
   name: string
+  address: string
 }
 
 interface Address {
   id: string
   image: string
   name: string
+  address: string
   status: keyof Status
   time: string
   message: string
   btndisable: boolean
 }
 
-function resolveTargetImage(icon: string) {
+/** 根据目标网址和图标标识解析本地品牌图标；MoviePilot 自有域名统一显示主 Logo。 */
+function resolveTargetImage(icon: string, address: string) {
+  try {
+    const hostname = new URL(address).hostname.toLowerCase()
+    if (hostname === 'movie-pilot.org' || hostname.endsWith('.movie-pilot.org')) return moviePilotLogo
+  } catch {
+    // 无法解析目标地址时继续根据图标标识回退。
+  }
+
   if (icon === 'tvdb') return tvdb
+  if (icon === 'site') return ''
   return getLogoUrl(icon)
 }
 
@@ -47,14 +59,16 @@ const resolveStatusColor: Status = {
 const abortControllers = new Set<AbortController>()
 const isUnmounting = ref(false)
 
+/** 从后端加载网络测试目录并初始化列表状态。 */
 async function loadTargets() {
   // 测试项由后端下发，前端只负责展示，避免再把可测试目标和校验规则留在客户端。
   const result = await api.get<TargetItem[]>('system/nettest/targets')
 
   targets.value = result.map(item => ({
     id: item.id,
-    image: resolveTargetImage(item.icon),
+    image: resolveTargetImage(item.icon, item.address),
     name: item.name,
+    address: item.address,
     status: 'Normal',
     time: '',
     message: t('netTest.notTested'),
@@ -62,7 +76,7 @@ async function loadTargets() {
   }))
 }
 
-// 调用API测试网络连接
+/** 请求后端测试指定目标并更新对应列表状态。 */
 async function netTest(index: number) {
   const target = targets.value[index]
   if (!target) return
@@ -118,21 +132,30 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <VList lines="two" rounded>
+  <VList lines="three" rounded>
     <template v-for="(target, index) of targets" :key="target.id">
       <VListItem>
         <template #prepend>
-          <VAvatar :image="target.image" />
+          <VAvatar
+            v-if="target.image"
+            :image="target.image"
+          />
+          <VAvatar v-else color="primary" variant="tonal">
+            <VIcon icon="mdi-web" />
+          </VAvatar>
         </template>
         <VListItemTitle>
           {{ target.name }}
         </VListItemTitle>
         <VListItemSubtitle class="mt-1 me-2">
-          <VBadge dot location="start center" offset-x="2" :color="resolveStatusColor[target.status]" class="me-3">
-            <span class="ms-4">{{ target.message }}</span>
-          </VBadge>
+          <div class="text-caption text-truncate text-disabled">{{ target.address }}</div>
+          <div class="d-flex align-center mt-1">
+            <VBadge dot location="start center" offset-x="2" :color="resolveStatusColor[target.status]" class="me-3">
+              <span class="ms-4">{{ target.message }}</span>
+            </VBadge>
 
-          <span v-if="target.time" class="text-xs text-wrap text-disabled"> {{ target.time }} ms </span>
+            <span v-if="target.time" class="text-xs text-wrap text-disabled"> {{ target.time }} ms </span>
+          </div>
         </VListItemSubtitle>
         <template #append>
           <VBtn size="small" icon="mdi-connection" :disabled="target.btndisable" @click="netTest(index)" />

@@ -429,9 +429,9 @@ export default {
     disconnect: 'Disconnect',
     needsReauthorization:
       'Authorization is invalid, expiring, or missing permissions required by Agent Issue/PR skills. Please authorize again.',
-    manualTitle: 'Enter a Token Manually',
+    manualTitle: 'Enter or Replace a Token Manually',
     manualHint:
-      'The PAT stays on the server. Ensure it can create Issues and PRs, create forks, and push branches; workflow file changes also require workflow permission.',
+      'Saving a manual PAT replaces the current GitHub token. The PAT stays on the server. Ensure it can create Issues and PRs, create forks, and push branches; workflow file changes also require workflow permission.',
     manualLabel: 'GitHub PAT',
     manualPlaceholder: 'ghp_**** or github_pat_****',
     saveManual: 'Save Token',
@@ -974,6 +974,8 @@ export default {
       enable: 'Enable Browser Notifications',
       enableHint:
         'Click to allow this browser to send WebPush notifications. On iOS, permission must be requested from a user action.',
+      retry: 'Register Notifications Again',
+      permissionAllowed: 'Browser notification permission granted',
       permissionGranted: 'Browser notifications are enabled',
       permissionDenied: 'Browser notification permission was denied',
       permissionDeniedHint: 'Notification permission was denied. Allow it in the browser settings and try again.',
@@ -4775,6 +4777,7 @@ export default {
     recognizeFailed: '{path} recognition failed!',
     scrape: 'Scrape',
     manualScrape: 'Manual Scrape',
+    startScrape: 'Start Scraping',
     scraping: 'Scraping {path}...',
     scrapeCompleted: '{path} scraping completed!',
     confirmScrape: 'Are you sure you want to scrape {path}?',
