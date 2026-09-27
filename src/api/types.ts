@@ -1816,6 +1816,60 @@ export interface Storage {
   used_storage: number
 }
 
+// 单块挂载磁盘的空间统计
+export interface DiskUsageInfo {
+  // 挂载点（Windows 盘符如 C:\，POSIX 挂载路径）
+  mount_point: string
+  // 文件系统类型
+  fs_type?: string | null
+  // 总空间（字节）
+  total: number
+  // 已用空间（字节）
+  used: number
+  // 可用空间（字节）
+  free: number
+  // 使用百分比
+  percent: number
+}
+
+// 采集统计：按采集源分布项
+export interface CollectSourceCount {
+  // 采集源（VideoSite 枚举值）
+  site: string
+  // 该源采集任务数
+  count: number
+}
+
+// 采集统计：按做种站点分布项
+export interface CollectSeedingSiteCount {
+  // 站点名称
+  site_name: string
+  // 该站点做种记录数
+  count: number
+}
+
+// 采集统计
+export interface CollectStatistic {
+  // 采集任务总数（未删除）
+  collect_count: number
+  // 本月新增采集任务数
+  collect_count_month: number
+  // 已完成（Finished）采集任务数
+  collect_finished_count: number
+  // 本月新增已完成采集任务数
+  collect_finished_month: number
+  // 做种任务总数（未删除）
+  seed_count: number
+  // 本月新增做种任务数
+  seed_count_month: number
+  // 种子总体积（字节）
+  torrent_size: number
+  // 按采集源分布，按数量降序
+  source_counts: CollectSourceCount[]
+  // 按做种站点分布，按数量降序
+  seeding_site_counts: CollectSeedingSiteCount[]
+}
+
 // 媒体统计
 export interface MediaStatistic {
   // 电影总数

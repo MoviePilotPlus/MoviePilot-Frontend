@@ -44,7 +44,9 @@ const asyncDashboardOptions = {
 
 const builtInDashboardComponentLoaders: Record<string, DashboardComponentLoader> = {
   storage: () => import('@/views/dashboard/AnalyticsStorage.vue'),
+  disks: () => import('@/views/dashboard/AnalyticsDisks.vue'),
   mediaStatistic: () => import('@/views/dashboard/AnalyticsMediaStatistic.vue'),
+  collectStatistic: () => import('@/views/dashboard/AnalyticsCollectStatistic.vue'),
   mediaRecommend: () => import('@/views/dashboard/MediaRecommend.vue'),
   weeklyOverview: () => import('@/views/dashboard/AnalyticsWeeklyOverview.vue'),
   speed: () => import('@/views/dashboard/AnalyticsSpeed.vue'),
@@ -89,7 +91,9 @@ function createAsyncDashboardComponent(id: string) {
 
 // 内置仪表盘按需加载，关闭的卡片不再挤进 dashboard 首屏 chunk。
 const AnalyticsStorage = createAsyncDashboardComponent('storage')
+const AnalyticsDisks = createAsyncDashboardComponent('disks')
 const AnalyticsMediaStatistic = createAsyncDashboardComponent('mediaStatistic')
+const AnalyticsCollectStatistic = createAsyncDashboardComponent('collectStatistic')
 const MediaRecommend = createAsyncDashboardComponent('mediaRecommend')
 const AnalyticsWeeklyOverview = createAsyncDashboardComponent('weeklyOverview')
 const AnalyticsSpeed = createAsyncDashboardComponent('speed')
@@ -237,7 +241,9 @@ onUnmounted(() => {
 <template>
   <!-- 系统内置的仪表板 -->
   <AnalyticsStorage v-if="config?.id === 'storage'" />
+  <AnalyticsDisks v-else-if="config?.id === 'disks'" />
   <AnalyticsMediaStatistic v-else-if="config?.id === 'mediaStatistic'" />
+  <AnalyticsCollectStatistic v-else-if="config?.id === 'collectStatistic'" />
   <MediaRecommend v-else-if="config?.id === 'mediaRecommend'" />
   <AnalyticsWeeklyOverview v-else-if="config?.id === 'weeklyOverview'" :allow-refresh="props.allowRefresh" />
   <AnalyticsSpeed v-else-if="config?.id === 'speed'" :allowRefresh="props.allowRefresh" />

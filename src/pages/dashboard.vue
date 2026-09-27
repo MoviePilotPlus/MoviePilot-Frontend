@@ -87,6 +87,8 @@ const DASHBOARD_DESKTOP_DEFAULT_LAYOUT: DashboardGridLayoutConfig = {
   quickActions: { x: 8, y: 22, w: 4, h: 5 },
   systemInfo: { x: 8, y: 27, w: 4, h: 6 },
   mediaRecommend: { x: 0, y: 33, w: 8, h: 17 },
+  disks: { x: 0, y: 50, w: 4, h: 7 },
+  collectStatistic: { x: 4, y: 50, w: 8, h: 7 },
 }
 
 // 单个设备档位的仪表盘配置，将布局与显示项绑定到同一份持久化数据。
@@ -207,6 +209,24 @@ const dashboardConfigs = ref<DashboardItem[]>([
   {
     id: 'mediaStatistic',
     name: t('dashboard.mediaStatistic'),
+    key: '',
+    attrs: {},
+    cols: { cols: 12, md: 8 },
+    rows: 7,
+    elements: [],
+  },
+  {
+    id: 'disks',
+    name: t('dashboard.disks'),
+    key: '',
+    attrs: {},
+    cols: { cols: 12, md: 4 },
+    rows: 7,
+    elements: [],
+  },
+  {
+    id: 'collectStatistic',
+    name: t('dashboard.collectStatistic'),
     key: '',
     attrs: {},
     cols: { cols: 12, md: 8 },
@@ -548,10 +568,12 @@ function clampGridNumber(value: unknown, min: number, max: number, fallback: num
 function getDefaultDashboardEnableConfig(): DashboardEnableConfig {
   return {
     mediaStatistic: true,
+    collectStatistic: true,
     mediaRecommend: true,
     scheduler: true,
     speed: true,
     storage: true,
+    disks: true,
     weeklyOverview: false,
     cpu: true,
     memory: true,
