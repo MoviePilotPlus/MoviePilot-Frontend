@@ -916,3 +916,11 @@ architecture 基线四刷新。
   UserProfile×2/glassOverlay×1/app-glass-optical-preload×1，已知 Windows
   环境族 IDENTICAL 放行）。
 - 后端 +20 另见后端仓记录。
+
+## 第 82 次合并（2026-09-28）
+
+- 范围：a23fa3cf6..63515db2e（8 提交，v3.0.9 → v3.0.10）
+- 上游内容：前端 v3.0.10 发布；过滤规则组选项值规范化（去空格，22b912b2/187d98cb）及 FilterRuleGroupInfoDialog 重构；Plex 请求超时暴露（2ddc3241）；系统设置媒体服务器防重复保存（451e237f）；workflow 动作句柄等待（bc177e3d）；目录卡固定分类库布局（48675d3d）；i18n GitHub Token 提示恢复（15525efb）；配套测试补充。
+- 冲突：零冲突自动合并（18 文件 +451/−190）。fork 采集视图均为独有文件未受影响；`src/api/constants.ts` 过滤规则值上游规范化与 fork 无交集。
+- 验证：yarn install --immutable ✓；eslint --max-warnings=0 ✓；vitest 3505 过 / 10 败——失败族与 81 轮完全一致（format-changed×4 symlink 平台差、UserProfile×2 CRLF、TransferHistoryView×2 CRLF、glassOverlay×1、app-glass-optical-preload×1），逐文件复跑+第 81 轮基线对照定性 Windows 环境族，非本轮引入。
+- 版本：package.json 3.0.9 → 3.0.10，与后端 version.py FRONTEND_VERSION v3.0.10 一致。
