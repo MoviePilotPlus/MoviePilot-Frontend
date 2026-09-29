@@ -4,7 +4,11 @@ import noImage from '@images/logos/site.webp'
 import { Site } from '@/api/types'
 import SiteSchemaEditDialog from '@/components/dialog/SiteSchemaEditDialog.vue'
 import api from '@/api'
+import { useI18n } from 'vue-i18n'
 import { getCachedSiteIcon } from '@/utils/siteIconCache'
+
+// 国际化
+const { t } = useI18n()
 
 // 定义输入
 const cardProps = defineProps({
@@ -12,6 +16,11 @@ const cardProps = defineProps({
   site: {
     type: Object as PropType<Site>,
     required: true,
+  },
+  // 是否已配置上传模板（由列表页按 siteschema.template 判定传入）
+  hasTemplate: {
+    type: Boolean,
+    default: false,
   },
 })
 
@@ -60,15 +69,28 @@ onMounted(() => {
 </script>
 <template>
   <div>
-    <VCard variant="tonal" @click="openSiteSchemeInfoDialog">
-      <VCardText class="flex justify-space-between align-center gap-3">
-        <div class="align-self-start flex-1">
-          <div class="text-h6 mb-1">{{ site.name }}</div>
-          <div class="text-sm mt-5 flex flex-wrap">
-            <span class="me-2 mb-1">{{ site.domain }}</span>
+    <VCard variant="tonal" class="site-schema-card" @click="openSiteSchemeInfoDialog">
+      <!-- 已配置上传模板标识：右上角绿点，悬停有文字说明 -->
+      <span
+        v-if="hasTemplate"
+        class="site-schema-badge"
+        :title="t('setting.collect.templateConfigured')"
+      />
+      <VCardText class="d-flex align-center gap-2 pa-2">
+        <VImg
+          :src="siteIcon"
+          cover
+          rounded="lg"
+          class="site-schema-icon"
+        />
+        <div class="min-w-0 flex-1">
+          <div class="site-schema-name text-truncate" :title="site.name">
+            {{ site.name }}
+          </div>
+          <div class="site-schema-domain text-truncate" :title="site.domain">
+            {{ site.domain }}
           </div>
         </div>
-        <VImg :src="siteIcon" cover rounded="lg" class="mt-7 me-3" max-width="3rem" min-width="3rem" />
       </VCardText>
     </VCard>
     <!-- 新增站点弹窗 -->
@@ -82,3 +104,49 @@ onMounted(() => {
     />
   </div>
 </template>
+
+<style lang="scss" scoped>
+.site-schema-card {
+  position: relative;
+  min-inline-size: 0;
+  cursor: pointer;
+  /* 全局 .v-card 圆角带 !important，须同级 !important 覆盖为直角 */
+  border-radius: 0 !important;
+}
+
+/* 「已配置」角标：右上角绿点，不参与文本布局 */
+.site-schema-badge {
+  position: absolute;
+  inset-block-start: 0.45rem;
+  inset-inline-end: 0.45rem;
+  z-index: 1;
+  border-radius: 50%;
+  background: rgb(var(--v-theme-success));
+  block-size: 0.5rem;
+  inline-size: 0.5rem;
+  pointer-events: auto;
+}
+
+/* VImg 自带 flex:1 0 auto 会横向拉伸；必须整条 flex 简写覆盖锁定正方形 */
+.site-schema-icon {
+  flex: 0 0 auto;
+  block-size: 1.5rem;
+  inline-size: 1.5rem;
+}
+
+.site-schema-name {
+  /* 右侧留出绿点角标宽度，长名提前截断不与其重叠 */
+  padding-inline-end: 0.9rem;
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.site-schema-domain {
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  font-size: 0.7rem;
+  line-height: 1.35;
+  margin-block-start: 0.1rem;
+}
+</style>

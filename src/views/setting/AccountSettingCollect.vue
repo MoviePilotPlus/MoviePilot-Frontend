@@ -10,6 +10,7 @@ import SiteSchemaCard from '@/components/cards/SiteSchemaCard.vue'
 import ProgressDialog from '@/components/dialog/ProgressDialog.vue'
 import SiteSchemaImportDialog from '@/components/dialog/SiteSchemaImportDialog.vue'
 import { useI18n } from 'vue-i18n'
+import type { ComponentPublicInstance } from 'vue'
 import { mediaServerOptions } from '@/api/constants'
 
 // 截图模板配置引擎：默认配置 + 预设
@@ -100,6 +101,77 @@ const { t } = useI18n()
 // 导入对话框
 const siteImportDialog = ref(false)
 
+// ===== 命名格式模板：字段清单与变量速查 =====
+// 六个命名模板字段统一在此登记：独立卡片渲染、label 走 i18n、变量芯片点击插入
+const FORMAT_TEMPLATE_FIELDS = [
+  { key: 'TV_FOLDER_FORMAT', labelKey: 'tvFolderFormat' },
+  { key: 'TV_FILE_FORMAT', labelKey: 'tvFileFormat' },
+  { key: 'TV_TITLE_FORMAT', labelKey: 'tvTitleFormat' },
+  { key: 'MOVIE_FOLDER_FORMAT', labelKey: 'movieFolderFormat' },
+  { key: 'MOVIE_FILE_FORMAT', labelKey: 'movieFileFormat' },
+  { key: 'MOVIE_TITLE_FORMAT', labelKey: 'movieTitleFormat' },
+] as const
+
+// 命名模板可用变量与说明（与后端 generate_pt_filename 上下文一致）
+const FORMAT_TEMPLATE_VARIABLES: Array<{ name: string, descKey: string }> = [
+  { name: 'cn_title', descKey: 'varCnTitle' },
+  { name: 'en_title', descKey: 'varEnTitle' },
+  { name: 'version', descKey: 'varVersion' },
+  { name: 'year', descKey: 'varYear' },
+  { name: 'resolution', descKey: 'varResolution' },
+  { name: 'source', descKey: 'varSource' },
+  { name: 'video_codec', descKey: 'varVideoCodec' },
+  { name: 'audio_codec', descKey: 'varAudioCodec' },
+  { name: 'bit_depth', descKey: 'varBitDepth' },
+  { name: 'frame_rate', descKey: 'varFrameRate' },
+  { name: 'audio_tracks', descKey: 'varAudioTracks' },
+  { name: 'team', descKey: 'varTeam' },
+  { name: 'site', descKey: 'varSite' },
+  { name: 'season', descKey: 'varSeason' },
+  { name: 'episode', descKey: 'varEpisode' },
+  { name: 'subtitle_language', descKey: 'varSubtitleLanguage' },
+  { name: 'audio_language', descKey: 'varAudioLanguage' },
+  { name: 'hdr_format', descKey: 'varHdrFormat' },
+  { name: 'audio_channel', descKey: 'varAudioChannel' },
+]
+
+// 变量说明气泡缓存（首次悬停才查词条）
+const formatVariableDescriptions = ref<Record<string, string>>({})
+
+function formatVariableTooltip(variable: { name: string, descKey: string }) {
+  if (!formatVariableDescriptions.value[variable.name])
+    formatVariableDescriptions.value[variable.name] = t(`setting.collect.${variable.descKey}`)
+  return formatVariableDescriptions.value[variable.name]
+}
+
+// 最近一次聚焦的命名模板字段，变量芯片插入目标
+const activeFormatField = ref<string>('')
+const formatFieldRefs = new Map<string, ComponentPublicInstance>()
+
+function setFormatFieldRef(key: string, el: ComponentPublicInstance | Element | null) {
+  if (el) formatFieldRefs.set(key, el as ComponentPublicInstance)
+  else formatFieldRefs.delete(key)
+}
+
+// 把 {{变量}} 插入到最近聚焦的模板输入框光标处；无焦点时追加到末尾
+function insertFormatVariable(variable: string) {
+  const key = activeFormatField.value || FORMAT_TEMPLATE_FIELDS[0].key
+  const component = formatFieldRefs.get(key)
+  const textarea = component?.$el?.querySelector('textarea') as HTMLTextAreaElement | null
+  if (!textarea) return
+
+  const snippet = `{{ ${variable} }}`
+  const start = textarea.selectionStart ?? textarea.value.length
+  const end = textarea.selectionEnd ?? start
+  const nextValue = `${textarea.value.slice(0, start)}${snippet}${textarea.value.slice(end)}`
+  CollectSettings.value.Basic[key] = nextValue
+  nextTick(() => {
+    textarea.focus()
+    const caret = start + snippet.length
+    textarea.setSelectionRange(caret, caret)
+  })
+}
+
 // 采集器设置项
 const CollectSettings = ref<any>({
   // 基础设置
@@ -166,17 +238,53 @@ const CollectSettings = ref<any>({
   },
 })
 
-const youkuDownloadLineOptions = [
-  { title: '普通酷喵TV', value: 'normal_tv' },
-  { title: '安卓端', value: 'android' },
-  { title: '酷喵帧享影院', value: 'frame_enjoy_cinema' },
+const youkuDownloadLineOptions = computed(() => [
+  { title: t('setting.collect.youkuLineNormalTv'), value: 'normal_tv' },
+  { title: t('setting.collect.youkuLineAndroid'), value: 'android' },
+  { title: t('setting.collect.youkuLineFrameEnjoy'), value: 'frame_enjoy_cinema' },
+])
+
+const tencentFetchLineOptions = computed(() => [
+  { title: t('setting.collect.tencentLineNormalTv'), value: 'normal_tv' },
+  { title: t('setting.collect.tencentLinePhone'), value: 'phone' },
+  { title: t('setting.collect.tencentLineAuto'), value: 'auto' },
+])
+
+// 截图 HDR/DV 色彩处理引擎选项
+const screenshotHdrEngineOptions = computed(() => [
+  { title: t('setting.collect.hdrEngineAuto'), value: 'auto' },
+  { title: t('setting.collect.hdrEngineLibplacebo'), value: 'libplacebo' },
+  { title: t('setting.collect.hdrEngineZscale'), value: 'zscale' },
+])
+
+// ===== 站点模板搜索过滤 =====
+const siteSearchKeyword = ref('')
+
+function matchSiteSchema(site: Site) {
+  const keyword = siteSearchKeyword.value.trim().toLowerCase()
+  if (!keyword) return true
+  return (
+    site.name?.toLowerCase().includes(keyword) || site.domain?.toLowerCase().includes(keyword)
+  )
+}
+
+// ===== 页内锚点导航：采集设置卡片分区 =====
+const collectSectionAnchors = [
+  { id: 'collect-basic', labelKey: 'basicSettings' },
+  { id: 'collect-naming', labelKey: 'namingFormat' },
+  { id: 'collect-screenshot', labelKey: 'screenshotTemplate' },
+  { id: 'collect-imagehosting', labelKey: 'imageHosting' },
+  { id: 'collect-ptgen', labelKey: 'ptgenSource' },
+  { id: 'collect-siteschema', labelKey: 'siteSchema' },
+  { id: 'collect-accounts', labelKey: 'accountSettings' },
+  { id: 'collect-teams', labelKey: 'teamConfig' },
 ]
 
-const tencentFetchLineOptions = [
-  { title: 'TV形态（默认）', value: 'normal_tv' },
-  { title: '手机App形态（部分版权内容仅此线路放行）', value: 'phone' },
-  { title: '智能切换（TV被拒自动试手机）', value: 'auto' },
-]
+function scrollToCollectSection(id: string) {
+  // 本页滚动容器是根级 glass 容器，对 smooth 行为不响应（实测仅 auto 生效）；
+  // 需要留白时用 scroll-margin-top 兜住吸顶锚点条
+  document.getElementById(id)?.scrollIntoView({ behavior: 'auto', block: 'start' })
+}
 
 // 是否发送请求的总开关
 const isRequest = ref(true)
@@ -388,10 +496,24 @@ async function loadImageHostingSetting() {
   }
   syncHostingOrder()
 }
+// 站点域名 → 是否已配置上传模板（siteschema.template 非空）
+const siteTemplateConfigured = ref<Record<string, boolean>>({})
+
 async function loadSiteList() {
   try {
     const data: Site[] = await api.get('site/')
     allSites.value = data
+  } catch (error) {
+    console.log(error)
+  }
+  try {
+    const schemas: Array<{ domain?: string, template?: Record<string, unknown> | null }> = await api.get('siteschema/')
+    const map: Record<string, boolean> = {}
+    for (const schema of schemas) {
+      if (schema.domain)
+        map[schema.domain] = !!schema.template && Object.keys(schema.template).length > 0
+    }
+    siteTemplateConfigured.value = map
   } catch (error) {
     console.log(error)
   }
@@ -885,15 +1007,30 @@ onDeactivated(() => {
     :indeterminate="true"
   />
 
+  <!-- 页内锚点导航：与顶部 HeaderTab 同视觉语言的文字标签（吸顶，长页免滚动找卡） -->
+  <nav class="collect-anchor-bar">
+    <button
+      v-for="anchor in collectSectionAnchors"
+      :key="anchor.id"
+      type="button"
+      class="collect-anchor-tab"
+      @click="scrollToCollectSection(anchor.id)"
+    >
+      {{ t(`setting.collect.${anchor.labelKey}`) }}
+    </button>
+  </nav>
+
   <VRow>
     <VCol cols="12">
-      <VCard>
+      <VCard id="collect-basic" class="overflow-visible">
         <VCardItem>
           <VCardTitle>{{ t('setting.collect.basicSettings') }}</VCardTitle>
           <VCardSubtitle>{{ t('setting.collect.basicSettingsDesc') }}</VCardSubtitle>
         </VCardItem>
         <VCardText>
           <VForm @submit.prevent="() => {}">
+            <!-- 目录 -->
+            <div class="settings-section-title">{{ t('setting.collect.sectionDirectory') }}</div>
             <VRow>
               <VCol cols="12" md="6">
                 <VTextField
@@ -915,12 +1052,18 @@ onDeactivated(() => {
                   prepend-inner-icon="mdi-folder-download"
                 />
               </VCol>
+            </VRow>
+            <!-- 下载参数 -->
+            <div class="settings-section-title">{{ t('setting.collect.sectionDownload') }}</div>
+            <VRow>
               <VCol cols="12" md="6">
                 <VTextField
                   v-model="CollectSettings.Basic.DOWNLOADER_THREAD_COUNT"
+                  type="number"
                   :label="t('setting.collect.downloaderThreadCount')"
                   :hint="t('setting.collect.downloaderThreadCountHint')"
                   placeholder="10"
+                  min="1"
                   persistent-hint
                   prepend-inner-icon="mdi-numeric"
                 />
@@ -938,9 +1081,11 @@ onDeactivated(() => {
               <VCol cols="12" md="6">
                 <VTextField
                   v-model="CollectSettings.Basic.DOWNLOAD_TASK_MAX_WORKERS"
+                  type="number"
                   :label="t('setting.collect.downloadTaskMaxWorkers')"
                   :hint="t('setting.collect.downloadTaskMaxWorkersHint')"
                   placeholder="1"
+                  min="1"
                   persistent-hint
                   prepend-inner-icon="mdi-view-week"
                 />
@@ -948,9 +1093,11 @@ onDeactivated(() => {
               <VCol cols="12" md="6">
                 <VTextField
                   v-model="CollectSettings.Basic.DOWNLOADER_SLEEP_TIME"
+                  type="number"
                   :label="t('setting.collect.downloaderSleepTime')"
                   :hint="t('setting.collect.downloaderSleepTimeHint')"
                   placeholder="1"
+                  min="0"
                   persistent-hint
                   prepend-inner-icon="mdi-fan"
                 />
@@ -971,6 +1118,10 @@ onDeactivated(() => {
                   persistent-hint
                 />
               </VCol>
+            </VRow>
+            <!-- 标签与调试 -->
+            <div class="settings-section-title">{{ t('setting.collect.sectionTagDebug') }}</div>
+            <VRow>
               <VCol cols="12" md="6">
                 <VTextField
                   v-model="CollectSettings.Basic.HIGH_BITRATE_THRESHOLD"
@@ -978,6 +1129,8 @@ onDeactivated(() => {
                   :label="t('setting.collect.highBitrateThreshold')"
                   :hint="t('setting.collect.highBitrateThresholdHint')"
                   placeholder="10000000"
+                  suffix="bps"
+                  min="0"
                   persistent-hint
                   prepend-inner-icon="mdi-speedometer"
                 />
@@ -998,16 +1151,16 @@ onDeactivated(() => {
                   persistent-hint
                 />
               </VCol>
+            </VRow>
+            <!-- 截图 -->
+            <div class="settings-section-title">{{ t('setting.collect.sectionScreenshot') }}</div>
+            <VRow>
               <VCol cols="12" md="6">
                 <VSelect
                   v-model="CollectSettings.Basic.SCREENSHOT_HDR_PROCESSOR"
-                  :items="[
-                    { title: '自动检测', value: 'auto' },
-                    { title: 'libplacebo（强制，需Vulkan）', value: 'libplacebo' },
-                    { title: 'zscale（强制CPU）', value: 'zscale' },
-                  ]"
-                  label="截图色彩处理引擎"
-                  hint="HDR/DV 截图的色彩映射引擎。auto 自动检测 Vulkan；libplacebo 质量最好但需要 Vulkan 支持；zscale 纯 CPU 速度快但 DV 可能偏色"
+                  :items="screenshotHdrEngineOptions"
+                  :label="t('setting.collect.screenshotHdrEngine')"
+                  :hint="t('setting.collect.screenshotHdrEngineHint')"
                   persistent-hint
                   prepend-inner-icon="mdi-palette"
                 />
@@ -1035,6 +1188,8 @@ onDeactivated(() => {
                   :label="t('setting.collect.screenshotCount')"
                   :hint="t('setting.collect.screenshotCountHint')"
                   placeholder="4"
+                  suffix="张"
+                  min="1"
                   persistent-hint
                   prepend-inner-icon="mdi-image-multiple"
                 />
@@ -1046,6 +1201,8 @@ onDeactivated(() => {
                   :label="t('setting.collect.screenshotCompressLimit')"
                   :hint="t('setting.collect.screenshotCompressLimitHint')"
                   placeholder="5242880"
+                  suffix="字节"
+                  min="0"
                   persistent-hint
                   prepend-inner-icon="mdi-image-size-select-large"
                 />
@@ -1057,6 +1214,8 @@ onDeactivated(() => {
                   :label="t('setting.collect.screenshotMinSizeLimit')"
                   :hint="t('setting.collect.screenshotMinSizeLimitHint')"
                   placeholder="1843200"
+                  suffix="字节"
+                  min="0"
                   persistent-hint
                   prepend-inner-icon="mdi-image-size-select-small"
                 />
@@ -1069,6 +1228,10 @@ onDeactivated(() => {
                   persistent-hint
                 />
               </VCol>
+            </VRow>
+            <!-- 简介与豆瓣 -->
+            <div class="settings-section-title">{{ t('setting.collect.sectionIntroDouban') }}</div>
+            <VRow>
               <VCol cols="12" md="6">
                 <VTextField
                   v-model="CollectSettings.Basic.BANGUMI_API_BASE"
@@ -1107,6 +1270,10 @@ onDeactivated(() => {
                   persistent-hint
                 />
               </VCol>
+            </VRow>
+            <!-- 种子 -->
+            <div class="settings-section-title">{{ t('setting.collect.sectionTorrent') }}</div>
+            <VRow>
               <VCol cols="12" md="6">
                 <VTextField
                   v-model="CollectSettings.Basic.TORRENT_AUTHOR"
@@ -1117,77 +1284,74 @@ onDeactivated(() => {
                   prepend-inner-icon="mdi-account-edit"
                 />
               </VCol>
-              <VCol cols="12" md="12">
-                <VTextarea
-                  v-model="CollectSettings.Basic.TV_FILE_FORMAT"
-                  auto-grow
-                  :placeholder="t('setting.collect.tvFileFormat')"
-                  :hint="t('setting.collect.tvFileFormatHint')"
-                  rows="3"
-                  persistent-hint
-                />
-              </VCol>
-              <VCol cols="12" md="12">
-                <VTextarea
-                  v-model="CollectSettings.Basic.TV_FOLDER_FORMAT"
-                  auto-grow
-                  :placeholder="t('setting.collect.tvFolderFormat')"
-                  :hint="t('setting.collect.tvFolderFormatHint')"
-                  rows="3"
-                  persistent-hint
-                />
-              </VCol>
-              <VCol cols="12" md="12">
-                <VTextarea
-                  v-model="CollectSettings.Basic.TV_TITLE_FORMAT"
-                  auto-grow
-                  :placeholder="t('setting.collect.tvTitleFormat')"
-                  :hint="t('setting.collect.tvTitleFormatHint')"
-                  rows="3"
-                  persistent-hint
-                />
-              </VCol>
-              <VCol cols="12" md="12">
-                <VTextarea
-                  v-model="CollectSettings.Basic.MOVIE_FOLDER_FORMAT"
-                  auto-grow
-                  :placeholder="t('setting.collect.movieFolderFormat')"
-                  :hint="t('setting.collect.movieFolderFormatHint')"
-                  rows="3"
-                  persistent-hint
-                />
-              </VCol>
-              <VCol cols="12" md="12">
-                <VTextarea
-                  v-model="CollectSettings.Basic.MOVIE_FILE_FORMAT"
-                  auto-grow
-                  :placeholder="t('setting.collect.movieFileFormat')"
-                  :hint="t('setting.collect.movieFileFormatHint')"
-                  rows="3"
-                  persistent-hint
-                />
-              </VCol>
-              <VCol cols="12" md="12">
-                <VTextarea
-                  v-model="CollectSettings.Basic.MOVIE_TITLE_FORMAT"
-                  auto-grow
-                  :placeholder="t('setting.collect.movieTitleFormat')"
-                  :hint="t('setting.collect.movieTitleFormatHint')"
-                  rows="3"
-                  persistent-hint
-                />
-              </VCol>
             </VRow>
           </VForm>
+          <!-- 吸底保存：长表单滚动到任意位置都可见（卡片开启 overflow-visible 以放行 sticky） -->
+          <div class="sticky-save-row">
+            <VBtn type="button" color="primary" elevation="4" @click="saveBasicSettings" prepend-icon="mdi-content-save">
+              {{ t('common.save') }}
+            </VBtn>
+          </div>
         </VCardText>
+      </VCard>
+    </VCol>
+  </VRow>
+
+  <!-- 命名格式模板（独立卡片：label 常显 + 等宽字体 + 变量芯片插入） -->
+  <VRow>
+    <VCol cols="12">
+      <VCard id="collect-naming" class="overflow-visible">
+        <VCardItem>
+          <VCardTitle>{{ t('setting.collect.namingFormat') }}</VCardTitle>
+          <VCardSubtitle>{{ t('setting.collect.namingFormatDesc') }}</VCardSubtitle>
+        </VCardItem>
         <VCardText>
-          <VForm @submit.prevent="() => {}">
-            <div class="d-flex flex-wrap gap-4 mt-4">
-              <VBtn type="submit" @click="saveBasicSettings" prepend-icon="mdi-content-save">
-                {{ t('common.save') }}
-              </VBtn>
-            </div>
-          </VForm>
+<!-- 变量速查：吸顶跟随滚动，悬停看变量说明，点击插入到最近聚焦的模板框光标处 -->
+        <div class="template-variable-bar">
+          <span class="template-variable-label">{{ t('setting.collect.namingVariables') }}</span>
+          <VTooltip
+            v-for="variable in FORMAT_TEMPLATE_VARIABLES"
+            :key="variable.name"
+            location="bottom"
+            open-delay="250"
+          >
+            <template #activator="{ props }">
+              <VChip
+                v-bind="props"
+                size="x-small"
+                variant="outlined"
+                color="primary"
+                class="cursor-pointer flex-shrink-0 font-weight-medium"
+                @click="insertFormatVariable(variable.name)"
+              >
+                {{ variable.name }}
+              </VChip>
+            </template>
+            {{ formatVariableTooltip(variable) }}
+          </VTooltip>
+        </div>
+          <VRow>
+            <VCol v-for="field in FORMAT_TEMPLATE_FIELDS" :key="field.key" cols="12" md="12">
+              <VTextarea
+                :ref="el => setFormatFieldRef(field.key, el)"
+                v-model="CollectSettings.Basic[field.key]"
+                auto-grow
+                :label="t(`setting.collect.${field.labelKey}`)"
+                :hint="t('setting.collect.namingFieldHint')"
+                rows="2"
+                min-rows="2"
+                max-rows="8"
+                persistent-hint
+                class="template-textarea"
+                @focus="activeFormatField = field.key"
+              />
+            </VCol>
+          </VRow>
+          <div class="sticky-save-row">
+            <VBtn type="button" color="primary" elevation="4" @click="saveBasicSettings" prepend-icon="mdi-content-save">
+              {{ t('common.save') }}
+            </VBtn>
+          </div>
         </VCardText>
       </VCard>
     </VCol>
@@ -1196,9 +1360,9 @@ onDeactivated(() => {
   <!-- 截图模板配置（独立卡片，左右两栏） -->
   <VRow>
     <VCol cols="12">
-      <VCard>
+      <VCard id="collect-screenshot">
         <VCardItem class="pb-2">
-          <VCardTitle class="text-h6">{{ t('setting.collect.screenshotTemplate') }}</VCardTitle>
+          <VCardTitle>{{ t('setting.collect.screenshotTemplate') }}</VCardTitle>
         </VCardItem>
         <VCardText>
           <VRow>
@@ -1379,7 +1543,7 @@ onDeactivated(() => {
 
   <VRow>
     <VCol cols="12">
-      <VCard>
+      <VCard id="collect-imagehosting">
         <VCardItem>
           <VCardTitle>{{ t('setting.collect.imageHosting') }}</VCardTitle>
           <VCardSubtitle>{{ t('setting.collect.imageHostingDesc') }}</VCardSubtitle>
@@ -1474,7 +1638,7 @@ onDeactivated(() => {
   </VRow>
   <VRow>
     <VCol cols="12">
-      <VCard>
+      <VCard id="collect-ptgen">
         <VCardItem>
           <VCardTitle>{{ t('setting.collect.ptgenSource') }}</VCardTitle>
           <VCardSubtitle>{{ t('setting.collect.ptgenSourceDesc') }}</VCardSubtitle>
@@ -1560,21 +1724,40 @@ onDeactivated(() => {
   </VRow>
   <VRow>
     <VCol cols="12">
-      <VCard>
+      <VCard id="collect-siteschema">
         <VCardItem>
           <VCardTitle>{{ t('setting.collect.siteSchema') }}</VCardTitle>
           <VCardSubtitle>{{ t('setting.collect.siteSchemaDesc') }}</VCardSubtitle>
         </VCardItem>
         <VCardText>
+          <!-- 站点搜索：按名称/域名过滤，拖拽排序在无搜索词时可用（紧凑单行，右对齐） -->
+          <VTextField
+            v-model="siteSearchKeyword"
+            density="compact"
+            variant="outlined"
+            single-line
+            :placeholder="t('setting.collect.siteSearchPlaceholder')"
+            prepend-inner-icon="mdi-magnify"
+            clearable
+            hide-details
+            class="site-search-field mb-3"
+          />
           <draggable
             v-model="allSites"
             handle=".cursor-move"
             item-key="id"
             tag="div"
-            :component-data="{ 'class': 'grid gap-3 grid-app-card' }"
+            :component-data="{ 'class': 'grid gap-2 grid-site-schema-card' }"
           >
             <template #item="{ element }">
-              <SiteSchemaCard :site="element" @close="removeMediaServer(element)" @change="onMediaServerChange" />
+              <div v-show="matchSiteSchema(element)" class="h-100">
+                <SiteSchemaCard
+                  :site="element"
+                  :has-template="siteTemplateConfigured[element.domain] === true"
+                  @close="removeMediaServer(element)"
+                  @change="onMediaServerChange"
+                />
+              </div>
             </template>
           </draggable>
         </VCardText>
@@ -1601,7 +1784,7 @@ onDeactivated(() => {
   </VRow>
   <VRow>
     <VCol cols="12">
-      <VCard>
+      <VCard id="collect-accounts">
         <VCardItem>
           <VCardTitle> {{ t('setting.collect.tencentCookie') }}</VCardTitle>
           <VCardSubtitle>{{ t('setting.collect.tencentCookieHint') }} </VCardSubtitle>
@@ -1875,7 +2058,7 @@ onDeactivated(() => {
   <!-- 制作组配置 -->
   <VRow>
     <VCol cols="12">
-      <VCard>
+      <VCard id="collect-teams">
         <VCardItem>
           <VCardTitle>{{ t('collect.teamConfig') }}</VCardTitle>
           <VCardSubtitle>{{ t('collect.teamConfigDesc') }}</VCardSubtitle>
@@ -1988,5 +2171,124 @@ onDeactivated(() => {
  */
 .collect-subpanel {
   background: rgba(var(--v-theme-on-surface), 0.04);
+}
+
+/* 锚点目标：跳转时给吸顶锚点条留出高度 */
+#collect-basic,
+#collect-naming,
+#collect-screenshot,
+#collect-imagehosting,
+#collect-ptgen,
+#collect-siteschema,
+#collect-accounts,
+#collect-teams {
+  scroll-margin-top: 8.5rem;
+}
+
+/* 页内锚点导航：吸在设定页顶部 tab 栏之下，视觉对齐 HeaderTab（圆角文字标签 + 悬停底色） */
+.collect-anchor-bar {
+  position: sticky;
+  top: 6.9rem;
+  z-index: 3;
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.35rem 0.25rem 0.55rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* 滚动时内容透出，用主题表面色渐隐保证吸顶时可读 */
+  background: linear-gradient(to bottom, rgb(var(--v-theme-surface)) 78%, transparent);
+}
+
+.collect-anchor-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.collect-anchor-tab {
+  position: relative;
+  flex-shrink: 0;
+  border-radius: 1.25rem;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+  padding-block: 0.35rem;
+  padding-inline: 0.85rem;
+  white-space: nowrap;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.collect-anchor-tab:hover {
+  background-color: rgba(var(--v-theme-primary), 0.05);
+  color: rgba(var(--v-theme-on-surface), 1);
+}
+
+.collect-anchor-tab:active {
+  color: rgb(var(--v-theme-primary));
+}
+
+/* 基础设置卡内分区标题 */
+.settings-section-title {
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-block: 1.35rem 0.9rem;
+  padding-inline-start: 0.55rem;
+  border-inline-start: 3px solid rgb(var(--v-theme-primary));
+}
+
+.settings-section-title:first-child {
+  margin-block-start: 0.25rem;
+}
+
+/* 长表单吸底保存按钮：跟随视口底部，滚动全程可及 */
+.sticky-save-row {
+  position: sticky;
+  bottom: 0.75rem;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-start;
+  padding-block-start: 0.75rem;
+}
+
+/* 命名模板变量速查条：吸顶跟随（锚点条之下），滚动中也可点击插入 */
+.template-variable-bar {
+  position: sticky;
+  top: 9.2rem;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.6rem 0.75rem;
+  margin-block-end: 0.9rem;
+  background: rgba(var(--v-theme-surface), 0.96);
+  backdrop-filter: blur(6px);
+  border-radius: 0.5rem;
+}
+
+.template-variable-label {
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  font-size: 0.75rem;
+  margin-inline-end: 0.35rem;
+}
+
+/* 站点模板卡专用网格：紧凑卡更小列宽（共享 grid-app-card 不动） */
+.grid-site-schema-card {
+  grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+}
+
+/* 站点搜索框：固定窄宽右对齐，不占整行 */
+.site-search-field {
+  max-inline-size: 15rem;
+  margin-inline-start: auto;
+}
+
+/* 命名模板输入框：等宽字体，代码不再糊成正文 */
+.template-textarea :deep(textarea) {
+  font-family: 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
 }
 </style>
