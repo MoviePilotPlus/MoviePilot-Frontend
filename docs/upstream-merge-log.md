@@ -924,3 +924,11 @@ architecture 基线四刷新。
 - 冲突：零冲突自动合并（18 文件 +451/−190）。fork 采集视图均为独有文件未受影响；`src/api/constants.ts` 过滤规则值上游规范化与 fork 无交集。
 - 验证：yarn install --immutable ✓；eslint --max-warnings=0 ✓；vitest 3505 过 / 10 败——失败族与 81 轮完全一致（format-changed×4 symlink 平台差、UserProfile×2 CRLF、TransferHistoryView×2 CRLF、glassOverlay×1、app-glass-optical-preload×1），逐文件复跑+第 81 轮基线对照定性 Windows 环境族，非本轮引入。
 - 版本：package.json 3.0.9 → 3.0.10，与后端 version.py FRONTEND_VERSION v3.0.10 一致。
+
+## 第 83 次合并（2026-09-29）
+
+- 范围：63515db2e..22bd1388（4 提交，v3.0.10 → v3.0.11）
+- 上游内容：Telegram 频道级 topic 路由（1383a4a9）；整理评审折叠与备注可选（f99683c5）；目录卡允许远程下载存储（9043c6b6，曾短暂 bump v3.0.12）；22bd1388 把版本钉回 v3.0.11；AccountSettingDirectory 测试补充。
+- 冲突：零冲突自动合并（14 文件 +294/−69）。eslint-suppressions.json 自动并集。
+- 验证：yarn install --immutable ✓；eslint --max-warnings=0 ✓；vitest 3514 过 / 10 败——失败族与 82 轮完全一致（format-changed×4 symlink、UserProfile×2 CRLF、TransferHistoryView×2 CRLF、glassOverlay×1、app-glass-optical-preload×1），已知 Windows 环境族，非本轮引入。
+- 版本：package.json 3.0.10 → 3.0.11（上游 22bd1388 钉回，与后端 FRONTEND_VERSION v3.0.10 暂差一版——后端本轮无 release 提交未 bump，属上游两仓节奏差，待下轮 release 对齐）。
