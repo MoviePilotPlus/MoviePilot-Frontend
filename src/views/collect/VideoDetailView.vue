@@ -442,6 +442,8 @@ async function getPtgen(url: string) {
     // 后端返回 overview，兼容 description 字段
     addForm.value.overview =
       ptgen.value.overview || ptgen.value.description || mediaDetail.value.overview || ''
+    // 左栏「简介」段落与表单同步刷新（切换豆瓣候选后页面级信息跟着变）
+    mediaDetail.value.overview = addForm.value.overview
     addForm.value.year = ptgen.value.year || mediaDetail.value.year || ''
     if (addForm.value.year) {
       mediaDetail.value.year = addForm.value.year
@@ -783,6 +785,10 @@ function isCurrentDouban(item: DoubanCandidate): boolean {
 function selectDoubanCandidate(item: DoubanCandidate) {
   if (!item.id || isCurrentDouban(item)) return
   addForm.value.douban_id = String(item.id)
+  // 页面级关联信息同步：doubanHint（ID 框下方提示）、顶部 card_subtitle 等
+  // 都从 mediaDetail.douban_info 读取，不跟着改的话切完候选页面仍是旧条目
+  mediaDetail.value.douban_id = String(item.id)
+  mediaDetail.value.douban_info = { ...(mediaDetail.value.douban_info ?? {}), ...item }
   onClickDouban()
 }
 
