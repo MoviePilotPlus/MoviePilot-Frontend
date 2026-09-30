@@ -1128,7 +1128,7 @@
       "count": 1
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 11
+      "count": 3
     },
     "no-prototype-builtins": {
       "count": 1
@@ -1168,6 +1168,11 @@
     }
   },
   "src/views/setting/collect-settings/CollectBasicCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "src/views/setting/collect-settings/CollectCredentialsCard.vue": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 1
     }
