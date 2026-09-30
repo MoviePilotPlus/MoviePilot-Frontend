@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // @ts-nocheck
 import { useToast } from 'vue-toastification'
+import { useDisplay } from 'vuetify'
 import { collectStatus } from '@/api/constants'
 import api from '@/api'
 import { tagOptions, categoryOptions, mediaCateOptions } from '@/api/constants'
@@ -19,20 +20,22 @@ import ProgressInfoDialog from '@/components/dialog/ProgressInfoDialog.vue'
 import AddSiteSeedDialog from '@/components/dialog/AddSiteSeedDialog.vue'
 import SiteSeedInfoDialog from '@/components/dialog/SiteSeedInfoDialog.vue'
 import CollectOperationDialog from '@/components/dialog/CollectOperationDialog.vue'
-import { useUserStore, useGlobalSettingsStore } from '@/stores'
+import { useGlobalSettingsStore } from '@/stores'
 
 // 输入参数
 const collectProps = defineProps({
   id: String,
 })
 
+// 断点：手机端把头部信息按钮收进「更多」菜单
+const display = useDisplay()
+const isMobile = computed(() => display.smAndDown.value)
+
 // 从 provide 中获取全局设置
 // 全局设置
 const globalSettingsStore = useGlobalSettingsStore()
 const globalSettings = globalSettingsStore.globalSettings
 
-// 用户 Store
-const userStore = useUserStore()
 // 资源浏览弹窗
 const resourceDialog = ref(false)
 // 所有站点
@@ -59,11 +62,6 @@ const isLoading = ref(false)
 // 基本信息字段的已保存值快照：addForm 与快照不一致时才展示「保存」按钮
 const savedSnapshot = ref<Record<string, string | number>>({})
 const operationType = ref('')
-// 本地是否存在，存在则包括Item信息
-const existsItemId = ref('1')
-
-// 是否已订阅
-const isSubscribed = ref(false)
 
 // 是否已加载完成
 const isRefreshed = ref(false)
@@ -177,12 +175,18 @@ function handleSearch() {
   // TODO 显示搜索弹框
   resourceDialog.value = true
 }
+// 手机端「更多」菜单里的搜索：沿用上次选择的站点（localStorage 持久化）直接打开资源弹窗
+async function openSearchDialog() {
+  if (!allSites.value.length) await querySites()
+  resourceDialog.value = true
+}
 function getCollectStatus(status: string | undefined) {
   return collectStatus[status as keyof typeof collectStatus]
 }
-// 调用API查询详情
+// 调用API查询详情（失败也必须结束加载态，否则永久转圈）
 async function getDetail() {
-  if (collectProps.id) {
+  if (!collectProps.id) return
+  try {
     collectDetail.value = await api.get(`collect/${collectProps.id}`)
     taskList.value = await api.get(`collect/task/${collectProps.id}`)
 
@@ -214,26 +218,33 @@ async function getDetail() {
       season: addForm.value.season,
       episodes_all: addForm.value.episodes_all,
     }
-    // 等待 tags 更新完 watch 事件触发以后再设置加载完成，避免触发更新标签
+    // 等待 tags 更新完 watch 事件触发以后再结束加载态，避免触发更新标签
+    // （成功/失败统一在 finally 收尾，失败时不再永久转圈）
+  } catch (error) {
+    console.error('加载采集详情失败:', error)
+    $toast.error('采集详情加载失败')
+  } finally {
     setTimeout(() => {
       isRefreshed.value = true
     }, 500)
   }
 }
+// 在线播放链接：仅腾讯源内容有 cover id，可确定跳转目标；其余来源不展示按钮
+const playUrl = computed(() => {
+  if (!collectDetail.value.cid) return ''
+  return `https://v.qq.com/x/cover/${collectDetail.value.cid}.html`
+})
 // 跳转播放页面
-async function handlePlay() {
-  // 获取播放链接地址
-  try {
-    if (collectDetail.value.cid) {
-      // 打开链接地址
-      window.open(`https://v.qq.com/x/cover/${collectDetail.value.cid}.html`, '_blank')
-    } else {
-      $toast.error(`获取播放链接失败！`)
-    }
-  } catch (error) {
-    console.error(error)
-  }
+function handlePlay() {
+  if (playUrl.value) window.open(playUrl.value, '_blank')
 }
+
+// 三个流程开关在任务创建时已定，详情页只读展示为状态徽标（原 disabled 开关易被误认可改）
+const collectFlags = computed(() => [
+  { label: '自动下载', value: !!addForm.value.auto_download },
+  { label: '自动发布', value: !!addForm.value.auto_publish },
+  { label: '匿名发布', value: !!addForm.value.anon_publish },
+])
 async function getSiteSeedList() {
   try {
     siteSeedList.value = await api.get(`collect/seed/${collectProps.id}`)
@@ -251,7 +262,6 @@ function showScreenshotInfoDialog() {
   showScreenshotInfo.value = true
 }
 function showProgressInfoDialog() {
-  console.log('showProgressInfoDialog')
   showProgressInfo.value = true
 }
 
@@ -261,12 +271,10 @@ function showSiteSeedInfoDialog(seed: SiteSeed) {
 }
 
 function showAddSiteSeddoDialog() {
-  console.log('AddSiteSeedDialog')
   showAddSiteSedd.value = true
 }
 
 function showCollectOperationDialog(operation: string) {
-  console.log('showCollectOperationDialog')
   operationType.value = operation
   showCollectOperation.value = true
 }
@@ -285,25 +293,6 @@ async function publish(id: number) {
   doneNProgress()
 }
 
-async function deleteSeed(id: number) {
-  try {
-    startNProgress()
-    // 请求API
-    // const result: { [key: string]: any } = await api.get('torrent_seed/' + id)
-    // // 添加采集任务状态
-    // if (result.success) {
-    //   // 成功
-    //   $toast.success(`发布成功！`)
-
-    // } else {
-    //   $toast.error(`发布失败`)
-    // }
-    $toast.success(`删除成功！`)
-  } catch (error) {
-    console.error(error)
-  }
-  doneNProgress()
-}
 // 表单校验
 function validateForm() {
   // 清空旧数据
@@ -448,6 +437,21 @@ const updateTypeDebounced = useDebounceFn(async newType => {
   }
 }, 500)
 
+/** 字段中文名（保存提示用，避免 toast 直接显示英文字段键） */
+const FIELD_LABELS: Record<string, string> = {
+  douban_id: '豆瓣ID',
+  imdb_id: 'IMDB ID',
+  tmdb_id: 'TMDB ID',
+  bangumi_id: 'Bangumi ID',
+  cn_title: '中文标题',
+  en_title: '英文标题',
+  sub_title: '副标题',
+  overview: '简介',
+  year: '年份',
+  season: '季数',
+  episodes_all: '总集数',
+}
+
 async function updateCollect(field: string) {
   // 未修改直接点保存：提示后跳过，按钮常显可点但不做无谓写库
   if (!isFieldDirty(field)) {
@@ -465,7 +469,7 @@ async function updateCollect(field: string) {
     }
     // 保存成功后刷新快照，保存提示回到「未修改」文案
     savedSnapshot.value[field] = addForm.value[field as keyof typeof addForm.value] as string | number
-    $toast.success(`更新 ${field} 成功！`)
+    $toast.success(`更新${FIELD_LABELS[field] ?? field}成功！`)
   } catch (error) {
     console.error(`${field} 更新失败:`, error)
   }
@@ -543,7 +547,7 @@ function fieldActions(field: string): FieldAction[] {
     key: 'save',
     icon: 'mdi-content-save',
     label: '保存',
-    title: isFieldDirty(field) ? `保存${field}` : '保存（未修改）',
+    title: isFieldDirty(field) ? `保存${FIELD_LABELS[field] ?? field}` : '保存（未修改）',
     pcDisabled: !isFieldDirty(field),
     onClick: () => updateCollect(field),
   })
@@ -708,7 +712,7 @@ watch(
           </VImg>
         </div>
         <div class="media-title">
-          <div v-if="existsItemId" class="media-status">
+          <div class="media-status">
             <span
               class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap transition !no-underline bg-green-500 bg-opacity-80 border border-green-500 !text-green-100 hover:bg-green-500 hover:bg-opacity-100 false overflow-hidden"
             >
@@ -730,66 +734,83 @@ watch(
           </span>
         </div>
         <div class="media-actions">
-          <VBtn class="ms-2 mb-2" color="green" @click="showMediaInfoDialog()">
-            <template #prepend>
-              <VIcon icon="mdi-timetable" />
-            </template>
-            媒体信息
-          </VBtn>
-          <VMenu close-on-content-click max-width="450">
-            <template v-slot:activator="{ props }">
-              <VBtn v-bind="props" class="ms-2 mb-2" color="green" @click.stop="clickSearch">
-                <template #prepend>
-                  <VIcon icon="mdi-magnify" />
-                </template>
-                搜索
-              </VBtn>
-            </template>
-            <VList>
-              <VListItem>
-                <VChipGroup v-model="selectedSites" column @click.stop>
-                  <VChip
-                    v-for="site in allSites"
-                    :key="site.id"
-                    :color="selectedSites === site.id ? 'primary' : ''"
-                    filter
-                    variant="outlined"
-                    :value="site.id"
-                    size="small"
-                  >
-                    {{ site.name }}
-                  </VChip>
-                </VChipGroup>
-              </VListItem>
-              <VListItem>
-                <VBtn @click="handleSearch" block>搜索</VBtn>
-              </VListItem>
-            </VList>
-          </VMenu>
-          <VBtn class="ms-2 mb-2" color="green" @click="showDescInfoDialog()">
-            <template #prepend>
-              <VIcon icon="mdi-timetable" />
-            </template>
-            简介
-          </VBtn>
-          <VBtn class="ms-2 mb-2" color="purple" @click="showScreenshotInfoDialog()">
-            <template #prepend>
-              <VIcon icon="mdi-image-multiple" />
-            </template>
-            截图
-          </VBtn>
-          <VBtn class="ms-2 mb-2" color="green" @click="showProgressInfoDialog()">
-            <template #prepend>
-              <VIcon icon="mdi-timetable" />
-            </template>
-            进度
-          </VBtn>
-          <VBtn class="ms-2 mb-2" color="green" @click="handlePlay()">
+          <VBtn v-if="playUrl" class="ms-2 mb-2" color="green" @click="handlePlay()">
             <template #prepend>
               <VIcon icon="mdi-play" />
             </template>
             在线播放
           </VBtn>
+          <!-- 桌面端平铺；手机端收进「更多」菜单（在线播放保留为主按钮） -->
+          <template v-if="!isMobile">
+            <VBtn class="ms-2 mb-2" color="green" @click="showMediaInfoDialog()">
+              <template #prepend>
+                <VIcon icon="mdi-information-outline" />
+              </template>
+              媒体信息
+            </VBtn>
+            <VMenu close-on-content-click max-width="450">
+              <template v-slot:activator="{ props }">
+                <VBtn v-bind="props" class="ms-2 mb-2" color="green" @click.stop="clickSearch">
+                  <template #prepend>
+                    <VIcon icon="mdi-magnify" />
+                  </template>
+                  搜索
+                </VBtn>
+              </template>
+              <VList>
+                <VListItem>
+                  <VChipGroup v-model="selectedSites" column @click.stop>
+                    <VChip
+                      v-for="site in allSites"
+                      :key="site.id"
+                      :color="selectedSites === site.id ? 'primary' : ''"
+                      filter
+                      variant="outlined"
+                      :value="site.id"
+                      size="small"
+                    >
+                      {{ site.name }}
+                    </VChip>
+                  </VChipGroup>
+                </VListItem>
+                <VListItem>
+                  <VBtn @click="handleSearch" block>搜索</VBtn>
+                </VListItem>
+              </VList>
+            </VMenu>
+            <VBtn class="ms-2 mb-2" color="green" @click="showDescInfoDialog()">
+              <template #prepend>
+                <VIcon icon="mdi-text-box-outline" />
+              </template>
+              简介
+            </VBtn>
+            <VBtn class="ms-2 mb-2" color="purple" @click="showScreenshotInfoDialog()">
+              <template #prepend>
+                <VIcon icon="mdi-image-multiple" />
+              </template>
+              截图
+            </VBtn>
+            <VBtn class="ms-2 mb-2" color="green" @click="showProgressInfoDialog()">
+              <template #prepend>
+                <VIcon icon="mdi-progress-clock" />
+              </template>
+              进度
+            </VBtn>
+          </template>
+          <VMenu v-else close-on-content-click>
+            <template v-slot:activator="{ props }">
+              <VBtn v-bind="props" class="ms-2 mb-2" color="green" prepend-icon="mdi-dots-horizontal">
+                更多
+              </VBtn>
+            </template>
+            <VList>
+              <VListItem prepend-icon="mdi-information-outline" title="媒体信息" @click="showMediaInfoDialog()" />
+              <VListItem prepend-icon="mdi-magnify" title="搜索资源" @click="openSearchDialog()" />
+              <VListItem prepend-icon="mdi-text-box-outline" title="简介" @click="showDescInfoDialog()" />
+              <VListItem prepend-icon="mdi-image-multiple" title="截图" @click="showScreenshotInfoDialog()" />
+              <VListItem prepend-icon="mdi-progress-clock" title="进度" @click="showProgressInfoDialog()" />
+            </VList>
+          </VMenu>
         </div>
       </div>
       <div class="media-overview">
@@ -888,7 +909,9 @@ watch(
             </div>
           </div>
           <div class="mt-6">
+            <!-- 步骤条：手机端横向滑动查看，桌面端平铺 -->
             <v-stepper
+              class="collect-stepper"
               bg-color="rgba(255, 255, 255, 0.1)"
               complete-icon="mdi-check-circle"
               edit-icon="mdi-checkbox-blank-circle"
@@ -939,18 +962,16 @@ watch(
               </v-stepper-header>
             </v-stepper>
           </div>
-          <div class="mt-6">
-            <v-row>
-              <v-col cols="4">
-                <v-switch v-model="addForm.auto_download" label="自动下载" hide-details disabled> </v-switch>
-              </v-col>
-              <v-col cols="4">
-                <v-switch v-model="addForm.auto_publish" label="自动发布" hide-details disabled> </v-switch>
-              </v-col>
-              <v-col cols="4">
-                <v-switch v-model="addForm.anon_publish" label="匿名发布" hide-details disabled> </v-switch>
-              </v-col>
-            </v-row>
+          <!-- 流程开关在任务创建时已定：低调的文字行展示（大块彩色徽标与页面风格不搭）；
+               勾/叉图标带 success/error 主题色，状态一眼可辨 -->
+          <div class="mt-4 collect-flags-line">
+            <template v-for="(flag, i) in collectFlags" :key="flag.label">
+              <span v-if="i > 0" class="collect-flags-divider">·</span>
+              <span class="collect-flags-item" :class="{ 'collect-flags-item--off': !flag.value }">
+                <VIcon :icon="flag.value ? 'mdi-check' : 'mdi-close'" size="12" :color="flag.value ? 'success' : 'error'" />
+                {{ flag.label }}
+              </span>
+            </template>
           </div>
           <div class="mt-6">
             <VChipGroup column>
@@ -1003,7 +1024,7 @@ watch(
       <div class="mt-6">
         <GroupTile title="基本信息" />
         <v-row>
-          <v-col cols="6" md="6">
+          <v-col cols="12" md="6">
             <VTextField
               v-model="addForm.episodes_all"
               placeholder="请手动输入总集数"
@@ -1018,7 +1039,7 @@ watch(
               </template>
             </VTextField>
           </v-col>
-          <v-col cols="6" md="6">
+          <v-col cols="12" md="6">
             <VTextField
               v-model="addForm.season"
               placeholder="请手动输入季数"
@@ -1037,7 +1058,7 @@ watch(
       </div>
       <div class="mt-6">
         <v-row>
-          <v-col cols="6" md="6">
+          <v-col cols="12" md="6">
             <VTextField
               v-model="addForm.douban_id"
               placeholder="请手动输入豆瓣ID"
@@ -1053,7 +1074,7 @@ watch(
               </template>
             </VTextField>
           </v-col>
-          <v-col cols="6" md="6">
+          <v-col cols="12" md="6">
             <VTextField
               v-model="addForm.imdb_id"
               placeholder="请手动输入IMDB ID"
@@ -1069,7 +1090,7 @@ watch(
               </template>
             </VTextField>
           </v-col>
-          <v-col cols="6" md="6">
+          <v-col cols="12" md="6">
             <VTextField
               v-model="addForm.tmdb_id"
               placeholder="PTGen 解析后自动填充"
@@ -1085,7 +1106,7 @@ watch(
               </template>
             </VTextField>
           </v-col>
-          <v-col cols="6" md="6">
+          <v-col cols="12" md="6">
             <VTextField
               v-model="addForm.bangumi_id"
               placeholder="PTGen 解析后自动填充，可手动修改"
@@ -1106,7 +1127,7 @@ watch(
       </div>
       <div class="mt-6">
         <v-row>
-          <v-col cols="6" md="6">
+          <v-col cols="12" md="6">
             <VTextField
               v-model="addForm.cn_title"
               placeholder="请手动输入中文标题"
@@ -1122,7 +1143,7 @@ watch(
               </template>
             </VTextField>
           </v-col>
-          <v-col cols="6" md="6">
+          <v-col cols="12" md="6">
             <VTextField
               v-model="addForm.en_title"
               placeholder="请手动输入英文标题"
@@ -1142,7 +1163,7 @@ watch(
       </div>
       <div class="mt-6">
         <v-row>
-          <v-col cols="6" md="6">
+          <v-col cols="12" md="6">
             <VTextField
               v-model="addForm.year"
               placeholder="请手动输入年份"
@@ -1299,10 +1320,17 @@ watch(
   padding-block-start: 1rem;
 }
 
+/* 标题行：桌面端海报+标题一行，操作按钮换到下一行整行排布；
+   标题保持 flex:1 且不参与 nowrap 按钮行的压缩，避免中文一字一行竖排 */
 @media (width >=1280px) {
   .media-header {
     flex-direction: row;
     align-items: flex-end;
+  }
+
+  .media-header .media-title {
+    flex: 1 1 0%;
+    min-inline-size: 12rem;
   }
 }
 
@@ -1348,10 +1376,11 @@ watch(
 
 .media-title {
   display: flex;
-  flex: 1 1 0%;
   flex-direction: column;
   margin-block-start: 1rem;
   text-align: center;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 @media (width >=1280px) {
@@ -1363,6 +1392,9 @@ watch(
 }
 
 .media-title > h1 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   font-size: 1.5rem;
   font-weight: 700;
   line-height: 2rem;
@@ -1370,6 +1402,9 @@ watch(
 
 @media (width >=1280px) {
   .media-title > h1 {
+    flex-direction: row;
+    align-items: baseline;
+    flex-wrap: wrap;
     font-size: 2.25rem;
     line-height: 2.5rem;
   }
@@ -1452,6 +1487,43 @@ a.crew-name {
 
 .media-overview-left {
   flex: 1 1 0%;
+}
+
+/* 步骤条：默认 v-stepper-header 强制平铺溢出，允许横向滑动；
+   v-stepper-item 自带 flex:1 0 auto 保证不压缩换行 */
+@media (width < 960px) {
+  .collect-stepper .v-stepper-header {
+    overflow-x: auto;
+    justify-content: flex-start;
+    padding-block: 0.25rem;
+    scrollbar-width: thin;
+  }
+}
+
+/* 流程开关行：紧跟步骤条的一行低调文字（勾/叉 + 名称），与步骤条元数据同视觉层级 */
+.collect-flags-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+  margin-block-start: 0.5rem;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  font-size: 0.78rem;
+}
+
+.collect-flags-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+/* 关闭项整体降透明度（图标已带 error 色，保持可辨的同时不抢焦点） */
+.collect-flags-item--off {
+  opacity: 0.6;
+}
+
+.collect-flags-divider {
+  opacity: 0.4;
 }
 
 @media (width >=1024px) {
