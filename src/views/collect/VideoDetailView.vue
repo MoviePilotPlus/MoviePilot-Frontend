@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // @ts-nocheck
 import { useToast } from 'vue-toastification'
+import { useI18n } from 'vue-i18n'
 
 import api from '@/api'
 import { tagOptions, mediaCateOptions, categoryOptions } from '@/api/constants'
@@ -13,8 +14,7 @@ import SiteSearchDialog from '@/components/dialog/SiteSearchDialog.vue'
 import VideoScreenshotDialog from '@/components/dialog/VideoScreenshotDialog.vue'
 import { doneNProgress, startNProgress } from '@/api/nprogress'
 import router from '@/router'
-import { useUserStore, useGlobalSettingsStore } from '@/stores'
-import { add } from 'lodash-es'
+import { useGlobalSettingsStore } from '@/stores'
 
 // 组件加载完成
 const componentLoaded = ref(false)
@@ -22,11 +22,6 @@ const componentLoaded = ref(false)
 // 是否已尝试加载
 const hasTriedLoading = ref(false)
 
-// 数据列表
-const dataList = shallowRef<Person[]>([])
-
-// 容器引用
-const containerRef = ref<HTMLElement | null>(null)
 // 输入参数
 const mediaProps = defineProps({
   source: String,
@@ -48,11 +43,11 @@ provide('rankingPropsKey', reactive({ ...mediaProps }))
 const globalSettingsStore = useGlobalSettingsStore()
 const globalSettings = globalSettingsStore.globalSettings
 
-// 用户 Store
-const userStore = useUserStore()
-
 // 提示框
 const $toast = useToast()
+
+// 国际化
+const { t } = useI18n()
 
 // 媒体详情
 const mediaDetail = ref<VideoInfo>({} as VideoInfo)
@@ -65,15 +60,18 @@ const ptgen = ref<PtgenInfo>({} as PtgenInfo)
 const showScreenshotDialog = ref(false)
 const screenshotCollect = ref<any>({})
 
-// 采集模式选项
-const collectModeOptions = {
-  'normal': '普通采集',
-  'episode': '分集采集',
-  'follow': '追更采集',
-}
+// 采集模式选项（label 走词条，随语言切换）
+const collectModeOptions = computed<Record<'normal' | 'episode' | 'follow', string>>(() => ({
+  normal: t('collectVideo.modeNormal'),
+  episode: t('collectVideo.modeEpisode'),
+  follow: t('collectVideo.modeFollow'),
+}))
 
 // 采集模式（三选一）
 const collectMode = ref<'normal' | 'episode' | 'follow'>('normal')
+
+// 吸底提交条的采集模式摘要文案
+const collectModeLabel = computed(() => collectModeOptions.value[collectMode.value])
 
 // 是否预约采集（开关，仅普通和分集采集可用）
 const isReserveCollect = ref(false)
@@ -129,6 +127,14 @@ const selectedCount = computed(() => {
     }
   })
   return count
+})
+
+// 总集数小于已选集数时的即时提示（提交校验前移到输入框）
+const episodesAllError = computed(() => {
+  const total = Number(addForm.value.episodes_all)
+  if (!total || total <= 0) return ''
+  if (total < selectedCount.value) return t('collectVideo.episodesAllLessThanSelected', { total, selected: selectedCount.value })
+  return ''
 })
 
 const selectedEpisode = computed(() => {
@@ -268,7 +274,8 @@ async function loadTeamOptions() {
 }
 
 async function getMediaDetail() {
-  if (mediaProps.mediaid && mediaProps.type) {
+  if (!mediaProps.mediaid || !mediaProps.type) return
+  try {
     mediaDetail.value = await api.get(`${mediaProps.source?.toLowerCase()}/detail`, {
       params: {
         cid: mediaProps.mediaid,
@@ -350,7 +357,6 @@ async function getMediaDetail() {
     ;(addForm.value as any).audio_languages = audioLangs
     // 自动填入追更配置的总集数
     followConfig.value.totalEpisodes = addForm.value.episodes_all
-    isRefreshed.value = true
 
     // 加载制作组数据
     await loadTeamOptions()
@@ -360,6 +366,14 @@ async function getMediaDetail() {
     } else {
       isLoading.value = false
     }
+  } catch (error) {
+    console.error('加载媒体详情失败:', error)
+    $toast.error(t('collectVideo.detailLoadFailed'))
+    isLoading.value = false
+  } finally {
+    // 成功/失败统一结束加载态，避免永久转圈
+    isRefreshed.value = true
+    componentLoaded.value = true
   }
 }
 
@@ -382,12 +396,12 @@ function onClickImdb() {
 function idFieldActions(kind: 'douban' | 'imdb' | 'tmdb' | 'bangumi'): FieldAction[] {
   if (kind === 'douban') {
     return [
-      { key: 'fetch', icon: 'mdi-magnify', label: '获取', title: '根据豆瓣 ID 获取信息', disabled: !addForm.value.douban_id, onClick: onClickDouban },
+      { key: 'fetch', icon: 'mdi-magnify', label: t('collectVideo.actionFetch'), title: t('collectVideo.actionFetchDouban'), disabled: !addForm.value.douban_id, onClick: onClickDouban },
       {
         key: 'open',
         icon: 'mdi-cloud-outline',
-        label: '详情',
-        title: '打开豆瓣详情页',
+        label: t('collectVideo.actionOpen'),
+        title: t('collectVideo.actionOpenDouban'),
         disabled: !addForm.value.douban_id,
         onClick: () => addForm.value.douban_id && openDoubanDetail(addForm.value.douban_id),
       },
@@ -395,12 +409,12 @@ function idFieldActions(kind: 'douban' | 'imdb' | 'tmdb' | 'bangumi'): FieldActi
   }
   if (kind === 'imdb') {
     return [
-      { key: 'fetch', icon: 'mdi-magnify', label: '获取', title: '根据 IMDB ID 获取信息', disabled: !addForm.value.imdb_id, onClick: onClickImdb },
+      { key: 'fetch', icon: 'mdi-magnify', label: t('collectVideo.actionFetch'), title: t('collectVideo.actionFetchImdb'), disabled: !addForm.value.imdb_id, onClick: onClickImdb },
       {
         key: 'open',
         icon: 'mdi-cloud-outline',
-        label: '详情',
-        title: '打开 IMDB 详情页',
+        label: t('collectVideo.actionOpen'),
+        title: t('collectVideo.actionOpenImdb'),
         disabled: !addForm.value.imdb_id,
         onClick: () => addForm.value.imdb_id && openImdbDetail(addForm.value.imdb_id),
       },
@@ -411,8 +425,8 @@ function idFieldActions(kind: 'douban' | 'imdb' | 'tmdb' | 'bangumi'): FieldActi
       {
         key: 'open',
         icon: 'mdi-cloud-outline',
-        label: '详情',
-        title: '打开TMDB详情页',
+        label: t('collectVideo.actionOpen'),
+        title: t('collectVideo.actionOpenTmdb'),
         disabled: !addForm.value.tmdb_id,
         onClick: () => addForm.value.tmdb_id && openTmdbDetail(addForm.value.tmdb_id),
       },
@@ -422,8 +436,8 @@ function idFieldActions(kind: 'douban' | 'imdb' | 'tmdb' | 'bangumi'): FieldActi
     {
       key: 'open',
       icon: 'mdi-cloud-outline',
-      label: '详情',
-      title: '打开Bangumi详情页',
+      label: t('collectVideo.actionOpen'),
+      title: t('collectVideo.actionOpenBangumi'),
       disabled: !addForm.value.bangumi_id,
       onClick: () => addForm.value.bangumi_id && openBangumiDetail(addForm.value.bangumi_id),
     },
@@ -528,14 +542,14 @@ async function addCollect() {
       isReserveCollect.value &&
       !reserveTimeFormatted.value
     ) {
-      $toast.error('请选择预约时间！')
+      $toast.error(t('collectVideo.reserveTimeRequired'))
       return
     }
 
     // 检查追更配置（仅追更采集）
     if (collectMode.value === 'follow') {
       if (!followConfig.value.startEpisode || followConfig.value.startEpisode < 1) {
-        $toast.error('请输入有效的起始集数！')
+        $toast.error(t('collectVideo.startEpisodeInvalid'))
         return
       }
     }
@@ -602,7 +616,7 @@ async function addCollect() {
     isExists.value = true
   } catch (error: any) {
     console.error(error)
-    const modeText = collectMode.value === 'follow' ? '追更任务' : '采集任务'
+    const modeText = collectMode.value === 'follow' ? t('collectVideo.followTask') : t('collectVideo.collectTask')
     showCollectAddToast(false, mediaDetail.value?.title ?? '', error?.message ?? '', modeText)
   }
   doneNProgress()
@@ -651,33 +665,33 @@ function validateForm() {
   const errors = []
 
   if (!addForm.value.cid) {
-    errors.push('媒体ID不能为空！')
+    errors.push(t('collectVideo.errMediaIdRequired'))
   }
   if (hasYoukuVideoQualityOptions.value) {
     if (!addForm.value.defn) {
-      errors.push('请选择画质！')
+      errors.push(t('collectVideo.errQualityRequired'))
     }
   } else if (!addForm.value.defn) {
-    errors.push('请选择清晰度！')
+    errors.push(t('collectVideo.errDefinitionRequired'))
   }
   if (!addForm.value.cate) {
-    errors.push('请选择分类！')
+    errors.push(t('collectVideo.errCateRequired'))
   }
   if (!addForm.value.cn_title) {
-    errors.push('中文标题不能为空！')
+    errors.push(t('collectVideo.errCnTitleRequired'))
   }
   if (!addForm.value.en_title) {
-    errors.push('英文标题不能为空！')
+    errors.push(t('collectVideo.errEnTitleRequired'))
   }
   if (!addForm.value.sub_title) {
-    errors.push('副标题不能为空！')
+    errors.push(t('collectVideo.errSubTitleRequired'))
   }
   if (!mediaDetail.value.episode_list?.some(e => e.selected)) {
-    errors.push('请至少选择一集！')
+    errors.push(t('collectVideo.errEpisodeRequired'))
   }
   // 分离音轨源（优酷帧享等）视频流无内嵌音，至少勾一条，否则成片无声
   if (audioTrackOptions.value.length > 0 && selectedAudioTracks.value.length === 0) {
-    errors.push('该清晰度的视频流不含内嵌音轨，请至少选择一条音频轨！')
+    errors.push(t('collectVideo.errAudioTrackRequired'))
   }
 
   // 新增：校验选中剧集的集数必须为数字且不重复
@@ -688,18 +702,18 @@ function validateForm() {
     // 校验是否全为数字
     const nonNumberEpisodes = episodeNumbers.filter(num => typeof num !== 'number' || isNaN(num))
     if (nonNumberEpisodes.length > 0) {
-      errors.push('选中的剧集中存在非数字的集数编号！')
+      errors.push(t('collectVideo.errEpisodeNotNumber'))
     }
 
     // 校验是否有重复
     const uniqueNumbers = new Set(episodeNumbers)
     if (uniqueNumbers.size !== episodeNumbers.length) {
-      errors.push('选中的剧集中存在重复的集数编号！')
+      errors.push(t('collectVideo.errEpisodeDuplicated'))
     }
     // 新增：校验集数必须大于0
     const invalidNumbers = episodeNumbers.filter(num => num <= 0)
     if (invalidNumbers.length > 0) {
-      errors.push('选中的剧集中存在集数编号小于等于0的情况！')
+      errors.push(t('collectVideo.errEpisodeNonPositive'))
     }
   }
 
@@ -712,11 +726,11 @@ function validateForm() {
   // }
 
   if (!addForm.value.episodes_all) {
-    errors.push('总集数不能为空！')
+    errors.push(t('collectVideo.errEpisodesAllRequired'))
   }
 
   if (addForm.value.episodes_all < selectedCount.value) {
-    errors.push('总集数不不能小于选中的集数！')
+    errors.push(t('collectVideo.errEpisodesAllLessThanSelected'))
   }
 
   if (errors.length > 0) {
@@ -725,10 +739,9 @@ function validateForm() {
   }
   return true
 }
-// 弹出添加订阅提示
-function showCollectAddToast(result: boolean, title: string, message: string, modeText: string = '采集任务') {
-  const subname = modeText
-  if (!result) $toast.error(`${title} 添加${subname}失败：${message}！`)
+// 弹出添加订阅提示（modeText 已由调用方按模式传入词条文案）
+function showCollectAddToast(result: boolean, title: string, message: string, modeText?: string) {
+  if (!result) $toast.error(t('collectVideo.addTaskFailed', { title, mode: modeText ?? t('collectVideo.collectTask'), message }))
 }
 
 // TMDB图片转换为w500大小
@@ -796,7 +809,7 @@ const doubanHint = computed(() => {
   if (mediaDetail.value.douban_id) {
     return `${mediaDetail.value.douban_info.title}(${mediaDetail.value.douban_info.year})`
   } else {
-    return '如：1878011'
+    return t('collectVideo.doubanIdHint')
   }
 })
 
@@ -812,25 +825,17 @@ const getAddBtnColor = computed(() => {
   else return 'warning'
 })
 
+// 在线播放链接：仅腾讯/芒果有确定的详情页 URL 规则，其余来源不展示按钮
+const playUrl = computed(() => {
+  if (!mediaProps.mediaid) return ''
+  if (mediaProps.source === 'MgTV') return `https://www.mgtv.com/b/${mediaProps.mediaid}.html`
+  if (mediaProps.source === 'Tencent') return `https://v.qq.com/x/cover/${mediaProps.mediaid}.html`
+  return ''
+})
+
 // 跳转播放页面
-async function handlePlay() {
-  // 获取播放链接地址
-  try {
-    if (mediaProps.mediaid) {
-      // 打开链接地址
-      if (mediaProps.source == 'MgTV') {
-        window.open(`https://www.mgtv.com/b/${mediaProps.mediaid}.html`, '_blank')
-      } else if (mediaProps.source == 'Tencent') {
-        window.open(`https://v.qq.com/x/cover/${mediaProps.mediaid}.html`, '_blank')
-      } else {
-        $toast.error(`不支持的播放源！`)
-      }
-    } else {
-      $toast.error(`获取播放链接失败！`)
-    }
-  } catch (error) {
-    console.error(error)
-  }
+function handlePlay() {
+  if (playUrl.value) window.open(playUrl.value, '_blank')
 }
 
 onBeforeMount(() => {
@@ -839,6 +844,7 @@ onBeforeMount(() => {
   getSites()
 })
 function update_subtitle() {
+  // 集数表述（全N集/第N集）是发布副标题的产物内容，面向中文 PT 站，不随界面语言切换
   let name = ''
   let play_title = ''
   let full_play_sub_title = ''
@@ -932,7 +938,7 @@ watch(
 function autoSetEpisodeNumbers() {
   const allEpisodes = mediaDetail.value.episode_list || []
   if (allEpisodes.length === 0) {
-    $toast.warning('没有可用的剧集列表！')
+    $toast.warning(t('collectVideo.warnNoEpisodeList'))
     return
   }
 
@@ -944,7 +950,7 @@ function autoSetEpisodeNumbers() {
   // 再处理选中剧集的自增编号
   const selectedEpisodes = allEpisodes.filter(ep => ep.selected && ep.show)
   if (selectedEpisodes.length === 0) {
-    $toast.warning('请先选择需要设置编号的剧集！')
+    $toast.warning(t('collectVideo.warnNoSelectedForNumbering'))
     return
   }
 
@@ -977,7 +983,7 @@ function toggleMainEpisodes() {
 function selectAllEpisodes() {
   const allEpisodes = mediaDetail.value.episode_list || []
   if (allEpisodes.length === 0) {
-    $toast.warning('没有可用的剧集列表！')
+    $toast.warning(t('collectVideo.warnNoEpisodeList'))
     return
   }
 
@@ -990,7 +996,7 @@ function selectAllEpisodes() {
 function invertSelectEpisodes() {
   const allEpisodes = mediaDetail.value.episode_list || []
   if (allEpisodes.length === 0) {
-    $toast.warning('没有可用的剧集列表！')
+    $toast.warning(t('collectVideo.warnNoEpisodeList'))
     return
   }
 
@@ -1001,7 +1007,7 @@ function invertSelectEpisodes() {
 // 打开豆瓣详情页
 function openDoubanDetail(doubanId: string) {
   if (!doubanId) {
-    $toast.warning('豆瓣ID不存在，无法打开详情页！')
+    $toast.warning(t('collectVideo.warnDoubanIdMissing'))
     return
   }
   window.open(`https://movie.douban.com/subject/${doubanId}/`, '_blank')
@@ -1009,7 +1015,7 @@ function openDoubanDetail(doubanId: string) {
 
 function openImdbDetail(imdbId: string) {
   if (!imdbId) {
-    $toast.warning('IMDB ID不存在，无法打开详情页！')
+    $toast.warning(t('collectVideo.warnImdbIdMissing'))
     return
   }
   window.open(`https://www.imdb.com/title/${imdbId}/`, '_blank')
@@ -1017,7 +1023,7 @@ function openImdbDetail(imdbId: string) {
 
 function openTmdbDetail(tmdbId: string) {
   if (!tmdbId) {
-    $toast.warning('TMDB ID不存在，无法打开详情页！')
+    $toast.warning(t('collectVideo.warnTmdbIdMissing'))
     return
   }
   // 优先使用 PTGen 返回的 TMDB 链接（已区分电影/剧集），否则按当前分类拼接
@@ -1031,7 +1037,7 @@ function openTmdbDetail(tmdbId: string) {
 
 function openBangumiDetail(bangumiId: string) {
   if (!bangumiId) {
-    $toast.warning('Bangumi ID不存在，无法打开详情页！')
+    $toast.warning(t('collectVideo.warnBangumiIdMissing'))
     return
   }
   window.open(`https://bangumi.tv/subject/${bangumiId}`, '_blank')
@@ -1100,7 +1106,7 @@ async function removeIgnore() {
     await api.delete(`collect/ignore/${mediaProps?.source}/${mediaProps?.mediaid}`)
 
     isIgnore.value = false
-    $toast.success(`${mediaProps?.title} 已取消忽略！`)
+    $toast.success(t('collectVideo.unignoredToast', { title: mediaProps?.title }))
   } catch (error) {
     console.error(error)
   } finally {
@@ -1115,7 +1121,7 @@ async function addIgnore() {
     await api.post(`collect/ignore/${mediaProps?.source}/${mediaProps?.mediaid}`)
 
     isIgnore.value = true
-    $toast.success(`${mediaProps?.title} 已忽略！`)
+    $toast.success(t('collectVideo.ignoredToast', { title: mediaProps?.title }))
   } catch (error) {
     console.error(error)
   } finally {
@@ -1154,19 +1160,19 @@ function handleIgnore() {
               v-if="isExists"
               class="mr-2 mb-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap transition !no-underline bg-green-500 bg-opacity-80 border border-green-500 !text-green-100 hover:bg-green-500 hover:bg-opacity-100 false overflow-hidden"
             >
-              <div class="relative z-20 flex items-center false"><span>已采集</span></div>
+              <div class="relative z-20 flex items-center false"><span>{{ t('collectVideo.statusCollected') }}</span></div>
             </span>
             <span
               v-if="isFollowed"
               class="mr-2 mb-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap transition !no-underline bg-orange-500 bg-opacity-80 border border-orange-500 !text-orange-100 hover:bg-orange-500 hover:bg-opacity-100 false overflow-hidden"
             >
-              <div class="relative z-20 flex items-center false"><span>追更中</span></div>
+              <div class="relative z-20 flex items-center false"><span>{{ t('collectVideo.statusFollowing') }}</span></div>
             </span>
             <span
               v-if="!isFollowed && isIgnore"
               class="mr-2 mb-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap transition !no-underline bg-gray-500 bg-opacity-80 border border-gray-500 !text-green-100 hover:bg-green-500 hover:bg-opacity-100 false overflow-hidden"
             >
-              <div class="relative z-20 flex items-center false"><span>已忽略</span></div>
+              <div class="relative z-20 flex items-center false"><span>{{ t('collectVideo.statusIgnored') }}</span></div>
             </span>
           </div>
 
@@ -1197,9 +1203,9 @@ function handleIgnore() {
         <div class="media-actions">
           <VBtn variant="tonal" color="info" class="mb-2" @click="addCollect">
             <template #prepend>
-              <VIcon icon="mdi-plus" />
+              <VIcon icon="mdi-download-multiple" />
             </template>
-            添加
+            {{ t('collectVideo.actionCollect') }}
           </VBtn>
 
           <VMenu close-on-content-click max-width="450">
@@ -1208,7 +1214,7 @@ function handleIgnore() {
                 <template #prepend>
                   <VIcon :icon="getAddBtnIcon" />
                 </template>
-                搜索
+                {{ t('common.search') }}
               </VBtn>
             </template>
             <VList>
@@ -1228,7 +1234,7 @@ function handleIgnore() {
                 </VChipGroup>
               </VListItem>
               <VListItem>
-                <VBtn @click="handleSearch" block>搜索</VBtn>
+                <VBtn @click="handleSearch" block>{{ t('common.search') }}</VBtn>
               </VListItem>
             </VList>
           </VMenu>
@@ -1236,66 +1242,82 @@ function handleIgnore() {
             <template #prepend>
               <VIcon :icon="isIgnore ? 'mdi-eye-off' : 'mdi-eye'" />
             </template>
-            {{ isIgnore ? '取消忽略' : '忽略' }}
+            {{ isIgnore ? t('collectVideo.unignore') : t('collectVideo.ignore') }}
           </VBtn>
-          <VBtn class="ms-2 mb-2" variant="tonal" @click="handlePlay()">
+          <VBtn v-if="playUrl" class="ms-2 mb-2" variant="tonal" @click="handlePlay()">
             <template #prepend>
               <VIcon icon="mdi-play" />
             </template>
-            在线播放
+            {{ t('collectVideo.playOnline') }}
           </VBtn>
         </div>
       </div>
       <div class="media-overview">
         <div class="media-overview-left">
           <div class="tagline">
-            <v-row>
-              <v-col cols="2">
-                <v-text-field label="已选" readonly :model-value="selectedCount" variant="plain"></v-text-field>
-              </v-col>
-              <v-col cols="2">
-                <v-text-field
-                  label="总剧集"
-                  placeholder="未获取到，请手动输入"
-                  variant="plain"
-                  v-model="addForm.episodes_all"
-                ></v-text-field>
-              </v-col>
-              <v-col cols="2">
-                <v-text-field
-                  label="季数"
-                  placeholder="未获取到，请手动输入"
-                  variant="plain"
-                  v-model="addForm.season"
-                ></v-text-field>
-              </v-col>
-            </v-row>
+            <!-- 已选/总剧集/季数：一行三个紧凑可编辑字段（手机端换行）；
+                 总集数小于已选集数时即时提示，不等提交才报错 -->
+            <div class="d-flex flex-wrap ga-4 align-start collect-episode-meta">
+              <VTextField
+                :label="t('collectVideo.selectedCount')"
+                readonly
+                :model-value="selectedCount"
+                variant="outlined"
+                density="compact"
+                hide-details
+                class="collect-meta-field"
+                :mobile-layout="false"
+              />
+              <VTextField
+                v-model="addForm.episodes_all"
+                :label="t('collectVideo.episodesAll')"
+                :placeholder="t('collectVideo.manualInputPlaceholder')"
+                type="number"
+                variant="outlined"
+                density="compact"
+                :error-messages="episodesAllError"
+                class="collect-meta-field"
+                :mobile-layout="false"
+              />
+              <VTextField
+                v-model="addForm.season"
+                :label="t('collectVideo.season')"
+                :placeholder="t('collectVideo.manualInputPlaceholder')"
+                type="number"
+                variant="outlined"
+                density="compact"
+                hide-details
+                class="collect-meta-field"
+                :mobile-layout="false"
+              />
+            </div>
           </div>
-          <h2 v-if="mediaDetail.overview">简介</h2>
+          <h2 v-if="mediaDetail.overview">{{ t('collectVideo.overview') }}</h2>
           <p>{{ mediaDetail.overview }}</p>
         </div>
 
         <div class="media-overview-right">
-          <!-- 调整列宽设置为cols="6"，确保小屏幕也能并排显示 -->
-          <v-row>
-            <!-- 豆瓣ID输入框 -->
-            <v-col cols="12" md="12">
+          <!-- 媒体信息分组卡：ID ×4 紧凑竖排，手机端退出窄框适配（ID 属长 token） -->
+          <VCard class="collect-form-card mb-4">
+            <VCardText>
+              <GroupTile :title="t('collectVideo.groupMediaIds')" />
               <VTextField
                 v-model="addForm.douban_id"
-                placeholder="请手动输入豆瓣ID"
+                :placeholder="t('collectVideo.doubanIdPlaceholder')"
                 :hint="doubanHint"
-                label="豆瓣 ID"
+                :label="t('collectVideo.doubanIdLabel')"
                 variant="outlined"
                 persistent-hint
-                class="max-w-sm mt-1"
                 density="compact"
+                class="mb-3"
+                :mobile-layout="false"
               >
                 <template #append-inner>
                   <AppFieldActions :actions="idFieldActions('douban')" />
                 </template>
               </VTextField>
               <!-- 豆瓣候选：封面/标题/年份，直观人工核对与一键改选（2026-09-20） -->
-              <div v-if="doubanCandidates.length" class="douban-candidate-strip mt-2">
+              <div v-if="doubanCandidates.length" class="douban-candidate-strip mb-3">
                 <div
                   v-for="item in doubanCandidates"
                   :key="`${item.id}-${item.year}`"
@@ -1327,212 +1349,193 @@ function handleIgnore() {
                   />
                 </div>
               </div>
-            </v-col>
-            <!-- IMDB ID输入框 -->
-            <v-col cols="12" md="12">
               <VTextField
                 v-model="addForm.imdb_id"
-                placeholder="请手动输入IMDB ID"
-                hint="如：tt1878011"
-                label="IMDB ID"
+                :placeholder="t('collectVideo.imdbIdPlaceholder')"
+                :hint="t('collectVideo.imdbIdHint')"
+                :label="t('collectVideo.imdbIdLabel')"
                 variant="outlined"
                 :loading="isLoading"
                 persistent-hint
-                class="max-w-sm mt-1"
                 density="compact"
+                class="mb-3"
+                :mobile-layout="false"
               >
                 <template #append-inner>
                   <AppFieldActions :actions="idFieldActions('imdb')" />
                 </template>
               </VTextField>
-            </v-col>
-            <!-- TMDB ID输入框 -->
-            <v-col cols="12" md="12">
               <VTextField
                 v-model="addForm.tmdb_id"
-                placeholder="PTGen 解析后自动填充"
-                hint="如：12345（根据 IMDB ID 自动解析）"
-                label="TMDB ID"
+                :placeholder="t('collectVideo.tmdbIdPlaceholder')"
+                :hint="t('collectVideo.tmdbIdHint')"
+                :label="t('collectVideo.tmdbIdLabel')"
                 variant="outlined"
                 persistent-hint
-                class="max-w-sm mt-1"
                 density="compact"
+                class="mb-3"
+                :mobile-layout="false"
               >
                 <template #append-inner>
                   <AppFieldActions :actions="idFieldActions('tmdb')" />
                 </template>
               </VTextField>
-            </v-col>
-            <!-- Bangumi ID输入框 -->
-            <v-col cols="12" md="12">
               <VTextField
                 v-model="addForm.bangumi_id"
-                placeholder="PTGen 解析后自动填充，可手动修改"
-                hint="如：350235（根据标题/年份匹配 Bangumi）"
-                label="Bangumi ID"
+                :placeholder="t('collectVideo.bangumiIdPlaceholder')"
+                :hint="t('collectVideo.bangumiIdHint')"
+                :label="t('collectVideo.bangumiIdLabel')"
                 variant="outlined"
                 :loading="isLoading"
                 persistent-hint
-                class="max-w-sm mt-1"
                 density="compact"
+                :mobile-layout="false"
               >
                 <template #append-inner>
                   <AppFieldActions :actions="idFieldActions('bangumi')" />
                 </template>
               </VTextField>
-            </v-col>
-          </v-row>
+            </VCardText>
+          </VCard>
         </div>
       </div>
       <div class="media-overview-bottom">
-        <div class="mt-6">
-          <v-row>
-            <!-- 豆瓣ID输入框 -->
-            <v-col cols="6" md="6">
-              <VTextField
-                v-model="addForm.cn_title"
-                placeholder="请手动输入中文标题"
-                hint="如：肖申克的救赎"
-                label="中文标题"
-                variant="outlined"
-                :loading="isLoading"
-                persistent-hint
-                class="max-w-sm mt-1"
-                density="compact"
-              >
-                <!-- 修复图标绑定逻辑：根据douban_id是否存在动态显示图标 -->
-                <template #prepend-inner>
-                  <VIcon icon="mdi-home-map-marker" class="cursor-pointer text-lg" />
-                </template>
-              </VTextField>
-            </v-col>
-            <!-- IMDB ID输入框 -->
-            <v-col cols="6" md="6">
-              <VTextField
-                v-model="addForm.en_title"
-                :loading="isLoading"
-                placeholder="请手动输入英文标题"
-                hint="如：The Shawshank Redemption"
-                label="英文标题"
-                variant="outlined"
-                persistent-hint
-                class="max-w-sm mt-1"
-                density="compact"
-              >
-                <template #prepend-inner>
-                  <VIcon icon="mdi-earth" class="cursor-pointer text-lg" />
-                </template>
-              </VTextField>
-            </v-col>
-          </v-row>
-        </div>
-        <div class="mt-6">
-          <v-row>
-            <!-- 年份输入框 -->
-            <v-col cols="6" md="6">
-              <VTextField
-                v-model="addForm.year"
-                placeholder="请手动输入年份"
-                hint="如：2025"
-                label="年份"
-                :loading="isLoading"
-                variant="outlined"
-                persistent-hint
-                class="max-w-sm mt-1"
-                density="compact"
-              >
-                <!-- 修复图标绑定逻辑：根据douban_id是否存在动态显示图标 -->
-                <template #prepend-inner>
-                  <VIcon icon="mdi-calendar" class="cursor-pointer text-lg" />
-                </template>
-              </VTextField>
-            </v-col>
-          </v-row>
-        </div>
-        <div class="mt-6">
-          <v-row>
-            <!-- 豆瓣ID输入框 -->
-            <v-col cols="12" md="12">
-              <VTextarea
-                v-model="addForm.sub_title"
-                :loading="isLoading"
-                placeholder="请手动输入副标题"
-                hint="根据豆瓣信息自动生成，可以手动修正"
-                label="副标题"
-                rows="3"
-                variant="outlined"
-                persistent-hint
-                class="max-w mt-1"
-                density="compact"
-              >
-              </VTextarea>
-            </v-col>
-          </v-row>
-        </div>
-        <div class="mt-6">
-          <v-row>
-            <!-- 豆瓣ID输入框 -->
-            <v-col cols="12" md="12">
-              <VTextarea
-                v-model="addForm.overview"
-                :loading="isLoading"
-                placeholder="请手动输入简介"
-                hint="如果豆瓣信息里面有简介信息取豆瓣信息，否则从视频网站获取"
-                label="简介"
-                rows="4"
-                variant="outlined"
-                persistent-hint
-                class="max-w mt-1"
-                density="compact"
-              >
-              </VTextarea>
-            </v-col>
-          </v-row>
-        </div>
+        <!-- 标题信息分组卡 -->
+        <VCard class="collect-form-card mb-4">
+          <VCardText>
+            <GroupTile :title="t('collectVideo.groupTitles')" />
+            <v-row>
+              <v-col cols="12" md="6">
+                <VTextField
+                  v-model="addForm.cn_title"
+                  :placeholder="t('collectVideo.cnTitlePlaceholder')"
+                  :hint="t('collectVideo.cnTitleHint')"
+                  :label="t('collectVideo.cnTitleLabel')"
+                  variant="outlined"
+                  :loading="isLoading"
+                  persistent-hint
+                  density="compact"
+                  :mobile-layout="false"
+                >
+                  <template #prepend-inner>
+                    <VIcon icon="mdi-home-map-marker" class="cursor-pointer text-lg" />
+                  </template>
+                </VTextField>
+              </v-col>
+              <v-col cols="12" md="6">
+                <VTextField
+                  v-model="addForm.en_title"
+                  :loading="isLoading"
+                  :placeholder="t('collectVideo.enTitlePlaceholder')"
+                  :hint="t('collectVideo.enTitleHint')"
+                  :label="t('collectVideo.enTitleLabel')"
+                  variant="outlined"
+                  persistent-hint
+                  density="compact"
+                  :mobile-layout="false"
+                >
+                  <template #prepend-inner>
+                    <VIcon icon="mdi-earth" class="cursor-pointer text-lg" />
+                  </template>
+                </VTextField>
+              </v-col>
+              <v-col cols="12" md="6">
+                <VTextField
+                  v-model="addForm.year"
+                  :placeholder="t('collectVideo.yearPlaceholder')"
+                  :hint="t('collectVideo.yearHint')"
+                  :label="t('collectVideo.yearLabel')"
+                  :loading="isLoading"
+                  variant="outlined"
+                  persistent-hint
+                  density="compact"
+                  :mobile-layout="false"
+                >
+                  <template #prepend-inner>
+                    <VIcon icon="mdi-calendar" class="cursor-pointer text-lg" />
+                  </template>
+                </VTextField>
+              </v-col>
+            </v-row>
+          </VCardText>
+        </VCard>
+        <!-- 副标题与简介分组卡（长文本，手机端同样退出窄框适配） -->
+        <VCard class="collect-form-card mb-4">
+          <VCardText>
+            <GroupTile :title="t('collectVideo.groupSubOverview')" />
+            <VTextarea
+              v-model="addForm.sub_title"
+              :loading="isLoading"
+              :placeholder="t('collectVideo.subTitlePlaceholder')"
+              :hint="t('collectVideo.subTitleHint')"
+              :label="t('collectVideo.subTitleLabel')"
+              rows="3"
+              variant="outlined"
+              persistent-hint
+              density="compact"
+              class="mb-3"
+              :mobile-layout="false"
+            >
+            </VTextarea>
+            <VTextarea
+              v-model="addForm.overview"
+              :loading="isLoading"
+              :placeholder="t('collectVideo.overviewPlaceholder')"
+              :hint="t('collectVideo.overviewHint')"
+              :label="t('collectVideo.overviewLabel')"
+              rows="4"
+              variant="outlined"
+              persistent-hint
+              density="compact"
+              :mobile-layout="false"
+            >
+            </VTextarea>
+          </VCardText>
+        </VCard>
       </div>
       <div class="media-overview-bottom">
         <div class="mt-6">
           <v-row>
             <v-col cols="4">
-              <v-switch v-model="addForm.auto_download" :label="`自动下载`" hide-details> </v-switch>
+              <v-switch v-model="addForm.auto_download" :label="t('collectVideo.autoDownload')" hide-details> </v-switch>
             </v-col>
             <v-col cols="4">
-              <v-switch v-model="addForm.auto_publish" :label="`自动发布`" hide-details> </v-switch>
+              <v-switch v-model="addForm.auto_publish" :label="t('collectVideo.autoPublish')" hide-details> </v-switch>
             </v-col>
             <v-col cols="4">
-              <v-switch v-model="addForm.anon_publish" :label="`匿名发布`" hide-details> </v-switch>
+              <v-switch v-model="addForm.anon_publish" :label="t('collectVideo.anonPublish')" hide-details> </v-switch>
             </v-col>
           </v-row>
         </div>
         <div class="mt-6">
-          <GroupTile title="采集模式" />
+          <GroupTile :title="t('collectVideo.groupCollectMode')" />
           <VChipGroup column v-model="collectMode">
             <VChip :color="collectMode === 'normal' ? 'primary' : ''" filter variant="outlined" value="normal">
-              普通采集
+              {{ t('collectVideo.modeNormal') }}
             </VChip>
             <VChip :color="collectMode === 'episode' ? 'primary' : ''" filter variant="outlined" value="episode">
-              分集采集
+              {{ t('collectVideo.modeEpisode') }}
             </VChip>
             <VChip :color="collectMode === 'follow' ? 'primary' : ''" filter variant="outlined" value="follow">
-              追更采集
+              {{ t('collectVideo.modeFollow') }}
             </VChip>
           </VChipGroup>
-          <div v-if="collectMode === 'normal'" class="text-caption text-grey mt-1">所有选中剧集作为一个采集任务</div>
+          <div v-if="collectMode === 'normal'" class="text-caption text-grey mt-1">{{ t('collectVideo.modeNormalDesc') }}</div>
           <div v-if="collectMode === 'episode'" class="text-caption text-grey mt-1">
-            每个选中的剧集创建一个独立的采集任务，便于单独管理
+            {{ t('collectVideo.modeEpisodeDesc') }}
           </div>
-          <div v-if="collectMode === 'follow'" class="text-caption text-grey mt-1">自动检测并下载新发布的剧集</div>
+          <div v-if="collectMode === 'follow'" class="text-caption text-grey mt-1">{{ t('collectVideo.modeFollowDesc') }}</div>
         </div>
 
         <!-- 预约采集选项（普通采集和分集采集可用） -->
         <div v-if="collectMode === 'normal' || collectMode === 'episode'" class="mt-4">
-          <v-switch v-model="isReserveCollect" :label="`预约采集`" hide-details color="primary" density="compact" />
+          <v-switch v-model="isReserveCollect" :label="t('collectVideo.reserveCollect')" hide-details color="primary" density="compact" />
           <v-slide-y-transition>
             <div v-if="isReserveCollect" class="mt-4">
               <div class="d-flex align-center ga-3 flex-wrap">
                 <VTextField
                   v-model="reserveStartDate"
-                  label="预约日期"
+                  :label="t('collectVideo.reserveDate')"
                   type="date"
                   variant="outlined"
                   density="compact"
@@ -1543,7 +1546,7 @@ function handleIgnore() {
                 />
                 <VTextField
                   v-model="reserveStartTimeOnly"
-                  label="预约时间"
+                  :label="t('collectVideo.reserveTime')"
                   type="time"
                   variant="outlined"
                   density="compact"
@@ -1554,7 +1557,7 @@ function handleIgnore() {
               </div>
               <div v-if="reserveTimeFormatted" class="text-caption text-primary mt-2">
                 <v-icon size="small" class="mr-1">mdi-information-outline</v-icon>
-                任务将在 {{ reserveTimeFormatted }} 自动开始下载
+                {{ t('collectVideo.reserveHint', { time: reserveTimeFormatted }) }}
               </div>
             </div>
           </v-slide-y-transition>
@@ -1566,14 +1569,14 @@ function handleIgnore() {
             <v-col cols="6" md="4">
               <VTextField
                 v-model="followConfig.startEpisode"
-                label="起始集数"
+                :label="t('collectVideo.followStartEpisode')"
                 type="number"
                 variant="outlined"
                 density="compact"
                 :hint="
                   followConfig.startEpisode
-                    ? `采集将从第 ${followConfig.startEpisode} 集开始`
-                    : '留空则从第 1 集开始采集'
+                    ? t('collectVideo.followStartFrom', { episode: followConfig.startEpisode })
+                    : t('collectVideo.followStartDefault')
                 "
                 persistent-hint
                 min="1"
@@ -1582,11 +1585,11 @@ function handleIgnore() {
             <v-col cols="6" md="4">
               <VTextField
                 v-model="followConfig.totalEpisodes"
-                label="总集数（可选）"
+                :label="t('collectVideo.followTotalEpisodes')"
                 type="number"
                 variant="outlined"
                 density="compact"
-                hint="填写总集数后采集完成会自动标记完结"
+                :hint="t('collectVideo.followTotalHint')"
                 persistent-hint
                 min="1"
               />
@@ -1596,7 +1599,7 @@ function handleIgnore() {
             <v-col cols="6" md="4">
               <VTextField
                 v-model="followConfig.checkStartTime"
-                label="检测开始时间"
+                :label="t('collectVideo.followCheckStart')"
                 type="time"
                 variant="outlined"
                 density="compact"
@@ -1607,7 +1610,7 @@ function handleIgnore() {
             <v-col cols="6" md="4">
               <VTextField
                 v-model="followConfig.checkEndTime"
-                label="检测结束时间"
+                :label="t('collectVideo.followCheckEnd')"
                 type="time"
                 variant="outlined"
                 density="compact"
@@ -1618,11 +1621,11 @@ function handleIgnore() {
             <v-col cols="6" md="4">
               <VTextField
                 v-model="followConfig.checkIntervalMin"
-                label="最小检测间隔（分钟）"
+                :label="t('collectVideo.followIntervalMin')"
                 type="number"
                 variant="outlined"
                 density="compact"
-                hint="检测间隔最小值"
+                :hint="t('collectVideo.followIntervalMinHint')"
                 persistent-hint
                 min="1"
               />
@@ -1630,11 +1633,11 @@ function handleIgnore() {
             <v-col cols="6" md="4">
               <VTextField
                 v-model="followConfig.checkIntervalMax"
-                label="最大检测间隔（分钟）"
+                :label="t('collectVideo.followIntervalMax')"
                 type="number"
                 variant="outlined"
                 density="compact"
-                hint="检测间隔最大值，系统将随机选择"
+                :hint="t('collectVideo.followIntervalMaxHint')"
                 persistent-hint
                 min="1"
               />
@@ -1642,12 +1645,12 @@ function handleIgnore() {
           </v-row>
           <div class="text-caption text-grey mt-2">
             <v-icon size="small" class="mr-1">mdi-information-outline</v-icon>
-            系统将在指定时间段内随机间隔检测新剧集，当天已更新则跳过，次日重新开始
+            {{ t('collectVideo.followCheckHint') }}
           </div>
         </div>
 
         <div v-if="hasYoukuVideoQualityOptions" class="mt-6">
-          <GroupTile title="画质" />
+          <GroupTile :title="t('collectVideo.groupQuality')" />
           <VChipGroup column v-model="addForm.defn">
             <template v-for="option in youkuVideoQualityOptions" :key="option.value">
               <VChip
@@ -1663,7 +1666,7 @@ function handleIgnore() {
         </div>
 
         <div v-if="!hasYoukuVideoQualityOptions" class="mt-6">
-          <GroupTile title="清晰度" />
+          <GroupTile :title="t('collectVideo.groupDefinition')" />
           <VChipGroup column v-model="addForm.defn">
             <template v-for="definition in mediaDetail.definition_list" :key="definition.name">
               <VChip
@@ -1680,9 +1683,9 @@ function handleIgnore() {
         </div>
 
         <div v-if="audioTrackOptions.length > 0" class="mt-6">
-          <GroupTile title="音频轨" />
+          <GroupTile :title="t('collectVideo.groupAudioTracks')" />
           <div class="text-caption text-medium-emphasis mb-2">
-            选择要下载合并的独立音频流（该视频流无内嵌音轨，至少选择一条）
+            {{ t('collectVideo.audioTracksHint') }}
           </div>
           <VChipGroup column multiple v-model="selectedAudioTracks">
             <VChip
@@ -1699,7 +1702,7 @@ function handleIgnore() {
         </div>
 
         <div class="mt-6">
-          <GroupTile title="制作组" />
+          <GroupTile :title="t('collectVideo.groupTeam')" />
           <VChipGroup column v-model="addForm.team">
             <template v-for="(teamOption, index) in teamList" :key="index">
               <VChip
@@ -1714,7 +1717,7 @@ function handleIgnore() {
           </VChipGroup>
         </div>
         <div class="mt-6">
-          <GroupTile title="命名类型" />
+          <GroupTile :title="t('collectVideo.groupNamingType')" />
           <VChipGroup column v-model="addForm.type">
             <template v-for="(value, key) in mediaCateOptions" :key="key">
               <VChip :color="addForm.type === key ? 'primary' : ''" filter variant="outlined" :value="key">
@@ -1724,7 +1727,7 @@ function handleIgnore() {
           </VChipGroup>
         </div>
         <div class="mt-6">
-          <GroupTile title="分类" />
+          <GroupTile :title="t('collectVideo.groupCate')" />
           <VChipGroup column v-model="addForm.cate">
             <template v-for="(value, key) in categoryOptions" :key="key">
               <VChip :color="addForm.cate === key ? 'primary' : ''" filter variant="outlined" :value="key">
@@ -1734,7 +1737,7 @@ function handleIgnore() {
           </VChipGroup>
         </div>
         <div class="mt-6">
-          <GroupTile title="标签" />
+          <GroupTile :title="t('collectVideo.groupTags')" />
           <VChipGroup column v-model="addForm.tags" multiple>
             <template v-for="(value, key) in tagOptions" :key="key">
               <VChip :color="addForm.tags.includes(key) ? 'primary' : ''" filter variant="outlined" :value="key">
@@ -1744,7 +1747,7 @@ function handleIgnore() {
           </VChipGroup>
         </div>
         <div class="mt-6">
-          <GroupTile title="站点" />
+          <GroupTile :title="t('collectVideo.groupSites')" />
           <VChipGroup column v-model="addForm.site_list" multiple>
             <template v-for="(site, index) in siteList" :key="index">
               <VChip
@@ -1768,11 +1771,11 @@ function handleIgnore() {
             variant="flat"
             @click="toggleMainEpisodes"
           >
-            {{ onlyShowMainEpisodes ? '显示所有剧集' : '只看正片' }}
+            {{ onlyShowMainEpisodes ? t('collectVideo.showAllEpisodes') : t('collectVideo.mainEpisodesOnly') }}
           </VBtn>
-          <VBtn color="#5865f2" size="x-small" variant="flat" @click="selectAllEpisodes"> 全选 </VBtn>
-          <VBtn color="#5865f2" size="x-small" variant="flat" @click="invertSelectEpisodes"> 全不选 </VBtn>
-          <VBtn color="#5865f2" size="x-small" variant="flat" @click="autoSetEpisodeNumbers"> 自动设置集数 </VBtn>
+          <VBtn color="#5865f2" size="x-small" variant="flat" @click="selectAllEpisodes"> {{ t('collectVideo.selectAll') }} </VBtn>
+          <VBtn color="#5865f2" size="x-small" variant="flat" @click="invertSelectEpisodes"> {{ t('collectVideo.selectNone') }} </VBtn>
+          <VBtn color="#5865f2" size="x-small" variant="flat" @click="autoSetEpisodeNumbers"> {{ t('collectVideo.autoNumbering') }} </VBtn>
         </div>
 
         <VirtualSlideView
@@ -1794,6 +1797,23 @@ function handleIgnore() {
         </VirtualSlideView>
       </div>
     </div>
+  </div>
+  <!-- 吸底提交条：已选摘要 + 添加按钮，长表单滚动到任意位置均可提交 -->
+  <div v-if="isRefreshed" class="collect-submit-bar">
+    <div class="d-flex align-center flex-wrap ga-2">
+      <VChip size="small" variant="tonal" color="primary" label>
+        {{ collectModeLabel }} · {{ t('collectVideo.selectedCountShort', { count: selectedCount }) }}
+      </VChip>
+      <VChip v-if="episodesAllError" size="small" variant="tonal" color="error" label>
+        {{ t('collectVideo.episodesAllShort', { count: addForm.episodes_all }) }}
+      </VChip>
+    </div>
+    <VBtn variant="tonal" color="info" @click="addCollect">
+      <template #prepend>
+        <VIcon icon="mdi-download-multiple" />
+      </template>
+      {{ t('collectVideo.actionCollect') }}
+    </VBtn>
   </div>
   <!-- 站点资源弹窗 -->
   <SiteSearchDialog
@@ -2018,7 +2038,7 @@ a.crew-name {
 
 @media (width >=1024px) {
   .media-overview-right {
-    inline-size: 20rem;
+    inline-size: 24rem;
     margin-block-start: 0;
   }
 }
@@ -2085,6 +2105,64 @@ a.crew-name {
     font-size: 1.5rem;
     line-height: 2rem;
   }
+}
+
+/* 已选/总剧集/季数紧凑行：定宽小字段，手机端随 flex-wrap 换行；
+   手机端退出「左标签右窄框」适配（:mobile-layout="false"），label 在框上方，
+   并压掉适配器残留的 min-block-size 让 label 行紧凑单行 */
+.collect-meta-field {
+  inline-size: 9rem;
+}
+
+@media (max-width: 959.98px) {
+  .collect-meta-field {
+    inline-size: 8rem;
+  }
+
+  /* 适配器即使被退出，其样式的 min-block-size 仍可能残留：压到原生紧凑高度 */
+  .collect-meta-field :deep(.app-responsive-input) {
+    display: block;
+    min-block-size: 0;
+    padding-block: 0;
+  }
+
+  /* label 不换行：超出省略（手机窄屏下"未获取到，请手动输入"等长 placeholder 已足够提示） */
+  .collect-meta-field :deep(.v-label),
+  .collect-meta-field :deep(.v-field-label) {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-inline-size: 100%;
+  }
+}
+
+/* 表单分组卡：去掉背景与圆角，仅保留分组结构（同页 GroupTile 风格） */
+/* 表单分组卡：无背景无圆角（tonal 的底色画在 .v-card__underlay 上，须一并隐藏） */
+.collect-form-card {
+  border-radius: 0 !important;
+  background: transparent;
+  box-shadow: none;
+}
+
+.collect-form-card :deep(.v-card__underlay) {
+  display: none;
+}
+
+/* 吸底提交条：滚动全程可提交；毛玻璃底避免文字透出 */
+.collect-submit-bar {
+  position: sticky;
+  inset-block-end: 0.75rem;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-inline: 1rem;
+  padding: 0.65rem 1rem;
+  border-radius: 0.75rem;
+  background: rgba(var(--v-theme-surface), 0.92);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
 }
 
 .bluray-tech-info {

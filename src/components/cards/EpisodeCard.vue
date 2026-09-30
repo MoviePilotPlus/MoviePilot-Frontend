@@ -156,21 +156,24 @@ function getYear(airDate: string) {
           </VChip> -->
           <!--来源图标-->
           <VIcon v-if="props.episode?.selected" icon="mdi-check" color="success" class="absolute top-1 right-1" />
-          <v-text-field
-            label="集"
-            :model-value="episode.episode"
-            variant="outlined"
-            bg-color="white"
-            color="white"
-            base-color="white"
-            text-color="white"
-            :width="60"
-            :height="30"
-            class="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2"
-            @keydown.enter="setEpisode($event.target.value)"
-            @blur="setEpisode($event.target.value)"
+          <!-- 集数输入：透明胶囊容器 + 白字描边，浮在剧照上保持可读；
+               label 紧贴输入框（缩小行距），点击卡片空白处仍是选集 -->
+          <div
+            class="episode-number-editor absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
             @click.stop
-          ></v-text-field>
+          >
+            <v-text-field
+              label="集"
+              :model-value="episode.episode"
+              variant="outlined"
+              density="compact"
+              :hide-details="true"
+              class="episode-number-input"
+              :mobile-layout="false"
+              @keydown.enter="setEpisode($event.target.value)"
+              @blur="setEpisode($event.target.value)"
+            ></v-text-field>
+          </div>
         </VCard>
       </div>
     </template>
@@ -178,19 +181,57 @@ function getYear(airDate: string) {
 </template>
 
 <style scoped>
-/* 现有输入框样式保持不变 */
-::v-deep .v-field__input {
+/* 集数编辑器：透明容器（无底色），白字靠文字阴影保证在任意剧照上可读 */
+.episode-number-editor {
+  padding: 0.2rem 0.5rem;
+  border-radius: 1rem;
+}
+
+.episode-number-editor :deep(.v-field) {
+  background: transparent;
+}
+
+/* 输入框窄化到数字宽度 */
+.episode-number-input {
+  inline-size: 4.5rem;
+}
+
+/* 手机端适配器把字段重排成「左标签右窄框」，与 PC 胶囊形态不一致；
+   已在组件上 :mobile-layout="false" 退出适配（scoped 选择器命中不了适配器根节点，
+   样式覆盖不生效），此处保留以防适配器回归 */
+.episode-number-input :deep(.app-responsive-input) {
+  display: block;
+}
+
+.episode-number-input :deep(.v-field__input) {
   color: white !important;
   font-weight: bold !important;
   text-align: center !important;
+  min-height: 1.7rem;
+  padding-block: 0.15rem;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.9), 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
-/* 新增label居中样式 */
-::v-deep .v-label {
-  /* label文本居中 */
-  inline-size: 100% !important;
-  text-align: center !important;
+/* label 收进框内并紧贴数值（默认浮动态在上方留出大片空隙） */
+.episode-number-input :deep(.v-field-label) {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.75rem;
+  opacity: 1;
+  transform: none;
+  top: 50%;
+  translate: 0 -50%;
+  inset-inline-start: 0.5rem;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.9), 0 1px 2px rgba(0, 0, 0, 0.8);
+}
 
-  /* 强制label容器宽度占满，确保居中生效 */
+.episode-number-input :deep(.v-field--variant-outlined .v-field__outline__start),
+.episode-number-input :deep(.v-field--variant-outlined .v-field__outline__end) {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* label 浮动后为数值让位（聚焦/有值时） */
+.episode-number-input :deep(.v-field--focused .v-field-label),
+.episode-number-input.v-field--active :deep(.v-field-label) {
+  display: none;
 }
 </style>

@@ -182,11 +182,17 @@ describe('VideoDetailView（冒烟）', () => {
         if (endpoint === 'tencent/detail') {
           return { ...mediaDetailFixture, title }
         }
+        // 状态检查与外层用例同口径（返回空对象走默认分支）
+        if (endpoint.startsWith('collect/status/')) return {}
         if (endpoint === 'system/setting/TEAM_PARAMS') return { value: [] }
         if (endpoint === 'site/') return []
         throw new Error(`Unexpected GET ${endpoint}`)
       })
       const rendered = await renderDetailView()
+      // 等待 getMediaDetail 主链路完成（含 team/ptgen 后续）后再断言表单
+      await waitFor(() => {
+        expect(mocks.apiGet).toHaveBeenCalledWith('system/setting/TEAM_PARAMS')
+      })
       const form = getAddForm(rendered.container)
       expect(form?.season, `标题「${title}」应解析为第 ${expected} 季`).toBe(expected)
     }

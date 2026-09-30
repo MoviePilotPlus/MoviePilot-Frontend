@@ -31,7 +31,8 @@ const emit = defineEmits(['close', 'done', 'change'])
 
 // 媒体服务器详情弹窗
 const siteSchemeInfoDialog = ref(false)
-// 查询站点图标（默认 api 自动拆信封，响应即 data；与 SiteCard 同范式走缓存）
+// 查询站点图标（默认 api 自动拆信封，响应即 data；与 SiteCard 同范式走缓存）。
+// 无图标的站点后端返回业务失败信封属正常情况，feedback 静默避免逐卡弹错
 async function getSiteIcon() {
   const siteId = cardProps.site?.id
   if (!siteId) {
@@ -40,7 +41,7 @@ async function getSiteIcon() {
   }
   try {
     const icon = await getCachedSiteIcon(siteId, async () => {
-      const response = await api.get<{ icon?: string }>(`site/icon/${siteId}`)
+      const response = await api.get<{ icon?: string }>(`site/icon/${siteId}`, { feedback: 'silent' })
       return response?.icon || noImage
     })
     siteIcon.value = icon || noImage
@@ -76,7 +77,8 @@ onMounted(() => {
         class="site-schema-badge"
         :title="t('setting.collect.templateConfigured')"
       />
-      <VCardText class="d-flex align-center gap-2 pa-2">
+      <!-- ps-3：图标与卡片左边框的呼吸间距（其余边保持紧凑） -->
+      <VCardText class="d-flex align-center gap-3 pa-2 ps-3">
         <VImg
           :src="siteIcon"
           cover
@@ -110,8 +112,8 @@ onMounted(() => {
   position: relative;
   min-inline-size: 0;
   cursor: pointer;
-  /* 全局 .v-card 圆角带 !important，须同级 !important 覆盖为直角 */
-  border-radius: 0 !important;
+  /* 全局 .v-card 圆角带 !important，须同级 !important 覆盖；站点卡用中等圆角 */
+  border-radius: 0.5rem !important;
 }
 
 /* 「已配置」角标：右上角绿点，不参与文本布局 */
