@@ -5,13 +5,11 @@ import { useToast } from 'vue-toastification'
 import { VRow, VSelect } from 'vuetify/lib/components/index.mjs'
 import draggable from 'vuedraggable'
 import api from '@/api'
-import { MediaServerConf, Site } from '@/api/types'
+import { Site } from '@/api/types'
 import SiteSchemaCard from '@/components/cards/SiteSchemaCard.vue'
-import ProgressDialog from '@/components/dialog/ProgressDialog.vue'
 import SiteSchemaImportDialog from '@/components/dialog/SiteSchemaImportDialog.vue'
 import { useI18n } from 'vue-i18n'
 import type { ComponentPublicInstance } from 'vue'
-import { mediaServerOptions } from '@/api/constants'
 
 // 截图模板配置引擎：默认配置 + 预设
 const TPL_DEFAULTS = {
@@ -90,9 +88,12 @@ async function renderTplPreview() {
 async function saveScreenshotConfig() {
   savingScreenshotConfig.value = true
   try {
-    await api.post('system/env', { SCREENSHOT_TEMPLATE_CONFIG: JSON.stringify(tplConfig.value) })
-    $toast.success('截图模板配置已保存')
-  } catch (e) { $toast.error('保存失败') } finally { savingScreenshotConfig.value = false }
+    const json = JSON.stringify(tplConfig.value)
+    await api.post('system/env', { SCREENSHOT_TEMPLATE_CONFIG: json })
+    // 回写表单组：否则随后保存基础设置时会把旧模板 JSON 原样提交回去（两处保存互相覆盖）
+    CollectSettings.value.Basic.SCREENSHOT_TEMPLATE_CONFIG = json
+    $toast.success(t('setting.collect.screenshotConfigSaveSuccess'))
+  } catch (e) { $toast.error(t('setting.collect.saveFailed')) } finally { savingScreenshotConfig.value = false }
 }
 
 // 国际化
@@ -238,6 +239,28 @@ const CollectSettings = ref<any>({
   },
 })
 
+// 截图模板面板的选项词条化（预设名/背景类型/元数据位置与对齐）
+const presetItems = computed(() => Object.keys(TPL_PRESETS).map(key => ({
+  title: t(`setting.collect.preset${key.charAt(0).toUpperCase()}${key.slice(1)}`),
+  value: key,
+})))
+const bgTypeLabels = computed(() => ({
+  solid: t('setting.collect.bgSolid'),
+  blur: t('setting.collect.bgBlur'),
+  frosted: t('setting.collect.bgFrosted'),
+  gradient: t('setting.collect.bgGradient'),
+}))
+const metadataPositionItems = computed(() => [
+  { title: t('setting.collect.posTop'), value: 'top' },
+  { title: t('setting.collect.posBottom'), value: 'bottom' },
+  { title: t('setting.collect.posOverlay'), value: 'overlay' },
+  { title: t('setting.collect.posLeft'), value: 'left' },
+])
+const metadataAlignItems = computed(() => [
+  { title: t('setting.collect.alignLeft'), value: 'left' },
+  { title: t('setting.collect.alignCenter'), value: 'center' },
+])
+
 const youkuDownloadLineOptions = computed(() => [
   { title: t('setting.collect.youkuLineNormalTv'), value: 'normal_tv' },
   { title: t('setting.collect.youkuLineAndroid'), value: 'android' },
@@ -286,19 +309,11 @@ function scrollToCollectSection(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'auto', block: 'start' })
 }
 
-// 是否发送请求的总开关
-const isRequest = ref(true)
-
 // 所有站点
 const allSites = ref<Site[]>([])
-// 选中的媒体服务器
-const mediaServers = ref<MediaServerConf[]>([])
 
 // 提示框
 const $toast = useToast()
-
-// 进度框
-const progressDialog = ref(false)
 
 // 腾讯视频Cookie
 const tencentCookie = ref('')
@@ -377,75 +392,72 @@ async function queryBilibiliCookie() {
 // 保存用户设置的腾讯视频Cookie
 async function saveTencentCookie() {
   try {
-    // 用户名密码
-    const result: { [key: string]: any } = await api.post('system/setting/TencentCookie', tencentCookie.value)
-
-          $toast.success('腾讯视频Cookie保存成功')
+    await api.post('system/setting/TencentCookie', tencentCookie.value)
+    $toast.success(t('setting.collect.cookieSaveSuccess', { name: t('setting.collect.tencentCookie') }))
   } catch (error) {
     console.log(error)
+    $toast.error(t('setting.collect.cookieSaveFailed', { name: t('setting.collect.tencentCookie') }))
   }
 }
 async function saveMgTvTicket() {
   try {
-    // 用户名密码
-    const result: { [key: string]: any } = await api.post('system/setting/MgTvTicket', mgTvTicket.value)
-
-          $toast.success('芒果TV 电视端Ticket保存成功')
+    await api.post('system/setting/MgTvTicket', mgTvTicket.value)
+    $toast.success(t('setting.collect.cookieSaveSuccess', { name: t('setting.collect.mgTvTicket') }))
   } catch (error) {
     console.log(error)
+    $toast.error(t('setting.collect.cookieSaveFailed', { name: t('setting.collect.mgTvTicket') }))
   }
 }
 
 async function saveMgAppTicket() {
   try {
-    // 用户名密码
-    const result: { [key: string]: any } = await api.post('system/setting/MgAppTicket', mgAppTicket.value)
-
-          $toast.success('芒果TV App端Ticket保存成功')
+    await api.post('system/setting/MgAppTicket', mgAppTicket.value)
+    $toast.success(t('setting.collect.cookieSaveSuccess', { name: t('setting.collect.mgAppTicket') }))
   } catch (error) {
     console.log(error)
+    $toast.error(t('setting.collect.cookieSaveFailed', { name: t('setting.collect.mgAppTicket') }))
   }
 }
 
 // 保存用户设置的爱奇艺Cookie
 async function saveIqiyiCookie() {
   try {
-    const result: { [key: string]: any } = await api.post('system/setting/IQiyiCookie', iqiyiCookie.value)
-
-          $toast.success('爱奇艺Cookie保存成功')
+    await api.post('system/setting/IQiyiCookie', iqiyiCookie.value)
+    $toast.success(t('setting.collect.cookieSaveSuccess', { name: t('setting.collect.iqiyiCookie') }))
   } catch (error) {
     console.log(error)
+    $toast.error(t('setting.collect.cookieSaveFailed', { name: t('setting.collect.iqiyiCookie') }))
   }
 }
 
 // 保存用户设置的优酷Cookie
 async function saveYoukuCookie() {
   try {
-    const result: { [key: string]: any } = await api.post('system/setting/YoukuCookie', youkuCookie.value)
-
-          $toast.success('优酷Cookie保存成功')
+    await api.post('system/setting/YoukuCookie', youkuCookie.value)
+    $toast.success(t('setting.collect.cookieSaveSuccess', { name: t('setting.collect.youkuCookie') }))
   } catch (error) {
     console.log(error)
+    $toast.error(t('setting.collect.cookieSaveFailed', { name: t('setting.collect.youkuCookie') }))
   }
 }
 // 保存用户设置的优酷Stoken
 async function saveYoukuStoken() {
   try {
     await api.post('system/setting/YoukuStoken', youkuStoken.value)
-
-          $toast.success('优酷Stoken保存成功')
+    $toast.success(t('setting.collect.cookieSaveSuccess', { name: t('setting.collect.youkuStoken') }))
   } catch (error) {
     console.log(error)
+    $toast.error(t('setting.collect.cookieSaveFailed', { name: t('setting.collect.youkuStoken') }))
   }
 }
 // 保存用户设置的哔哩哔哩Cookie
 async function saveBilibiliCookie() {
   try {
-    const result: { [key: string]: any } = await api.post('system/setting/BilibiliCookie', bilibiliCookie.value)
-
-          $toast.success('哔哩哔哩Cookie保存成功')
+    await api.post('system/setting/BilibiliCookie', bilibiliCookie.value)
+    $toast.success(t('setting.collect.cookieSaveSuccess', { name: t('setting.collect.bilibiliCookie') }))
   } catch (error) {
     console.log(error)
+    $toast.error(t('setting.collect.cookieSaveFailed', { name: t('setting.collect.bilibiliCookie') }))
   }
 }
 // 调用API查询下载器设置
@@ -710,33 +722,7 @@ async function saveImageHostingSetting() {
     await loadImageHostingSetting()
   } catch (error) {
     console.log(error)
-  }
-}
-
-// 处理默认下载器状态
-function handleDefaultImageHostings(enabledImageHostings: any[], imageHostings: any[]) {
-  const enabledDefaultImageHosting = enabledImageHostings.find(item => item.default)
-  if (enabledImageHostings.length > 0 && !enabledDefaultImageHosting) {
-    imageHostings = imageHostings.map(item => {
-      if (item === enabledImageHostings[0]) {
-        $toast.info(t('setting.collect.defaultImageHostingNotice', { name: item.name }))
-        return { ...item, default: true }
-      }
-      // 清除其他下载器的默认下载器状态
-      return { ...item, default: false }
-    })
-  }
-  return imageHostings
-}
-
-// 调用API查询媒体服务器设置
-async function loadMediaServerSetting() {
-  try {
-    const result: { [key: string]: any } = await api.get('system/setting/MediaServers')
-    // 同 system/setting/{key} 信封：data 是 {value: 配置}，未配置为 null
-    mediaServers.value = result?.value ?? []
-  } catch (error) {
-    console.log(error)
+    $toast.error(t('setting.collect.imageHostingSaveFailed'))
   }
 }
 
@@ -821,12 +807,6 @@ function addTeamConfig() {
   }
 }
 
-// 删除媒体服务器
-function removeMediaServer(ele: MediaServerConf) {
-  const index = mediaServers.value.indexOf(ele)
-  if (index !== -1) mediaServers.value.splice(index, 1)
-}
-
 // 删除制作组配置
 function removeTeamConfig(teamConfig: TeamConfig) {
   const index = teamConfigs.value.indexOf(teamConfig)
@@ -840,12 +820,6 @@ function removeTeamConfig(teamConfig: TeamConfig) {
 
     teamConfigs.value.splice(index, 1)
   }
-}
-
-// 变更媒体服务器
-function onMediaServerChange(mediaserver: MediaServerConf, name: string) {
-  const index = mediaServers.value.findIndex(item => item.name === name)
-  if (index !== -1) mediaServers.value[index] = mediaserver
 }
 
 // 制作组配置
@@ -900,7 +874,7 @@ async function saveTeamConfigs() {
   try {
     // 验证至少要有一个制作组
     if (teamConfigs.value.length === 0) {
-      $toast.error('至少需要保留一个制作组配置')
+      $toast.error(t('collect.teamMinOne'))
       return
     }
 
@@ -908,11 +882,11 @@ async function saveTeamConfigs() {
     for (let i = 0; i < teamConfigs.value.length; i++) {
       const config = teamConfigs.value[i]
       if (!config.team || config.team.trim() === '') {
-        $toast.error(`第 ${i + 1} 个制作组的名称不能为空`)
+        $toast.error(t('collect.teamNameRequired', { index: i + 1 }))
         return
       }
       if (!config.copyright || config.copyright.trim() === '') {
-        $toast.error(`第 ${i + 1} 个制作组的版权信息不能为空`)
+        $toast.error(t('collect.teamCopyrightRequired', { index: i + 1 }))
         return
       }
     }
@@ -936,10 +910,10 @@ async function saveTeamConfigs() {
       },
     })
 
-    $toast.success('制作组配置保存成功')
+    $toast.success(t('collect.teamSaveSuccess'))
   } catch (error) {
     console.log(error)
-    $toast.error('保存失败，请重试')
+    $toast.error(t('collect.teamSaveFailed'))
   }
 }
 
@@ -984,29 +958,13 @@ onMounted(() => {
   loadSystemFonts()
   loadImageHostingSetting()
   loadPtgenSourceSetting()
-  loadMediaServerSetting()
   loadSystemSettings()
   loadSiteList()
   queryTeamConfigs()
 })
-
-onActivated(async () => {
-  isRequest.value = true
-})
-
-onDeactivated(() => {
-  isRequest.value = false
-})
 </script>
 
 <template>
-  <ProgressDialog
-    v-if="progressDialog"
-    v-model="progressDialog"
-    :text="t('setting.collect.reloading')"
-    :indeterminate="true"
-  />
-
   <!-- 页内锚点导航：与顶部 HeaderTab 同视觉语言的文字标签（吸顶，长页免滚动找卡） -->
   <nav class="collect-anchor-bar">
     <button
@@ -1373,7 +1331,7 @@ onDeactivated(() => {
                 <VImg v-if="tplPreviewSrc" :src="tplPreviewSrc" contain class="rounded-0"
                       style="cursor:pointer;max-height:70vh" @click="tplPreviewLarge = true" />
                 <div v-else class="d-flex align-center justify-center bg-grey-lighten-3 rounded-0" style="min-height:300px">
-                  <span class="text-medium-emphasis">{{ realtimePreview ? '正在生成预览…' : '点击「预览」查看效果' }}</span>
+                  <span class="text-medium-emphasis">{{ realtimePreview ? t('setting.collect.previewGenerating') : t('setting.collect.previewIdle') }}</span>
                 </div>
               </div>
             </VCol>
@@ -1381,20 +1339,20 @@ onDeactivated(() => {
             <VCol cols="12" md="5">
               <!-- 工具栏 -->
               <div class="d-flex align-center gap-2 mb-2 flex-wrap">
-                <VSelect v-model="activePreset" :items="Object.keys(TPL_PRESETS)" density="compact"
-                         label="预设" variant="outlined" hide-details style="max-width:140px"
+                <VSelect v-model="activePreset" :items="presetItems" density="compact"
+                         :label="t('setting.collect.presetLabel')" variant="outlined" hide-details style="max-width:140px"
                          @update:model-value="loadPreset" />
-                <VSwitch v-model="realtimePreview" label="实时" density="compact" hide-details color="primary" />
+                <VSwitch v-model="realtimePreview" :label="t('setting.collect.realtimePreview')" density="compact" hide-details color="primary" />
                 <VSpacer />
                 <VBtn v-if="!realtimePreview" size="small" color="primary" variant="outlined"
-                      :loading="previewLoading" prepend-icon="mdi-eye" @click="renderTplPreview">预览</VBtn>
+                      :loading="previewLoading" prepend-icon="mdi-eye" @click="renderTplPreview">{{ t('setting.collect.previewBtn') }}</VBtn>
                 <VBtn size="small" color="primary" :loading="savingScreenshotConfig"
-                      prepend-icon="mdi-content-save" @click="saveScreenshotConfig">保存</VBtn>
+                      prepend-icon="mdi-content-save" @click="saveScreenshotConfig">{{ t('common.save') }}</VBtn>
               </div>
 
               <!-- 背景 -->
               <div class="d-flex align-center gap-2 mb-2">
-                <span class="text-caption font-weight-bold text-medium-emphasis flex-shrink-0 text-no-wrap">背景</span>
+                <span class="text-caption font-weight-bold text-medium-emphasis flex-shrink-0 text-no-wrap">{{ t('setting.collect.bgSection') }}</span>
                 <!-- 标签须 flex-shrink-0：.v-divider 是 flex:1 1 100%，basis 100%，
                      会在窄列里把同行文字压到换行；收缩全部由分割线承担 -->
                 <VDivider class="flex-grow-1" />
@@ -1403,14 +1361,14 @@ onDeactivated(() => {
                 <VBtn v-for="bt in ['solid','blur','frosted','gradient']" :key="bt" size="x-small"
                       :variant="tplConfig.background.type===bt?'flat':'outlined'" :color="tplConfig.background.type===bt?'primary':''"
                       style="flex:1" @click="tplConfig.background.type=bt">
-                  {{ {solid:'纯色',blur:'模糊',frosted:'毛玻璃',gradient:'渐变'}[bt] }}
+                  {{ bgTypeLabels[bt] }}
                 </VBtn>
               </VBtnGroup>
               <VRow dense class="mb-1" no-gutters>
                 <VCol v-if="tplConfig.background.type==='solid'" cols="12" class="pr-1">
                   <VMenu :close-on-content-click="false" location="bottom start">
                     <template #activator="{ props: mp }">
-                      <VTextField v-bind="mp" v-model="tplConfig.background.color" label="背景色" density="compact" readonly variant="outlined" hide-details>
+                      <VTextField v-bind="mp" v-model="tplConfig.background.color" :label="t('setting.collect.bgColor')" density="compact" readonly variant="outlined" hide-details>
                         <template #prepend-inner><div :style="{backgroundColor:tplConfig.background.color,width:'18px',height:'18px',borderRadius:'3px',border:'1px solid #ccc'}" /></template>
                       </VTextField>
                     </template>
@@ -1419,14 +1377,14 @@ onDeactivated(() => {
                 </VCol>
                 <VCol v-if="['blur','frosted'].includes(tplConfig.background.type)" cols="6" class="pr-1">
                   <div class="d-flex align-center gap-1">
-                    <span class="text-caption" style="min-width:28px">模糊</span>
+                    <span class="text-caption" style="min-width:28px">{{ t('setting.collect.blurAmount') }}</span>
                     <VSlider v-model="tplConfig.background.blur" :min="0" :max="80" density="compact" hide-details thumb-size="14" class="flex-grow-1" />
                     <VTextField v-model.number="tplConfig.background.blur" type="number" density="compact" variant="outlined" hide-details class="flex-shrink-0" style="width:72px" />
                   </div>
                 </VCol>
                 <VCol v-if="tplConfig.background.type==='frosted'" cols="6" class="pl-1">
                   <div class="d-flex align-center gap-1">
-                    <span class="text-caption" style="min-width:28px">压暗</span>
+                    <span class="text-caption" style="min-width:28px">{{ t('setting.collect.scrimAmount') }}</span>
                     <VSlider v-model="tplConfig.background.scrim_alpha" :min="0" :max="255" density="compact" hide-details thumb-size="14" class="flex-grow-1" />
                     <VTextField v-model.number="tplConfig.background.scrim_alpha" type="number" density="compact" variant="outlined" hide-details class="flex-shrink-0" style="width:72px" />
                   </div>
@@ -1435,29 +1393,29 @@ onDeactivated(() => {
 
               <!-- 拼图 -->
               <div class="d-flex align-center gap-2 mb-2 mt-3">
-                <span class="text-caption font-weight-bold text-medium-emphasis flex-shrink-0 text-no-wrap">拼图</span>
+                <span class="text-caption font-weight-bold text-medium-emphasis flex-shrink-0 text-no-wrap">{{ t('setting.collect.gridSection') }}</span>
                 <VDivider class="flex-grow-1" />
               </div>
               <VRow dense class="mb-1" no-gutters>
                 <VCol cols="6" class="pr-1"><div class="d-flex align-center gap-1">
-                  <span class="text-caption" style="min-width:28px">间距</span>
+                  <span class="text-caption" style="min-width:28px">{{ t('setting.collect.gapLabel') }}</span>
                   <VSlider v-model="tplConfig.grid.gap" :min="0" :max="30" density="compact" hide-details thumb-size="14" class="flex-grow-1" />
                   <VTextField v-model.number="tplConfig.grid.gap" type="number" density="compact" variant="outlined" hide-details class="flex-shrink-0" style="width:72px" />
                 </div></VCol>
                 <VCol cols="6" class="pl-1"><div class="d-flex align-center gap-1">
-                  <span class="text-caption" style="min-width:28px">圆角</span>
+                  <span class="text-caption" style="min-width:28px">{{ t('setting.collect.cornerRadius') }}</span>
                   <VSlider v-model="tplConfig.grid.corner_radius" :min="0" :max="30" density="compact" hide-details thumb-size="14" class="flex-grow-1" />
                   <VTextField v-model.number="tplConfig.grid.corner_radius" type="number" density="compact" variant="outlined" hide-details class="flex-shrink-0" style="width:72px" />
                 </div></VCol>
                 <VCol cols="6" class="pr-1"><div class="d-flex align-center gap-1">
-                  <span class="text-caption" style="min-width:28px">描边</span>
+                  <span class="text-caption" style="min-width:28px">{{ t('setting.collect.borderWidth') }}</span>
                   <VSlider v-model="tplConfig.grid.border_width" :min="0" :max="5" density="compact" hide-details thumb-size="14" class="flex-grow-1" />
                   <VTextField v-model.number="tplConfig.grid.border_width" type="number" density="compact" variant="outlined" hide-details class="flex-shrink-0" style="width:72px" />
                 </div></VCol>
                 <VCol cols="6" class="pl-1">
                   <VMenu :close-on-content-click="false" location="bottom start">
                     <template #activator="{ props: mp }">
-                      <VTextField v-bind="mp" v-model="tplConfig.grid.border_color" label="描边色" density="compact" readonly variant="outlined" hide-details>
+                      <VTextField v-bind="mp" v-model="tplConfig.grid.border_color" :label="t('setting.collect.borderColor')" density="compact" readonly variant="outlined" hide-details>
                         <template #prepend-inner><div :style="{backgroundColor:tplConfig.grid.border_color,width:'18px',height:'18px',borderRadius:'3px',border:'1px solid #ccc'}" /></template>
                       </VTextField>
                     </template>
@@ -1465,25 +1423,25 @@ onDeactivated(() => {
                   </VMenu>
                 </VCol>
               </VRow>
-              <VSwitch v-model="tplConfig.grid.shadow" label="柔影" density="compact" hide-details class="mb-1 mt-1" />
-              <VSwitch v-model="tplConfig.grid.show_timestamp" label="截图时间戳" density="compact" hide-details class="mb-1" />
+              <VSwitch v-model="tplConfig.grid.shadow" :label="t('setting.collect.shadowLabel')" density="compact" hide-details class="mb-1 mt-1" />
+              <VSwitch v-model="tplConfig.grid.show_timestamp" :label="t('setting.collect.showTimestamp')" density="compact" hide-details class="mb-1" />
 
               <!-- 元数据 -->
               <div class="d-flex align-center gap-2 mb-2 mt-3">
-                <span class="text-caption font-weight-bold text-medium-emphasis flex-shrink-0 text-no-wrap">元数据</span>
+                <span class="text-caption font-weight-bold text-medium-emphasis flex-shrink-0 text-no-wrap">{{ t('setting.collect.metadataSection') }}</span>
                 <VDivider class="flex-grow-1" />
               </div>
               <VRow dense class="mb-1" no-gutters>
                 <VCol cols="4" class="pr-1"><VSelect v-model="tplConfig.metadata.position"
-                  :items="[{title:'顶部',value:'top'},{title:'底部',value:'bottom'},{title:'叠加',value:'overlay'},{title:'左侧',value:'left'}]"
-                  label="位置" density="compact" variant="outlined" hide-details /></VCol>
+                  :items="metadataPositionItems"
+                  :label="t('setting.collect.positionLabel')" density="compact" variant="outlined" hide-details /></VCol>
                 <VCol cols="4" class="px-1"><VSelect v-model="tplConfig.metadata.align"
-                  :items="[{title:'左对齐',value:'left'},{title:'居中',value:'center'}]"
-                  label="对齐" density="compact" variant="outlined" hide-details /></VCol>
+                  :items="metadataAlignItems"
+                  :label="t('setting.collect.alignLabel')" density="compact" variant="outlined" hide-details /></VCol>
                 <VCol cols="4" class="pl-1">
                   <VMenu :close-on-content-click="false" location="bottom start">
                     <template #activator="{ props: mp }">
-                      <VTextField v-bind="mp" v-model="tplConfig.metadata.font_color" label="文字色" density="compact" readonly variant="outlined" hide-details>
+                      <VTextField v-bind="mp" v-model="tplConfig.metadata.font_color" :label="t('setting.collect.fontColor')" density="compact" readonly variant="outlined" hide-details>
                         <template #prepend-inner><div :style="{backgroundColor:tplConfig.metadata.font_color,width:'18px',height:'18px',borderRadius:'3px',border:'1px solid #ccc'}" /></template>
                       </VTextField>
                     </template>
@@ -1492,26 +1450,26 @@ onDeactivated(() => {
                 </VCol>
               </VRow>
               <div class="grid grid-cols-2 gap-x-2 gap-y-1 mt-1">
-                <VSwitch v-model="tplConfig.metadata.hierarchy" label="标题放大" density="compact" hide-details />
-                <VSwitch v-model="tplConfig.metadata.label_prefix" label="File:" density="compact" hide-details />
-                <VSwitch v-model="tplConfig.metadata.outline" label="深色描边" density="compact" hide-details />
-                <VSwitch v-model="tplConfig.metadata.bold" label="文字加粗" density="compact" hide-details />
-                <VSwitch v-model="tplConfig.poster.show_cover" label="显示封面" density="compact" hide-details />
+                <VSwitch v-model="tplConfig.metadata.hierarchy" :label="t('setting.collect.titleEnlarge')" density="compact" hide-details />
+                <VSwitch v-model="tplConfig.metadata.label_prefix" :label="t('setting.collect.filePrefix')" density="compact" hide-details />
+                <VSwitch v-model="tplConfig.metadata.outline" :label="t('setting.collect.darkOutline')" density="compact" hide-details />
+                <VSwitch v-model="tplConfig.metadata.bold" :label="t('setting.collect.boldText')" density="compact" hide-details />
+                <VSwitch v-model="tplConfig.poster.show_cover" :label="t('setting.collect.showCover')" density="compact" hide-details />
               </div>
 
               <!-- 字体 -->
               <div class="d-flex align-center gap-2 mb-2 mt-3">
-                <span class="text-caption font-weight-bold text-medium-emphasis flex-shrink-0 text-no-wrap">字体</span>
+                <span class="text-caption font-weight-bold text-medium-emphasis flex-shrink-0 text-no-wrap">{{ t('setting.collect.fontSection') }}</span>
                 <VDivider class="flex-grow-1" />
               </div>
               <VRow dense class="mb-1" no-gutters>
                 <VCol cols="6" class="pr-1">
                   <VAutocomplete v-model="tplConfig.font.primary" :items="systemFonts" clearable
-                    label="主字体" density="compact" variant="outlined" hide-details />
+                    :label="t('setting.collect.primaryFont')" density="compact" variant="outlined" hide-details />
                 </VCol>
                 <VCol cols="6" class="pl-1">
                   <VAutocomplete v-model="tplConfig.font.fallback" :items="systemFonts" clearable
-                    label="Fallback 字体" density="compact" variant="outlined" hide-details />
+                    :label="t('setting.collect.fallbackFont')" density="compact" variant="outlined" hide-details />
                 </VCol>
               </VRow>
             </VCol>
@@ -1754,8 +1712,6 @@ onDeactivated(() => {
                 <SiteSchemaCard
                   :site="element"
                   :has-template="siteTemplateConfigured[element.domain] === true"
-                  @close="removeMediaServer(element)"
-                  @change="onMediaServerChange"
                 />
               </div>
             </template>
@@ -1822,7 +1778,7 @@ onDeactivated(() => {
           <VCardSubtitle>{{ t('setting.collect.mgTvTicketHint') }} </VCardSubtitle>
         </VCardItem>
         <VCardText>
-          <VTextField
+          <VTextarea
             v-model="mgTvTicket"
             auto-grow
             :placeholder="t('setting.collect.mgTvTicket')"
@@ -1849,7 +1805,7 @@ onDeactivated(() => {
           <VCardSubtitle>{{ t('setting.collect.mgAppTicketHint') }} </VCardSubtitle>
         </VCardItem>
         <VCardText>
-          <VTextField
+          <VTextarea
             v-model="mgAppTicket"
             auto-grow
             :placeholder="t('setting.collect.mgAppTicket')"
