@@ -107,26 +107,28 @@ async function saveNamingSettings() {
       <!-- 变量速查：吸顶跟随滚动，悬停看变量说明，点击插入到最近聚焦的模板框光标处 -->
       <div class="template-variable-bar">
         <span class="template-variable-label">{{ t('setting.collect.namingVariables') }}</span>
-        <VTooltip
-          v-for="variable in FORMAT_TEMPLATE_VARIABLES"
-          :key="variable.name"
-          location="bottom"
-          open-delay="250"
-        >
-          <template #activator="{ props: vp }">
-            <VChip
-              v-bind="vp"
-              size="x-small"
-              variant="outlined"
-              color="primary"
-              class="cursor-pointer flex-shrink-0 font-weight-medium"
-              @click="insertFormatVariable(variable.name)"
-            >
-              {{ variable.name }}
-            </VChip>
-          </template>
-          {{ formatVariableTooltip(variable) }}
-        </VTooltip>
+        <div class="template-variable-chips">
+          <VTooltip
+            v-for="variable in FORMAT_TEMPLATE_VARIABLES"
+            :key="variable.name"
+            location="bottom"
+            open-delay="250"
+          >
+            <template #activator="{ props: vp }">
+              <VChip
+                v-bind="vp"
+                size="x-small"
+                variant="outlined"
+                color="primary"
+                class="cursor-pointer flex-shrink-0 font-weight-medium"
+                @click="insertFormatVariable(variable.name)"
+              >
+                {{ variable.name }}
+              </VChip>
+            </template>
+            {{ formatVariableTooltip(variable) }}
+          </VTooltip>
+        </div>
       </div>
       <VRow>
         <VCol v-for="field in FORMAT_TEMPLATE_FIELDS" :key="field.key" cols="12" md="12">
@@ -165,15 +167,11 @@ async function saveNamingSettings() {
   padding-block-start: 0.75rem;
 }
 
-/* 命名模板变量速查条：吸顶跟随（锚点条之下），滚动中也可点击插入 */
+/* 命名模板变量速查条：标题一行、标签流式换行跟随其后（吸顶跟随锚点条之下） */
 .template-variable-bar {
   position: sticky;
   top: 9.2rem;
   z-index: 2;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  align-items: center;
   padding: 0.6rem 0.75rem;
   margin-block-end: 0.9rem;
   background: rgba(var(--v-theme-surface), 0.96);
@@ -182,9 +180,20 @@ async function saveNamingSettings() {
 }
 
 .template-variable-label {
+  display: block;
+}
+
+.template-variable-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  margin-block-start: 0.45rem;
+}
+
+.template-variable-label {
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.75rem;
-  margin-inline-end: 0.35rem;
 }
 
 /* 命名模板输入框：等宽字体，代码不再糊成正文 */

@@ -14,13 +14,6 @@ const basic = inject('collectSettingsBasic')
 const { t } = useI18n()
 const $toast = useToast()
 
-// 截图 HDR/DV 色彩处理引擎选项
-const screenshotHdrEngineOptions = computed(() => [
-  { title: t('setting.collect.hdrEngineAuto'), value: 'auto' },
-  { title: t('setting.collect.hdrEngineLibplacebo'), value: 'libplacebo' },
-  { title: t('setting.collect.hdrEngineZscale'), value: 'zscale' },
-])
-
 // 保存基础设置（截图组键由截图卡独占保存，此处剔除）
 async function saveBasicSettings() {
   try {
@@ -164,83 +157,7 @@ async function saveBasicSettings() {
             />
           </VCol>
         </VRow>
-        <!-- 截图 -->
-        <div class="settings-section-title">{{ t('setting.collect.sectionScreenshot') }}</div>
-        <VRow>
-          <VCol cols="12" md="6">
-            <VSelect
-              v-model="basic.SCREENSHOT_HDR_PROCESSOR"
-              :items="screenshotHdrEngineOptions"
-              :label="t('setting.collect.screenshotHdrEngine')"
-              :hint="t('setting.collect.screenshotHdrEngineHint')"
-              persistent-hint
-              prepend-inner-icon="mdi-palette"
-            />
-          </VCol>
-          <VCol cols="12" md="6">
-            <VSwitch
-              v-model="basic.SCREENSHOT_GRID_ENABLED"
-              :label="t('setting.collect.screenshotGridEnabled')"
-              :hint="t('setting.collect.screenshotGridEnabledHint')"
-              persistent-hint
-            />
-          </VCol>
-          <VCol cols="12" md="6">
-            <VSwitch
-              v-model="basic.SCREENSHOT_CACHE_ENABLED"
-              :label="t('setting.collect.screenshotCacheEnabled')"
-              :hint="t('setting.collect.screenshotCacheEnabledHint')"
-              persistent-hint
-            />
-          </VCol>
-          <VCol cols="12" md="6">
-            <VTextField
-              v-model="basic.SCREENSHOT_COUNT"
-              type="number"
-              :label="t('setting.collect.screenshotCount')"
-              :hint="t('setting.collect.screenshotCountHint')"
-              placeholder="4"
-              suffix="张"
-              min="1"
-              persistent-hint
-              prepend-inner-icon="mdi-image-multiple"
-            />
-          </VCol>
-          <VCol cols="12" md="6">
-            <VTextField
-              v-model="basic.SCREENSHOT_COMPRESS_LIMIT"
-              type="number"
-              :label="t('setting.collect.screenshotCompressLimit')"
-              :hint="t('setting.collect.screenshotCompressLimitHint')"
-              placeholder="5242880"
-              suffix="字节"
-              min="0"
-              persistent-hint
-              prepend-inner-icon="mdi-image-size-select-large"
-            />
-          </VCol>
-          <VCol cols="12" md="6">
-            <VTextField
-              v-model="basic.SCREENSHOT_MIN_SIZE_LIMIT"
-              type="number"
-              :label="t('setting.collect.screenshotMinSizeLimit')"
-              :hint="t('setting.collect.screenshotMinSizeLimitHint')"
-              placeholder="1843200"
-              suffix="字节"
-              min="0"
-              persistent-hint
-              prepend-inner-icon="mdi-image-size-select-small"
-            />
-          </VCol>
-          <VCol cols="12" md="6">
-            <VSwitch
-              v-model="basic.SCREENSHOT_QUALITY_CHECK"
-              :label="t('setting.collect.screenshotQualityCheck')"
-              :hint="t('setting.collect.screenshotQualityCheckHint')"
-              persistent-hint
-            />
-          </VCol>
-        </VRow>
+        <!-- 截图参数已迁入「截图拼接模板」卡（含 MB 展示/字节提交），此处不再重复 -->
         <!-- 简介与豆瓣 -->
         <div class="settings-section-title">{{ t('setting.collect.sectionIntroDouban') }}</div>
         <VRow>

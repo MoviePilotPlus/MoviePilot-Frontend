@@ -208,7 +208,7 @@ const screenshotHdrEngineOptions = computed(() => [
               <VMenu :close-on-content-click="false" location="bottom start">
                 <template #activator="{ props: mp }">
                   <VTextField v-bind="mp" v-model="tplConfig.background.color" :label="t('setting.collect.bgColor')" density="compact" readonly variant="outlined" hide-details>
-                    <template #prepend-inner><div :style="{backgroundColor:tplConfig.background.color,width:'18px',height:'18px',borderRadius:'3px',border:'1px solid #ccc'}" /></template>
+                    <template #prepend-inner><div class="tpl-color-dot" :style="{backgroundColor:tplConfig.background.color}" /></template>
                   </VTextField>
                 </template>
                 <VColorPicker v-model="tplConfig.background.color" mode="hex" hide-inputs />
@@ -216,16 +216,16 @@ const screenshotHdrEngineOptions = computed(() => [
             </VCol>
             <VCol v-if="['blur','frosted'].includes(tplConfig.background.type)" cols="6" class="pr-1">
               <div class="d-flex align-center gap-1">
-                <span class="text-caption" style="min-width:28px">{{ t('setting.collect.blurAmount') }}</span>
+                <span class="tpl-slider-label">{{ t('setting.collect.blurAmount') }}</span>
                 <VSlider v-model="tplConfig.background.blur" :min="0" :max="80" density="compact" hide-details thumb-size="14" class="flex-grow-1" />
-                <VTextField v-model.number="tplConfig.background.blur" type="number" density="compact" variant="outlined" hide-details class="flex-shrink-0" style="width:72px" />
+                <VTextField v-model.number="tplConfig.background.blur" type="number" density="compact" variant="outlined" hide-details class="tpl-slider-input flex-shrink-0" />
               </div>
             </VCol>
             <VCol v-if="tplConfig.background.type==='frosted'" cols="6" class="pl-1">
               <div class="d-flex align-center gap-1">
-                <span class="text-caption" style="min-width:28px">{{ t('setting.collect.scrimAmount') }}</span>
+                <span class="tpl-slider-label">{{ t('setting.collect.scrimAmount') }}</span>
                 <VSlider v-model="tplConfig.background.scrim_alpha" :min="0" :max="255" density="compact" hide-details thumb-size="14" class="flex-grow-1" />
-                <VTextField v-model.number="tplConfig.background.scrim_alpha" type="number" density="compact" variant="outlined" hide-details class="flex-shrink-0" style="width:72px" />
+                <VTextField v-model.number="tplConfig.background.scrim_alpha" type="number" density="compact" variant="outlined" hide-details class="tpl-slider-input flex-shrink-0" />
               </div>
             </VCol>
           </VRow>
@@ -237,33 +237,35 @@ const screenshotHdrEngineOptions = computed(() => [
           </div>
           <VRow dense class="mb-1" no-gutters>
             <VCol cols="6" class="pr-1"><div class="d-flex align-center gap-1">
-              <span class="text-caption" style="min-width:28px">{{ t('setting.collect.gapLabel') }}</span>
+              <span class="tpl-slider-label">{{ t('setting.collect.gapLabel') }}</span>
               <VSlider v-model="tplConfig.grid.gap" :min="0" :max="30" density="compact" hide-details thumb-size="14" class="flex-grow-1" />
-              <VTextField v-model.number="tplConfig.grid.gap" type="number" density="compact" variant="outlined" hide-details class="flex-shrink-0" style="width:72px" />
+              <VTextField v-model.number="tplConfig.grid.gap" type="number" density="compact" variant="outlined" hide-details class="tpl-slider-input flex-shrink-0" />
             </div></VCol>
             <VCol cols="6" class="pl-1"><div class="d-flex align-center gap-1">
-              <span class="text-caption" style="min-width:28px">{{ t('setting.collect.cornerRadius') }}</span>
+              <span class="tpl-slider-label">{{ t('setting.collect.cornerRadius') }}</span>
               <VSlider v-model="tplConfig.grid.corner_radius" :min="0" :max="30" density="compact" hide-details thumb-size="14" class="flex-grow-1" />
-              <VTextField v-model.number="tplConfig.grid.corner_radius" type="number" density="compact" variant="outlined" hide-details class="flex-shrink-0" style="width:72px" />
+              <VTextField v-model.number="tplConfig.grid.corner_radius" type="number" density="compact" variant="outlined" hide-details class="tpl-slider-input flex-shrink-0" />
             </div></VCol>
             <VCol cols="6" class="pr-1"><div class="d-flex align-center gap-1">
-              <span class="text-caption" style="min-width:28px">{{ t('setting.collect.borderWidth') }}</span>
+              <span class="tpl-slider-label">{{ t('setting.collect.borderWidth') }}</span>
               <VSlider v-model="tplConfig.grid.border_width" :min="0" :max="5" density="compact" hide-details thumb-size="14" class="flex-grow-1" />
-              <VTextField v-model.number="tplConfig.grid.border_width" type="number" density="compact" variant="outlined" hide-details class="flex-shrink-0" style="width:72px" />
+              <VTextField v-model.number="tplConfig.grid.border_width" type="number" density="compact" variant="outlined" hide-details class="tpl-slider-input flex-shrink-0" />
             </div></VCol>
             <VCol cols="6" class="pl-1">
               <VMenu :close-on-content-click="false" location="bottom start">
                 <template #activator="{ props: mp }">
                   <VTextField v-bind="mp" v-model="tplConfig.grid.border_color" :label="t('setting.collect.borderColor')" density="compact" readonly variant="outlined" hide-details>
-                    <template #prepend-inner><div :style="{backgroundColor:tplConfig.grid.border_color,width:'18px',height:'18px',borderRadius:'3px',border:'1px solid #ccc'}" /></template>
+                    <template #prepend-inner><div class="tpl-color-dot" :style="{backgroundColor:tplConfig.grid.border_color}" /></template>
                   </VTextField>
                 </template>
                 <VColorPicker v-model="tplConfig.grid.border_color" mode="hex" hide-inputs />
               </VMenu>
             </VCol>
           </VRow>
-          <VSwitch v-model="tplConfig.grid.shadow" :label="t('setting.collect.shadowLabel')" density="compact" hide-details class="mb-1 mt-1" />
-          <VSwitch v-model="tplConfig.grid.show_timestamp" :label="t('setting.collect.showTimestamp')" density="compact" hide-details class="mb-1" />
+          <div class="grid grid-cols-2 gap-x-2 gap-y-1 mt-1">
+            <VSwitch v-model="tplConfig.grid.shadow" :label="t('setting.collect.shadowLabel')" density="compact" hide-details />
+            <VSwitch v-model="tplConfig.grid.show_timestamp" :label="t('setting.collect.showTimestamp')" density="compact" hide-details />
+          </div>
 
           <!-- 元数据 -->
           <div class="d-flex align-center gap-2 mb-2 mt-3">
@@ -281,7 +283,7 @@ const screenshotHdrEngineOptions = computed(() => [
               <VMenu :close-on-content-click="false" location="bottom start">
                 <template #activator="{ props: mp }">
                   <VTextField v-bind="mp" v-model="tplConfig.metadata.font_color" :label="t('setting.collect.fontColor')" density="compact" readonly variant="outlined" hide-details>
-                    <template #prepend-inner><div :style="{backgroundColor:tplConfig.metadata.font_color,width:'18px',height:'18px',borderRadius:'3px',border:'1px solid #ccc'}" /></template>
+                    <template #prepend-inner><div class="tpl-color-dot" :style="{backgroundColor:tplConfig.metadata.font_color}" /></template>
                   </VTextField>
                 </template>
                 <VColorPicker v-model="tplConfig.metadata.font_color" mode="hex" hide-inputs />
@@ -358,26 +360,28 @@ const screenshotHdrEngineOptions = computed(() => [
         </VCol>
         <VCol cols="12" md="6">
           <VTextField
-            v-model.number="basic.SCREENSHOT_COMPRESS_LIMIT"
+            v-model="compressLimitMb"
             type="number"
             :label="t('setting.collect.screenshotCompressLimit')"
             :hint="t('setting.collect.screenshotCompressLimitHint')"
-            placeholder="5242880"
-            suffix="字节"
+            placeholder="5"
+            suffix="MB"
             min="0"
+            step="0.5"
             persistent-hint
             prepend-inner-icon="mdi-image-size-select-large"
           />
         </VCol>
         <VCol cols="12" md="6">
           <VTextField
-            v-model.number="basic.SCREENSHOT_MIN_SIZE_LIMIT"
+            v-model="minSizeLimitMb"
             type="number"
             :label="t('setting.collect.screenshotMinSizeLimit')"
             :hint="t('setting.collect.screenshotMinSizeLimitHint')"
-            placeholder="1843200"
-            suffix="字节"
+            placeholder="1.75"
+            suffix="MB"
             min="0"
+            step="0.25"
             persistent-hint
             prepend-inner-icon="mdi-image-size-select-small"
           />
@@ -401,6 +405,33 @@ const screenshotHdrEngineOptions = computed(() => [
 </template>
 
 <style scoped>
+/* 滑杆行：标签右对齐定宽，数值框统一窄宽居中 */
+.tpl-slider-label {
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  font-size: 0.75rem;
+  min-width: 2.6rem;
+  text-align: end;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.tpl-slider-input {
+  width: 4.5rem;
+}
+
+.tpl-slider-input :deep(input) {
+  text-align: center;
+  font-size: 0.8rem;
+}
+
+/* 颜色选择触发框内色块 */
+.tpl-color-dot {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 3px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.25);
+}
+
 /* 分区标题（与基础设置卡同视觉） */
 .settings-section-title {
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));

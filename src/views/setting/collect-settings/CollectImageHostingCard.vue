@@ -133,6 +133,12 @@ onMounted(() => {
       <VCardSubtitle>{{ t('setting.collect.imageHostingDesc') }}</VCardSubtitle>
     </VCardItem>
     <VCardText>
+      <VExpansionPanels variant="accordion">
+        <VExpansionPanel>
+          <VExpansionPanelTitle>
+            <span class="text-subtitle-1 font-weight-bold">{{ t('setting.collect.imageHostingPanelTitle') }}</span>
+          </VExpansionPanelTitle>
+          <VExpansionPanelText>
       <VForm @submit.prevent="() => {}">
         <div class="text-medium-emphasis text-body-2 mb-3">
           {{ t('setting.collect.imageHostingOrderHint') }}
@@ -207,6 +213,9 @@ onMounted(() => {
           </template>
         </draggable>
       </VForm>
+          </VExpansionPanelText>
+        </VExpansionPanel>
+      </VExpansionPanels>
     </VCardText>
     <VCardText>
       <VForm @submit.prevent="() => {}">

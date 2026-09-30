@@ -101,6 +101,12 @@ onMounted(() => {
       <VCardSubtitle>{{ t('setting.collect.ptgenSourceDesc') }}</VCardSubtitle>
     </VCardItem>
     <VCardText>
+      <VExpansionPanels variant="accordion">
+        <VExpansionPanel>
+          <VExpansionPanelTitle>
+            <span class="text-subtitle-1 font-weight-bold">{{ t('setting.collect.ptgenSourcePanelTitle') }}</span>
+          </VExpansionPanelTitle>
+          <VExpansionPanelText>
       <VForm @submit.prevent="() => {}">
         <div class="text-medium-emphasis text-body-2 mb-3">
           {{ t('setting.collect.ptgenSourceOrderHint') }}
@@ -166,6 +172,9 @@ onMounted(() => {
           </template>
         </draggable>
       </VForm>
+          </VExpansionPanelText>
+        </VExpansionPanel>
+      </VExpansionPanels>
     </VCardText>
     <VCardText>
       <VForm @submit.prevent="() => {}">

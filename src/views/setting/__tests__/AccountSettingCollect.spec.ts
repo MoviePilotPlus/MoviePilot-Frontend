@@ -134,6 +134,14 @@ async function renderCollectSettings() {
   return result
 }
 
+/** 展开图床/简介线路卡的手风琴面板（Vuetify 折叠面板内容默认收起）。 */
+async function openAccordion(cardTitle: string) {
+  const card = getCardByTitle(cardTitle)
+  const header = card.element.querySelector('.v-expansion-panel-title') as HTMLElement
+  await fireEvent.click(header)
+  return card
+}
+
 describe('AccountSettingCollect', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -191,7 +199,7 @@ describe('AccountSettingCollect', () => {
     await renderCollectSettings()
 
     // 存量配置里 imgbb 的 apikey 应回填进表单；未配置的图床保留默认开关
-    const hostingCard = getCardByTitle('图床设置')
+    const hostingCard = await openAccordion('图床设置')
     const inputs = hostingCard.element.querySelectorAll('input, textarea')
     const values = Array.from(inputs).map(el => (el as HTMLInputElement).value)
     expect(values).toContain('bb-key')
@@ -211,7 +219,7 @@ describe('AccountSettingCollect', () => {
     await renderCollectSettings()
 
     // 打开图床卡片保存动作，断言 POST 载荷不含 smms
-    const hostingCard = getCardByTitle('图床设置')
+    const hostingCard = await openAccordion('图床设置')
     await fireEvent.click(hostingCard.getAllByRole('button', { name: /保存/ })[0])
     await waitFor(() => {
       const call = mocks.apiPost.mock.calls.find(([path]) => path === 'system/setting/ImageHostingParams')
@@ -223,7 +231,7 @@ describe('AccountSettingCollect', () => {
   it('图床保存载荷含 order 优先级序（拖拽列表顺序回写）', async () => {
     await renderCollectSettings()
 
-    const hostingCard = getCardByTitle('图床设置')
+    const hostingCard = await openAccordion('图床设置')
     await fireEvent.click(hostingCard.getAllByRole('button', { name: /保存/ })[0])
     await waitFor(() => {
       const call = mocks.apiPost.mock.calls.find(([path]) => path === 'system/setting/ImageHostingParams')
@@ -254,7 +262,7 @@ describe('AccountSettingCollect', () => {
 
     await renderCollectSettings()
 
-    const hostingCard = getCardByTitle('图床设置')
+    const hostingCard = await openAccordion('图床设置')
     await fireEvent.click(hostingCard.getAllByRole('button', { name: /保存/ })[0])
     await waitFor(() => {
       const call = mocks.apiPost.mock.calls.find(([path]) => path === 'system/setting/ImageHostingParams')
@@ -283,7 +291,7 @@ describe('AccountSettingCollect', () => {
 
     await renderCollectSettings()
 
-    const hostingCard = getCardByTitle('图床设置')
+    const hostingCard = await openAccordion('图床设置')
     const values = Array.from(hostingCard.element.querySelectorAll('input'))
       .map(el => (el as HTMLInputElement).value)
     // 用户序 imgbox 首位：账号/密码回填
@@ -312,7 +320,7 @@ describe('AccountSettingCollect', () => {
 
     await renderCollectSettings()
 
-    const hostingCard = getCardByTitle('图床设置')
+    const hostingCard = await openAccordion('图床设置')
     const text = hostingCard.element.textContent ?? ''
     // 优先级徽标按拖拽顺序编号（顺序 = 实际取用优先级）
     expect(text).toMatch(/优先级\s*1/)
@@ -328,7 +336,7 @@ describe('AccountSettingCollect', () => {
   it('线路卡片渲染优先级序号；refactor 参数段独占子面板；三条线路开关均可用', async () => {
     await renderCollectSettings()
 
-    const sourceCard = getCardByTitle('简介抓取线路')
+    const sourceCard = await openAccordion('简介抓取线路')
     const text = sourceCard.element.textContent ?? ''
     // 默认序 douban → ptgen_refactor → wmdb
     expect(text).toMatch(/优先级\s*1/)
