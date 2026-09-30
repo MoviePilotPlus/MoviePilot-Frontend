@@ -932,3 +932,11 @@ architecture 基线四刷新。
 - 冲突：零冲突自动合并（14 文件 +294/−69）。eslint-suppressions.json 自动并集。
 - 验证：yarn install --immutable ✓；eslint --max-warnings=0 ✓；vitest 3514 过 / 10 败——失败族与 82 轮完全一致（format-changed×4 symlink、UserProfile×2 CRLF、TransferHistoryView×2 CRLF、glassOverlay×1、app-glass-optical-preload×1），已知 Windows 环境族，非本轮引入。
 - 版本：package.json 3.0.10 → 3.0.11（上游 22bd1388 钉回，与后端 FRONTEND_VERSION v3.0.10 暂差一版——后端本轮无 release 提交未 bump，属上游两仓节奏差，待下轮 release 对齐）。
+
+## 第 84 次合并（2026-10-01）
+
+- 范围：22bd1388..afc70418（8 提交，v3.0.11 → v3.1.0）
+- 上游内容：v3.1.0 发布（d41f9fe8）；MediaVault 更名 Vyo（afc70418）；高级实验设置新增 API 文档开关（9ec5e68f）；音乐预览证据与专辑版本按文件组纠正（bdbaa5f3）；SMB 每服务器多共享配置（2462c0d3）；历史页移动端空态适配视口（84133be6）；新版浏览器跳过缓存告警（b15b6f8f）；玻璃背景噪点平铺视口（fbad9c69）。
+- 冲突：零冲突自动合并（27 文件 +1716/−84）。
+- 验证：yarn install --immutable ✓；eslint --max-warnings=0 ✓；vitest 3542 过 / 10 败——失败族与 83 轮完全一致（format-changed×4、UserProfile×2、TransferHistoryView×2、glassOverlay×1、app-glass-optical-preload×1），已知 Windows 环境族。
+- 版本：package.json 3.0.11 → 3.1.0，与后端本轮 v3.1.0 对齐。
