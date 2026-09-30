@@ -65,6 +65,8 @@ const zhCN = {
       tencentLinePhone: '手机App形态（部分版权内容仅此线路放行）',
       tencentLineAuto: '智能切换（TV被拒自动试手机）',
       accountSettings: '账号登录',
+      accountSettingsDesc: '配置各视频源的登录凭据与下载线路（按源折叠分区）',
+      templateNotConfigured: '未配置',
       teamConfig: '制作组配置',
       basicSaveSuccess: '基础设置保存成功',
       basicSaveFailed: '基础设置保存失败',

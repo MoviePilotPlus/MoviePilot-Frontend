@@ -4,6 +4,7 @@
 import { useToast } from 'vue-toastification'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
+import { SCREENSHOT_ENV_KEYS } from './share'
 
 // 截图模板卡：截图拼接模板配置引擎（预设 + 可视化调参 + 预览 + 保存）。
 // basic 由父级 provide（CollectSettings.Basic 响应式引用）：初始化读 SCREENSHOT_TEMPLATE_CONFIG /
@@ -91,7 +92,13 @@ async function saveScreenshotConfig() {
   savingScreenshotConfig.value = true
   try {
     const json = JSON.stringify(tplConfig.value)
-    await api.post('system/env', { SCREENSHOT_TEMPLATE_CONFIG: json })
+    // 截图组键整卡一次提交：模板 JSON + 截图参数（基础/命名卡提交时剔除截图键）
+    const payload: Record<string, unknown> = { SCREENSHOT_TEMPLATE_CONFIG: json }
+    for (const key of SCREENSHOT_ENV_KEYS) {
+      if (key !== 'SCREENSHOT_TEMPLATE' && key !== 'SCREENSHOT_TEMPLATE_CONFIG')
+        payload[key] = basic[key]
+    }
+    await api.post('system/env', payload)
     // 回写表单组：否则随后保存基础设置时会把旧模板 JSON 原样提交回去（两处保存互相覆盖）
     basic.SCREENSHOT_TEMPLATE_CONFIG = json
     $toast.success(t('setting.collect.screenshotConfigSaveSuccess'))
@@ -139,6 +146,13 @@ const metadataPositionItems = computed(() => [
 const metadataAlignItems = computed(() => [
   { title: t('setting.collect.alignLeft'), value: 'left' },
   { title: t('setting.collect.alignCenter'), value: 'center' },
+])
+
+// 截图 HDR/DV 色彩处理引擎选项（与截图参数同卡）
+const screenshotHdrEngineOptions = computed(() => [
+  { title: t('setting.collect.hdrEngineAuto'), value: 'auto' },
+  { title: t('setting.collect.hdrEngineLibplacebo'), value: 'libplacebo' },
+  { title: t('setting.collect.hdrEngineZscale'), value: 'zscale' },
 ])
 </script>
 
@@ -300,6 +314,84 @@ const metadataAlignItems = computed(() => [
         </VCol>
       </VRow>
 
+      <!-- 截图参数（自基础设置卡迁入：一张卡管全部截图配置，整卡一次保存） -->
+      <div class="settings-section-title mt-4">{{ t('setting.collect.sectionScreenshot') }}</div>
+      <VRow dense>
+        <VCol cols="12" md="6">
+          <VSelect
+            v-model="basic.SCREENSHOT_HDR_PROCESSOR"
+            :items="screenshotHdrEngineOptions"
+            :label="t('setting.collect.screenshotHdrEngine')"
+            :hint="t('setting.collect.screenshotHdrEngineHint')"
+            persistent-hint
+            prepend-inner-icon="mdi-palette"
+          />
+        </VCol>
+        <VCol cols="12" md="6">
+          <VSwitch
+            v-model="basic.SCREENSHOT_GRID_ENABLED"
+            :label="t('setting.collect.screenshotGridEnabled')"
+            :hint="t('setting.collect.screenshotGridEnabledHint')"
+            persistent-hint
+          />
+        </VCol>
+        <VCol cols="12" md="6">
+          <VSwitch
+            v-model="basic.SCREENSHOT_CACHE_ENABLED"
+            :label="t('setting.collect.screenshotCacheEnabled')"
+            :hint="t('setting.collect.screenshotCacheEnabledHint')"
+            persistent-hint
+          />
+        </VCol>
+        <VCol cols="12" md="6">
+          <VTextField
+            v-model.number="basic.SCREENSHOT_COUNT"
+            type="number"
+            :label="t('setting.collect.screenshotCount')"
+            :hint="t('setting.collect.screenshotCountHint')"
+            placeholder="4"
+            suffix="张"
+            min="1"
+            persistent-hint
+            prepend-inner-icon="mdi-image-multiple"
+          />
+        </VCol>
+        <VCol cols="12" md="6">
+          <VTextField
+            v-model.number="basic.SCREENSHOT_COMPRESS_LIMIT"
+            type="number"
+            :label="t('setting.collect.screenshotCompressLimit')"
+            :hint="t('setting.collect.screenshotCompressLimitHint')"
+            placeholder="5242880"
+            suffix="字节"
+            min="0"
+            persistent-hint
+            prepend-inner-icon="mdi-image-size-select-large"
+          />
+        </VCol>
+        <VCol cols="12" md="6">
+          <VTextField
+            v-model.number="basic.SCREENSHOT_MIN_SIZE_LIMIT"
+            type="number"
+            :label="t('setting.collect.screenshotMinSizeLimit')"
+            :hint="t('setting.collect.screenshotMinSizeLimitHint')"
+            placeholder="1843200"
+            suffix="字节"
+            min="0"
+            persistent-hint
+            prepend-inner-icon="mdi-image-size-select-small"
+          />
+        </VCol>
+        <VCol cols="12" md="6">
+          <VSwitch
+            v-model="basic.SCREENSHOT_QUALITY_CHECK"
+            :label="t('setting.collect.screenshotQualityCheck')"
+            :hint="t('setting.collect.screenshotQualityCheckHint')"
+            persistent-hint
+          />
+        </VCol>
+      </VRow>
+
       <!-- 预览大图（VDialog 传送门渲染，置于卡内保持组件单根以继承锚点 id） -->
       <VDialog v-model="tplPreviewLarge" max-width="95vw">
         <VImg v-if="tplPreviewSrc" :src="tplPreviewSrc" max-height="90vh" contain @click="tplPreviewLarge = false" style="cursor:pointer" class="rounded-0" />
@@ -307,3 +399,16 @@ const metadataAlignItems = computed(() => [
     </VCardText>
   </VCard>
 </template>
+
+<style scoped>
+/* 分区标题（与基础设置卡同视觉） */
+.settings-section-title {
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-block: 1.35rem 0.9rem;
+  padding-inline-start: 0.55rem;
+  border-inline-start: 3px solid rgb(var(--v-theme-primary));
+}
+</style>

@@ -86,8 +86,6 @@ function mockAllSettings(overrides: { imageHosting?: unknown } = {}) {
         return settingEnvelope('bili-cookie-1')
       case 'system/setting/ImageHostingParams':
         return settingEnvelope(overrides.imageHosting ?? imageHostingFixture)
-      case 'system/setting/MediaServers':
-        return settingEnvelope(null)
       case 'system/setting/TEAM_PARAMS':
         return settingEnvelope(teamParamsFixture)
       case 'site/':
@@ -105,6 +103,21 @@ function getCardByTitle(title: string) {
   expect(card).not.toBeNull()
   const queries = within(card)
   return { ...queries, element: card }
+}
+
+/** 按 data-testid 取凭据分区面板（视频源账号手风琴卡）。 */
+function getCredentialPanel(key: string) {
+  const panel = document.body.querySelector(`[data-testid="credential-panel-${key}"]`) as HTMLElement | null
+  expect(panel).not.toBeNull()
+  return panel!
+}
+
+/** 展开凭据面板（Vuetify 折叠面板内容默认懒渲染，断言前先展开）。 */
+async function openCredentialPanel(key: string) {
+  const panel = getCredentialPanel(key)
+  const header = panel.querySelector('.v-expansion-panel-title') as HTMLElement
+  await fireEvent.click(header)
+  return panel
 }
 
 /** 等待挂载期的全部异步 GET 收敛。 */
@@ -130,20 +143,32 @@ describe('AccountSettingCollect', () => {
   it('拆开 system/setting 双层信封回填七类 Cookie/Ticket 表单', async () => {
     await renderCollectSettings()
 
-    const tencentCard = getCardByTitle('腾讯视频Cookie')
-    expect(tencentCard.getAllByDisplayValue('tencent-cookie-1').length).toBeGreaterThan(0)
+    const tencent = await openCredentialPanel('tencent')
+    await waitFor(() => {
+      expect(within(tencent).getAllByDisplayValue('tencent-cookie-1').length).toBeGreaterThan(0)
+    })
 
-    const iqiyiCard = getCardByTitle('爱奇艺Cookie')
-    expect(iqiyiCard.getAllByDisplayValue('iqiyi-cookie-1').length).toBeGreaterThan(0)
+    const iqiyi = await openCredentialPanel('iqiyi')
+    await waitFor(() => {
+      expect(within(iqiyi).getAllByDisplayValue('iqiyi-cookie-1').length).toBeGreaterThan(0)
+    })
 
-    const youkuCard = getCardByTitle('优酷Cookie')
-    expect(youkuCard.getAllByDisplayValue('youku-cookie-1').length).toBeGreaterThan(0)
+    const youku = await openCredentialPanel('youku')
+    await waitFor(() => {
+      expect(within(youku).getAllByDisplayValue('youku-cookie-1').length).toBeGreaterThan(0)
+      expect(within(youku).getAllByDisplayValue('youku-stoken-1').length).toBeGreaterThan(0)
+    })
 
-    const stokenCard = getCardByTitle('优酷Stoken')
-    expect(stokenCard.getAllByDisplayValue('youku-stoken-1').length).toBeGreaterThan(0)
+    const mgtv = await openCredentialPanel('mgtv')
+    await waitFor(() => {
+      expect(within(mgtv).getAllByDisplayValue('tv-ticket-1').length).toBeGreaterThan(0)
+      expect(within(mgtv).getAllByDisplayValue('app-ticket-1').length).toBeGreaterThan(0)
+    })
 
-    const biliCard = getCardByTitle('哔哩哔哩Cookie')
-    expect(biliCard.getAllByDisplayValue('bili-cookie-1').length).toBeGreaterThan(0)
+    const bili = await openCredentialPanel('bilibili')
+    await waitFor(() => {
+      expect(within(bili).getAllByDisplayValue('bili-cookie-1').length).toBeGreaterThan(0)
+    })
   })
 
   it('信封 value 为 null 时表单保持空串不炸（未配置过的新装场景）', async () => {
@@ -157,9 +182,9 @@ describe('AccountSettingCollect', () => {
 
     await renderCollectSettings()
 
-    const tencentCard = getCardByTitle('腾讯视频Cookie')
-    const input = tencentCard.element.querySelector("input, textarea") as HTMLInputElement
-    expect(input.value).toBe('')
+    const tencent = await openCredentialPanel('tencent')
+    const textarea = tencent.querySelector('textarea') as HTMLTextAreaElement
+    expect(textarea.value).toBe('')
   })
 
   it('图床设置拆信封取 value 并合并默认子键（2026-08-24 信封回归）', async () => {
@@ -176,14 +201,7 @@ describe('AccountSettingCollect', () => {
     mocks.apiGet.mockImplementation((endpoint: string) => {
       if (endpoint === 'system/setting/ImageHostingParams')
         return settingEnvelope({ ...imageHostingFixture, smms: { apikey: 'dead', active: true } })
-      return null
-    })
-    // 覆盖默认实现后重新放行其它端点
-    mocks.apiGet.mockImplementation((endpoint: string) => {
-      if (endpoint === 'system/setting/ImageHostingParams')
-        return settingEnvelope({ ...imageHostingFixture, smms: { apikey: 'dead', active: true } })
       if (endpoint === 'system/env') return systemEnvFixture
-      if (endpoint === 'system/setting/MediaServers') return settingEnvelope(null)
       if (endpoint === 'system/setting/TEAM_PARAMS') return settingEnvelope(teamParamsFixture)
       if (endpoint.startsWith('system/setting/')) return settingEnvelope(null)
       if (endpoint === 'site/' || endpoint === 'siteschema/') return []
@@ -228,7 +246,6 @@ describe('AccountSettingCollect', () => {
           panda: { apikey: '', active: true },
         })
       if (endpoint === 'system/env') return systemEnvFixture
-      if (endpoint === 'system/setting/MediaServers') return settingEnvelope(null)
       if (endpoint === 'system/setting/TEAM_PARAMS') return settingEnvelope(teamParamsFixture)
       if (endpoint.startsWith('system/setting/')) return settingEnvelope(null)
       if (endpoint === 'site/' || endpoint === 'siteschema/') return []
@@ -258,7 +275,6 @@ describe('AccountSettingCollect', () => {
           pixhost: { active: true },
         })
       if (endpoint === 'system/env') return systemEnvFixture
-      if (endpoint === 'system/setting/MediaServers') return settingEnvelope(null)
       if (endpoint === 'system/setting/TEAM_PARAMS') return settingEnvelope(teamParamsFixture)
       if (endpoint.startsWith('system/setting/')) return settingEnvelope(null)
       if (endpoint === 'site/' || endpoint === 'siteschema/') return []
@@ -288,7 +304,6 @@ describe('AccountSettingCollect', () => {
           pixhost: { active: true },
         })
       if (endpoint === 'system/env') return systemEnvFixture
-      if (endpoint === 'system/setting/MediaServers') return settingEnvelope(null)
       if (endpoint === 'system/setting/TEAM_PARAMS') return settingEnvelope(teamParamsFixture)
       if (endpoint.startsWith('system/setting/')) return settingEnvelope(null)
       if (endpoint === 'site/' || endpoint === 'siteschema/') return []
@@ -329,15 +344,20 @@ describe('AccountSettingCollect', () => {
   it('保存 Cookie 时 POST 原值到对应 system/setting 键', async () => {
     await renderCollectSettings()
 
-    const tencentCard = getCardByTitle('腾讯视频Cookie')
-    await fireEvent.click(tencentCard.getByRole('button', { name: /保存/ }))
+    const tencent = await openCredentialPanel('tencent')
+    await waitFor(() => {
+      expect(within(tencent).getAllByDisplayValue('tencent-cookie-1').length).toBeGreaterThan(0)
+    })
+    // 分区内第一个保存按钮 = 凭据保存（线路保存按钮在后）
+    const saveBtns = within(tencent).getAllByRole('button', { name: /保存/ })
+    await fireEvent.click(saveBtns[0])
     await waitFor(() => {
       expect(mocks.apiPost).toHaveBeenCalledWith('system/setting/TencentCookie', 'tencent-cookie-1')
     })
     expect(mocks.toastSuccess).toHaveBeenCalledWith('腾讯视频Cookie保存成功')
   })
 
-  it('基础设置保存 POST system/env 且只含表单声明键', async () => {
+  it('基础设置保存 POST system/env 且只含表单声明键（截图键由截图卡独占）', async () => {
     await renderCollectSettings()
 
     const basicCard = getCardByTitle('基础设置')
@@ -348,28 +368,39 @@ describe('AccountSettingCollect', () => {
       const payload = call?.[1] as Record<string, unknown>
       expect(payload.MEDIA_DIR).toBe('/media')
       expect(payload.YOUKU_DOWNLOAD_LINE).toBeUndefined()
+      // 截图组键已并入截图卡保存，基础设置不再提交
+      expect(payload.SCREENSHOT_QUALITY_CHECK).toBeUndefined()
+      expect(payload.SCREENSHOT_TEMPLATE_CONFIG).toBeUndefined()
     })
   })
 
-  it('截图质量校验开关随基础设置整组提交，默认开启', async () => {
+  it('截图参数随截图卡整卡提交（模板 JSON + 质量校验开关）', async () => {
     await renderCollectSettings()
 
-    const basicCard = getCardByTitle('基础设置')
-    expect(basicCard.getByText('截图质量校验')).toBeTruthy()
-    await fireEvent.click(basicCard.getByRole('button', { name: /保存/ }))
+    const screenshotCard = getCardByTitle('截图拼接模板')
+    expect(screenshotCard.getByText('截图质量校验')).toBeTruthy()
+    await fireEvent.click(screenshotCard.getByRole('button', { name: /保存/ }))
     await waitFor(() => {
       const call = mocks.apiPost.mock.calls.find(([path]) => path === 'system/env')
       expect(call).toBeTruthy()
       const payload = call?.[1] as Record<string, unknown>
       expect(payload.SCREENSHOT_QUALITY_CHECK).toBe(true)
+      expect(typeof payload.SCREENSHOT_TEMPLATE_CONFIG).toBe('string')
+      expect(payload.MEDIA_DIR).toBeUndefined()
     })
   })
 
   it('优酷下载线路保存独立 POST，不夹带基础设置键', async () => {
     await renderCollectSettings()
 
-    const youkuCard = getCardByTitle('优酷下载线路')
-    await fireEvent.click(youkuCard.getByRole('button', { name: /保存/ }))
+    const youku = await openCredentialPanel('youku')
+    await waitFor(() => {
+      expect(within(youku).getAllByDisplayValue('youku-cookie-1').length).toBeGreaterThan(0)
+    })
+    // 优酷分区内保存按钮顺序：Cookie → Stoken → 下载线路，取最后一个
+    const saveBtns = within(youku).getAllByRole('button', { name: /保存/ })
+    expect(saveBtns.length).toBe(3)
+    await fireEvent.click(saveBtns[saveBtns.length - 1])
     await waitFor(() => {
       const call = mocks.apiPost.mock.calls.find(([path]) => path === 'system/env')
       expect(call).toBeTruthy()

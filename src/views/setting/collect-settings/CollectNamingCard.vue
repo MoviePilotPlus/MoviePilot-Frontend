@@ -4,6 +4,7 @@
 import { useToast } from 'vue-toastification'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
+import { buildEnvPayload } from './share'
 import type { ComponentPublicInstance } from 'vue'
 
 // 命名格式模板卡：六个命名模板字段 + 变量芯片插入。
@@ -84,10 +85,10 @@ function insertFormatVariable(variable: string) {
   })
 }
 
-// 保存命名模板（与基础设置同组提交 system/env）
+// 保存命名模板（与基础设置同组提交 system/env；截图组键由截图卡独占保存）
 async function saveNamingSettings() {
   try {
-    await api.post('system/env', basic)
+    await api.post('system/env', buildEnvPayload(basic))
     $toast.success(t('setting.collect.basicSaveSuccess'))
   } catch (error) {
     console.log(error)

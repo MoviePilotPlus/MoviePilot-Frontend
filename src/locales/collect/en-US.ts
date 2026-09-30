@@ -65,6 +65,8 @@ const enUS = {
       tencentLinePhone: 'Mobile mode (some titles only allow this)',
       tencentLineAuto: 'Auto switch (TV first, then mobile)',
       accountSettings: 'Account Login',
+      accountSettingsDesc: 'Configure login credentials and download lines for each source',
+      templateNotConfigured: 'Not configured',
       teamConfig: 'Team Config',
       basicSaveSuccess: 'Basic settings saved successfully',
       basicSaveFailed: 'Failed to save basic settings',

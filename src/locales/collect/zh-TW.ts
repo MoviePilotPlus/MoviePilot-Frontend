@@ -65,6 +65,8 @@ const zhTW = {
       tencentLinePhone: '手機App形態（部分版權內容僅此線路放行）',
       tencentLineAuto: '智能切換（TV被拒自動試手機）',
       accountSettings: '賬號登錄',
+      accountSettingsDesc: '配置各視頻源的登入憑據與下載線路（按源摺疊分區）',
+      templateNotConfigured: '未配置',
       teamConfig: '製作組配置',
       basicSaveSuccess: '基礎設置保存成功',
       basicSaveFailed: '基礎設置保存失敗',

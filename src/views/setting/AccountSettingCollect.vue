@@ -1,7 +1,6 @@
 <script lang="ts" setup>
 // @ts-nocheck
-import { useToast } from 'vue-toastification'
-import { VRow, VSelect } from 'vuetify/lib/components/index.mjs'
+import { VRow } from 'vuetify/lib/components/index.mjs'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
 import CollectBasicCard from './collect-settings/CollectBasicCard.vue'
@@ -10,16 +9,15 @@ import CollectScreenshotCard from './collect-settings/CollectScreenshotCard.vue'
 import CollectImageHostingCard from './collect-settings/CollectImageHostingCard.vue'
 import CollectPtgenCard from './collect-settings/CollectPtgenCard.vue'
 import CollectSiteSchemaCard from './collect-settings/CollectSiteSchemaCard.vue'
+import CollectCredentialsCard from './collect-settings/CollectCredentialsCard.vue'
 import CollectTeamCard from './collect-settings/CollectTeamCard.vue'
 
-// 采集设置页（设定 → 采集）：装配各分区卡片 + 视频源账号凭据卡。
-// 分区卡位于 ./collect-settings/，各自负责加载与保存；本页持有 Basic 组表单状态。
+// 采集设置页（设定 → 采集）：装配各分区卡片。
+// 分区卡位于 ./collect-settings/，各自负责加载与保存；本页持有 Basic 组与
+// 源线路组的表单状态（经 provide 共享给分区卡），并提供页内锚点导航。
 
 // 国际化
 const { t } = useI18n()
-
-// 提示框
-const $toast = useToast()
 
 // ===== 页内锚点导航：采集设置卡片分区 =====
 const collectSectionAnchors = [
@@ -39,9 +37,29 @@ function scrollToCollectSection(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'auto', block: 'start' })
 }
 
+// scrollspy：高亮当前滚动到的分区（jsdom 无 IntersectionObserver，测试环境自动跳过）
+const activeAnchor = ref('')
+let anchorObserver: IntersectionObserver | null = null
+onMounted(() => {
+  if (typeof IntersectionObserver === 'undefined') return
+  anchorObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) activeAnchor.value = entry.target.id
+    }
+  }, { rootMargin: '-25% 0px -65% 0px' })
+  for (const anchor of collectSectionAnchors) {
+    const el = document.getElementById(anchor.id)
+    if (el) anchorObserver.observe(el)
+  }
+})
+onBeforeUnmount(() => {
+  anchorObserver?.disconnect()
+  anchorObserver = null
+})
+
 // 采集器设置项
 const CollectSettings = ref<any>({
-  // 基础设置
+  // 基础设置（截图组键由截图卡独占保存）
   Basic: {
     MEDIA_DIR: '',
     DOWNLOAD_DIR: '',
@@ -83,166 +101,9 @@ const CollectSettings = ref<any>({
   },
 })
 
-// 向分区卡共享 Basic 组表单状态（读写同一响应式对象；卡内保存也基于它）
+// 向分区卡共享表单状态（读写同一响应式对象；卡内保存也基于它们）
 provide('collectSettingsBasic', CollectSettings.value.Basic)
-
-const youkuDownloadLineOptions = computed(() => [
-  { title: t('setting.collect.youkuLineNormalTv'), value: 'normal_tv' },
-  { title: t('setting.collect.youkuLineAndroid'), value: 'android' },
-  { title: t('setting.collect.youkuLineFrameEnjoy'), value: 'frame_enjoy_cinema' },
-])
-
-const tencentFetchLineOptions = computed(() => [
-  { title: t('setting.collect.tencentLineNormalTv'), value: 'normal_tv' },
-  { title: t('setting.collect.tencentLinePhone'), value: 'phone' },
-  { title: t('setting.collect.tencentLineAuto'), value: 'auto' },
-])
-
-// 腾讯视频Cookie
-const tencentCookie = ref('')
-const mgTvTicket = ref('')
-const mgAppTicket = ref('')
-const iqiyiCookie = ref('')
-const youkuCookie = ref('')
-const youkuStoken = ref('')
-const bilibiliCookie = ref('')
-
-// 查询已设置的腾讯视频Cookie
-async function queryTencentCookie() {
-  try {
-    const result: { [key: string]: any } = await api.get('system/setting/TencentCookie')
-    if (result && result.value) tencentCookie.value = result.value
-  } catch (error) {
-    console.log(error)
-  }
-}
-async function queryTvAppTicket() {
-  try {
-    const result: { [key: string]: any } = await api.get('system/setting/MgTvTicket')
-    if (result && result.value) mgTvTicket.value = result.value
-  } catch (error) {
-    console.log(error)
-  }
-}
-// 查询已设置的芒果App端Ticket
-async function queryMgAppTicket() {
-  try {
-    const result: { [key: string]: any } = await api.get('system/setting/MgAppTicket')
-    if (result && result.value) mgAppTicket.value = result.value
-  } catch (error) {
-    console.log(error)
-  }
-}
-
-// 查询已设置的爱奇艺Cookie
-async function queryIqiyiCookie() {
-  try {
-    const result: { [key: string]: any } = await api.get('system/setting/IQiyiCookie')
-    if (result && result.value) iqiyiCookie.value = result.value
-  } catch (error) {
-    console.log(error)
-  }
-}
-
-// 查询已设置的优酷Cookie
-async function queryYoukuCookie() {
-  try {
-    const result: { [key: string]: any } = await api.get('system/setting/YoukuCookie')
-    if (result && result.value) youkuCookie.value = result.value
-  } catch (error) {
-    console.log(error)
-  }
-}
-async function queryYoukuStoken() {
-  try {
-    const result: { [key: string]: any } = await api.get('system/setting/YoukuStoken')
-    if (result && result.value) youkuStoken.value = result.value
-  } catch (error) {
-    console.log(error)
-  }
-}
-
-// 查询已设置的哔哩哔哩Cookie
-async function queryBilibiliCookie() {
-  try {
-    const result: { [key: string]: any } = await api.get('system/setting/BilibiliCookie')
-    if (result && result.value) bilibiliCookie.value = result.value
-  } catch (error) {
-    console.log(error)
-  }
-}
-
-// 保存用户设置的腾讯视频Cookie
-async function saveTencentCookie() {
-  try {
-    await api.post('system/setting/TencentCookie', tencentCookie.value)
-    $toast.success(t('setting.collect.cookieSaveSuccess', { name: t('setting.collect.tencentCookie') }))
-  } catch (error) {
-    console.log(error)
-    $toast.error(t('setting.collect.cookieSaveFailed', { name: t('setting.collect.tencentCookie') }))
-  }
-}
-async function saveMgTvTicket() {
-  try {
-    await api.post('system/setting/MgTvTicket', mgTvTicket.value)
-    $toast.success(t('setting.collect.cookieSaveSuccess', { name: t('setting.collect.mgTvTicket') }))
-  } catch (error) {
-    console.log(error)
-    $toast.error(t('setting.collect.cookieSaveFailed', { name: t('setting.collect.mgTvTicket') }))
-  }
-}
-
-async function saveMgAppTicket() {
-  try {
-    await api.post('system/setting/MgAppTicket', mgAppTicket.value)
-    $toast.success(t('setting.collect.cookieSaveSuccess', { name: t('setting.collect.mgAppTicket') }))
-  } catch (error) {
-    console.log(error)
-    $toast.error(t('setting.collect.cookieSaveFailed', { name: t('setting.collect.mgAppTicket') }))
-  }
-}
-
-// 保存用户设置的爱奇艺Cookie
-async function saveIqiyiCookie() {
-  try {
-    await api.post('system/setting/IQiyiCookie', iqiyiCookie.value)
-    $toast.success(t('setting.collect.cookieSaveSuccess', { name: t('setting.collect.iqiyiCookie') }))
-  } catch (error) {
-    console.log(error)
-    $toast.error(t('setting.collect.cookieSaveFailed', { name: t('setting.collect.iqiyiCookie') }))
-  }
-}
-
-// 保存用户设置的优酷Cookie
-async function saveYoukuCookie() {
-  try {
-    await api.post('system/setting/YoukuCookie', youkuCookie.value)
-    $toast.success(t('setting.collect.cookieSaveSuccess', { name: t('setting.collect.youkuCookie') }))
-  } catch (error) {
-    console.log(error)
-    $toast.error(t('setting.collect.cookieSaveFailed', { name: t('setting.collect.youkuCookie') }))
-  }
-}
-// 保存用户设置的优酷Stoken
-async function saveYoukuStoken() {
-  try {
-    await api.post('system/setting/YoukuStoken', youkuStoken.value)
-    $toast.success(t('setting.collect.cookieSaveSuccess', { name: t('setting.collect.youkuStoken') }))
-  } catch (error) {
-    console.log(error)
-    $toast.error(t('setting.collect.cookieSaveFailed', { name: t('setting.collect.youkuStoken') }))
-  }
-}
-// 保存用户设置的哔哩哔哩Cookie
-async function saveBilibiliCookie() {
-  try {
-    await api.post('system/setting/BilibiliCookie', bilibiliCookie.value)
-    $toast.success(t('setting.collect.cookieSaveSuccess', { name: t('setting.collect.bilibiliCookie') }))
-  } catch (error) {
-    console.log(error)
-    $toast.error(t('setting.collect.cookieSaveFailed', { name: t('setting.collect.bilibiliCookie') }))
-  }
-}
+provide('collectSourceLines', { Youku: CollectSettings.value.Youku, Tencent: CollectSettings.value.Tencent })
 
 // 加载系统设置
 async function loadSystemSettings() {
@@ -259,39 +120,8 @@ async function loadSystemSettings() {
   }
 }
 
-// 调用API保存设置
-async function saveSystemSetting(value: { [key: string]: any }) {
-  try {
-    await api.post('system/env', value)
-    return true
-  } catch (error) {
-    console.log(error)
-  }
-  return false
-}
-
-// 保存优酷下载线路设置
-async function saveYoukuDownloadLineSettings() {
-  if (await saveSystemSetting(CollectSettings.value.Youku)) {
-    $toast.success(t('setting.collect.youkuDownloadLineSaveSuccess'))
-  }
-}
-
-async function saveTencentFetchLineSettings() {
-  if (await saveSystemSetting(CollectSettings.value.Tencent)) {
-    $toast.success(t('setting.collect.tencentFetchLineSaveSuccess'))
-  }
-}
-
 // 加载数据（分区卡的自身加载在各自组件 onMounted 内完成）
 onMounted(() => {
-  queryTencentCookie()
-  queryTvAppTicket()
-  queryMgAppTicket()
-  queryIqiyiCookie()
-  queryYoukuCookie()
-  queryYoukuStoken()
-  queryBilibiliCookie()
   loadSystemSettings()
 })
 </script>
@@ -304,6 +134,7 @@ onMounted(() => {
       :key="anchor.id"
       type="button"
       class="collect-anchor-tab"
+      :class="{ 'collect-anchor-tab-active': activeAnchor === anchor.id }"
       @click="scrollToCollectSection(anchor.id)"
     >
       {{ t(`setting.collect.${anchor.labelKey}`) }}
@@ -323,7 +154,7 @@ onMounted(() => {
     </VCol>
   </VRow>
 
-  <!-- 截图模板配置 -->
+  <!-- 截图模板配置（含截图参数，一张卡管全部截图设置） -->
   <VRow>
     <VCol cols="12">
       <CollectScreenshotCard :basic="CollectSettings.Basic" />
@@ -351,276 +182,10 @@ onMounted(() => {
     </VCol>
   </VRow>
 
+  <!-- 视频源账号：六源凭据 + 腾讯/优酷下载线路（按源折叠分区） -->
   <VRow>
     <VCol cols="12">
-      <VCard id="collect-accounts">
-        <VCardItem>
-          <VCardTitle> {{ t('setting.collect.tencentCookie') }}</VCardTitle>
-          <VCardSubtitle>{{ t('setting.collect.tencentCookieHint') }} </VCardSubtitle>
-        </VCardItem>
-        <VCardText>
-          <VTextarea
-            v-model="tencentCookie"
-            auto-grow
-            :placeholder="t('setting.collect.tencentCookie')"
-            :hint="t('setting.collect.tencentCookieHint')"
-            rows="3"
-            persistent-hint
-          />
-        </VCardText>
-        <VCardText>
-          <VAlert type="info" variant="tonal" :title="t('setting.collect.tencentCookieTipsTitle')">
-            <span v-html="t('setting.collect.tencentCookieTips')" />
-          </VAlert>
-        </VCardText>
-        <VCardText>
-          <VForm @submit.prevent="() => {}">
-            <div class="d-flex flex-wrap gap-4 mt-4">
-              <VBtn type="submit" @click="saveTencentCookie"> {{ t('common.save') }} </VBtn>
-            </div>
-          </VForm>
-        </VCardText>
-      </VCard>
-    </VCol>
-  </VRow>
-  <VRow>
-    <VCol cols="12">
-      <VCard>
-        <VCardItem>
-          <VCardTitle> {{ t('setting.collect.mgTvTicket') }}</VCardTitle>
-          <VCardSubtitle>{{ t('setting.collect.mgTvTicketHint') }} </VCardSubtitle>
-        </VCardItem>
-        <VCardText>
-          <VTextarea
-            v-model="mgTvTicket"
-            auto-grow
-            :placeholder="t('setting.collect.mgTvTicket')"
-            :hint="t('setting.collect.mgTvTicketHint')"
-            rows="3"
-            persistent-hint
-          />
-        </VCardText>
-        <VCardText>
-          <VForm @submit.prevent="() => {}">
-            <div class="d-flex flex-wrap gap-4 mt-4">
-              <VBtn type="submit" @click="saveMgTvTicket"> {{ t('common.save') }} </VBtn>
-            </div>
-          </VForm>
-        </VCardText>
-      </VCard>
-    </VCol>
-  </VRow>
-  <VRow>
-    <VCol cols="12">
-      <VCard>
-        <VCardItem>
-          <VCardTitle> {{ t('setting.collect.mgAppTicket') }}</VCardTitle>
-          <VCardSubtitle>{{ t('setting.collect.mgAppTicketHint') }} </VCardSubtitle>
-        </VCardItem>
-        <VCardText>
-          <VTextarea
-            v-model="mgAppTicket"
-            auto-grow
-            :placeholder="t('setting.collect.mgAppTicket')"
-            :hint="t('setting.collect.mgAppTicketHint')"
-            rows="3"
-            persistent-hint
-          />
-        </VCardText>
-        <VCardText>
-          <VForm @submit.prevent="() => {}">
-            <div class="d-flex flex-wrap gap-4 mt-4">
-              <VBtn type="submit" @click="saveMgAppTicket"> {{ t('common.save') }} </VBtn>
-            </div>
-          </VForm>
-        </VCardText>
-      </VCard>
-    </VCol>
-  </VRow>
-  <VRow>
-    <VCol cols="12">
-      <VCard>
-        <VCardItem>
-          <VCardTitle> {{ t('setting.collect.iqiyiCookie') }}</VCardTitle>
-          <VCardSubtitle>{{ t('setting.collect.iqiyiCookieHint') }} </VCardSubtitle>
-        </VCardItem>
-        <VCardText>
-          <VTextarea
-            v-model="iqiyiCookie"
-            auto-grow
-            :placeholder="t('setting.collect.iqiyiCookie')"
-            :hint="t('setting.collect.iqiyiCookieHint')"
-            rows="3"
-            persistent-hint
-          />
-        </VCardText>
-        <VCardText>
-          <VAlert type="info" variant="tonal" :title="t('setting.collect.iqiyiCookieTipsTitle')">
-            <span v-html="t('setting.collect.iqiyiCookieTips')" />
-          </VAlert>
-        </VCardText>
-        <VCardText>
-          <VForm @submit.prevent="() => {}">
-            <div class="d-flex flex-wrap gap-4 mt-4">
-              <VBtn type="submit" @click="saveIqiyiCookie"> {{ t('common.save') }} </VBtn>
-            </div>
-          </VForm>
-        </VCardText>
-      </VCard>
-    </VCol>
-  </VRow>
-  <VRow>
-    <VCol cols="12">
-      <VCard>
-        <VCardItem>
-          <VCardTitle> {{ t('setting.collect.youkuCookie') }}</VCardTitle>
-          <VCardSubtitle>{{ t('setting.collect.youkuCookieHint') }} </VCardSubtitle>
-        </VCardItem>
-        <VCardText>
-          <VTextarea
-            v-model="youkuCookie"
-            auto-grow
-            :placeholder="t('setting.collect.youkuCookie')"
-            :hint="t('setting.collect.youkuCookieHint')"
-            rows="3"
-            persistent-hint
-          />
-        </VCardText>
-        <VCardText>
-          <VAlert type="info" variant="tonal" :title="t('setting.collect.youkuCookieTipsTitle')">
-            <span v-html="t('setting.collect.youkuCookieTips')" />
-          </VAlert>
-        </VCardText>
-        <VCardText>
-          <VForm @submit.prevent="() => {}">
-            <div class="d-flex flex-wrap gap-4 mt-4">
-              <VBtn type="submit" @click="saveYoukuCookie"> {{ t('common.save') }} </VBtn>
-            </div>
-          </VForm>
-        </VCardText>
-      </VCard>
-    </VCol>
-  </VRow>
-  <VRow>
-    <VCol cols="12">
-      <VCard>
-        <VCardItem>
-          <VCardTitle> {{ t('setting.collect.youkuStoken') }}</VCardTitle>
-          <VCardSubtitle>{{ t('setting.collect.youkuStokenHint') }} </VCardSubtitle>
-        </VCardItem>
-        <VCardText>
-          <VTextarea
-            v-model="youkuStoken"
-            auto-grow
-            :placeholder="t('setting.collect.youkuStoken')"
-            :hint="t('setting.collect.youkuStokenHint')"
-            rows="3"
-            persistent-hint
-          />
-        </VCardText>
-        <VCardText>
-          <VAlert type="info" variant="tonal" :title="t('setting.collect.youkuStokenTipsTitle')">
-            <span v-html="t('setting.collect.youkuStokenTips')" />
-          </VAlert>
-        </VCardText>
-        <VCardText>
-          <VForm @submit.prevent="() => {}">
-            <div class="d-flex flex-wrap gap-4 mt-4">
-              <VBtn type="submit" @click="saveYoukuStoken"> {{ t('common.save') }} </VBtn>
-            </div>
-          </VForm>
-        </VCardText>
-      </VCard>
-    </VCol>
-  </VRow>
-  <VRow>
-    <VCol cols="12">
-      <VCard>
-        <VCardItem>
-          <VCardTitle>{{ t('setting.collect.youkuDownloadLine') }}</VCardTitle>
-          <VCardSubtitle>{{ t('setting.collect.youkuDownloadLineHint') }}</VCardSubtitle>
-        </VCardItem>
-        <VCardText>
-          <VSelect
-            v-model="CollectSettings.Youku.YOUKU_DOWNLOAD_LINE"
-            :items="youkuDownloadLineOptions"
-            item-title="title"
-            item-value="value"
-            :label="t('setting.collect.youkuDownloadLine')"
-            :hint="t('setting.collect.youkuDownloadLineHint')"
-            persistent-hint
-            prepend-inner-icon="mdi-routes"
-          />
-        </VCardText>
-        <VCardText>
-          <VForm @submit.prevent="() => {}">
-            <div class="d-flex flex-wrap gap-4 mt-4">
-              <VBtn type="submit" @click="saveYoukuDownloadLineSettings"> {{ t('common.save') }} </VBtn>
-            </div>
-          </VForm>
-        </VCardText>
-      </VCard>
-    </VCol>
-  </VRow>
-  <VRow>
-    <VCol cols="12">
-      <VCard>
-        <VCardItem>
-          <VCardTitle>{{ t('setting.collect.tencentFetchLine') }}</VCardTitle>
-          <VCardSubtitle>{{ t('setting.collect.tencentFetchLineHint') }}</VCardSubtitle>
-        </VCardItem>
-        <VCardText>
-          <VSelect
-            v-model="CollectSettings.Tencent.TENCENT_FETCH_LINE"
-            :items="tencentFetchLineOptions"
-            item-title="title"
-            item-value="value"
-            :label="t('setting.collect.tencentFetchLine')"
-            :hint="t('setting.collect.tencentFetchLineHint')"
-            persistent-hint
-            prepend-inner-icon="mdi-routes"
-          />
-        </VCardText>
-        <VCardText>
-          <VForm @submit.prevent="() => {}">
-            <div class="d-flex flex-wrap gap-4 mt-4">
-              <VBtn type="submit" @click="saveTencentFetchLineSettings"> {{ t('common.save') }} </VBtn>
-            </div>
-          </VForm>
-        </VCardText>
-      </VCard>
-    </VCol>
-  </VRow>
-  <VRow>
-    <VCol cols="12">
-      <VCard>
-        <VCardItem>
-          <VCardTitle> {{ t('setting.collect.bilibiliCookie') }}</VCardTitle>
-          <VCardSubtitle>{{ t('setting.collect.bilibiliCookieHint') }} </VCardSubtitle>
-        </VCardItem>
-        <VCardText>
-          <VTextarea
-            v-model="bilibiliCookie"
-            auto-grow
-            :placeholder="t('setting.collect.bilibiliCookie')"
-            :hint="t('setting.collect.bilibiliCookieHint')"
-            rows="3"
-            persistent-hint
-          />
-        </VCardText>
-        <VCardText>
-          <VAlert type="info" variant="tonal" :title="t('setting.collect.bilibiliCookieTipsTitle')">
-            <span v-html="t('setting.collect.bilibiliCookieTips')" />
-          </VAlert>
-        </VCardText>
-        <VCardText>
-          <VForm @submit.prevent="() => {}">
-            <div class="d-flex flex-wrap gap-4 mt-4">
-              <VBtn type="submit" @click="saveBilibiliCookie"> {{ t('common.save') }} </VBtn>
-            </div>
-          </VForm>
-        </VCardText>
-      </VCard>
+      <CollectCredentialsCard />
     </VCol>
   </VRow>
 
@@ -684,6 +249,12 @@ onMounted(() => {
 }
 
 .collect-anchor-tab:active {
+  color: rgb(var(--v-theme-primary));
+}
+
+/* scrollspy 当前分区高亮 */
+.collect-anchor-tab-active {
+  background-color: rgba(var(--v-theme-primary), 0.1);
   color: rgb(var(--v-theme-primary));
 }
 </style>

@@ -4,9 +4,11 @@
 import { useToast } from 'vue-toastification'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
+import { buildEnvPayload } from './share'
 
-// 基础设置卡：目录 / 下载参数 / 标签与调试 / 截图 / 简介与豆瓣 / 种子。
-// basic 由父级 provide（CollectSettings.Basic 响应式引用，读写同一对象，整体提交 system/env）。
+// 基础设置卡：目录 / 下载参数 / 标签与调试 / 简介与豆瓣 / 种子。
+// basic 由父级 provide（CollectSettings.Basic 响应式引用，读写同一对象）；
+// 提交 system/env 时剔除截图组键（由截图卡独占保存，见 share.ts）。
 const basic = inject('collectSettingsBasic')
 
 const { t } = useI18n()
@@ -19,10 +21,10 @@ const screenshotHdrEngineOptions = computed(() => [
   { title: t('setting.collect.hdrEngineZscale'), value: 'zscale' },
 ])
 
-// 保存基础设置
+// 保存基础设置（截图组键由截图卡独占保存，此处剔除）
 async function saveBasicSettings() {
   try {
-    await api.post('system/env', basic)
+    await api.post('system/env', buildEnvPayload(basic))
     $toast.success(t('setting.collect.basicSaveSuccess'))
   } catch (error) {
     console.log(error)
