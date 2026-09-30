@@ -1128,15 +1128,9 @@
       "count": 1
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 28
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
+      "count": 11
     },
     "no-prototype-builtins": {
-      "count": 1
-    },
-    "sonarjs/no-ignored-exceptions": {
       "count": 1
     }
   },
@@ -1171,6 +1165,53 @@
   "src/views/setting/AccountSettingSystem.vue": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
+    }
+  },
+  "src/views/setting/collect-settings/CollectBasicCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "src/views/setting/collect-settings/CollectImageHostingCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 6
+    }
+  },
+  "src/views/setting/collect-settings/CollectNamingCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "src/views/setting/collect-settings/CollectPtgenCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "src/views/setting/collect-settings/CollectScreenshotCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 7
+    }
+  },
+  "src/views/setting/collect-settings/CollectSiteSchemaCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/views/setting/collect-settings/CollectTeamCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
     }
   },
   "src/views/subscribe/FullCalendarView.vue": {
