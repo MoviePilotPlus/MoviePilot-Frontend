@@ -940,3 +940,10 @@ architecture 基线四刷新。
 - 冲突：零冲突自动合并（27 文件 +1716/−84）。
 - 验证：yarn install --immutable ✓；eslint --max-warnings=0 ✓；vitest 3542 过 / 10 败——失败族与 83 轮完全一致（format-changed×4、UserProfile×2、TransferHistoryView×2、glassOverlay×1、app-glass-optical-preload×1），已知 Windows 环境族。
 - 版本：package.json 3.0.11 → 3.1.0，与后端本轮 v3.1.0 对齐。
+
+## 第 85 次合并（2026-10-01）
+
+- 范围：d2f501fa..42063d1b（9 提交，v3.1.0 保持）
+- 上游内容：agent 思考态四连修（timeline 行渲染 091582a5、耗时展示 37c49954、打点动画 91f6ab53、取消停表 42063d1b、工具期状态 2967544ba/842ba547e）；订阅卡海报色调染色+背景窗化（6a095e3e）；订阅卡隐藏订阅者名（1a07060e）；系统通知显式 severity（690dacd6）。
+- 冲突：零冲突自动合并（9 文件 +642/−105）。
+- 验证：yarn install --immutable ✓；eslint ✓；vitest 3551 过 / 10 败——失败族与 84 轮完全一致（format-changed×4、UserProfile×2、TransferHistoryView×2、glassOverlay×1、app-glass-optical-preload×1），已知 Windows 环境族。
