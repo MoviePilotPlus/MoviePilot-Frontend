@@ -23,6 +23,8 @@ interface PtgenSourceItem {
 }
 const ptgenSourceOrder = ref<PtgenSourceItem[]>([])
 const defaultPtgenSourceOrder = ['douban', 'ptgen_refactor', 'wmdb']
+// 行内折叠状态：键为线路 key，值为展开面板索引（null=收起）；仅 refactor 有参数段
+const openPtgenPanels = ref<Record<string, number | null>>({})
 
 function ptgenSourceLabel(key: string) {
   const keyMap: Record<string, string> = {
@@ -101,12 +103,6 @@ onMounted(() => {
       <VCardSubtitle>{{ t('setting.collect.ptgenSourceDesc') }}</VCardSubtitle>
     </VCardItem>
     <VCardText>
-      <VExpansionPanels variant="accordion">
-        <VExpansionPanel>
-          <VExpansionPanelTitle>
-            <span class="text-subtitle-1 font-weight-bold">{{ t('setting.collect.ptgenSourcePanelTitle') }}</span>
-          </VExpansionPanelTitle>
-          <VExpansionPanelText>
       <VForm @submit.prevent="() => {}">
         <div class="text-medium-emphasis text-body-2 mb-3">
           {{ t('setting.collect.ptgenSourceOrderHint') }}
@@ -142,39 +138,50 @@ onMounted(() => {
                   class="flex-shrink-0"
                 />
               </div>
-              <!-- PT-Gen-Refactor 自建部署参数（官方实例留空用内置默认）；浅底子面板与头行分层 -->
-              <div v-if="element.key === 'ptgen_refactor'" class="mt-2 pa-3 rounded-lg collect-subpanel">
-                <VRow dense no-gutters>
-                  <VCol cols="12" md="7" class="pr-md-1 pb-1 pb-md-0">
-                    <VTextField
-                      v-model="element.base_url"
-                      :label="t('setting.collect.ptgenSourceRefactorBaseUrl')"
-                      :hint="t('setting.collect.ptgenSourceRefactorBaseUrlHint')"
-                      placeholder="https://pt-gen.hares.dpdns.org"
-                      persistent-hint
-                      density="compact"
-                      prepend-inner-icon="mdi-api"
-                    />
-                  </VCol>
-                  <VCol cols="12" md="5" class="pl-md-1">
-                    <VTextField
-                      v-model="element.secret"
-                      :label="t('setting.collect.ptgenSourceRefactorSecret')"
-                      :hint="t('setting.collect.ptgenSourceRefactorSecretHint')"
-                      persistent-hint
-                      density="compact"
-                      prepend-inner-icon="mdi-key-variant"
-                    />
-                  </VCol>
-                </VRow>
-              </div>
+              <!-- PT-Gen-Refactor 自建部署参数（官方实例留空用内置默认）：行内手风琴展开；浅底子面板与头行分层 -->
+              <VExpansionPanels
+                v-if="element.key === 'ptgen_refactor'"
+                v-model="openPtgenPanels[element.key]"
+                variant="accordion"
+                class="mt-2"
+              >
+                <VExpansionPanel data-testid="ptgen-panel-refactor">
+                  <VExpansionPanelTitle>
+                    <span class="text-caption text-medium-emphasis">{{ t('setting.collect.ptgenSourceRefactorParamsTitle') }}</span>
+                  </VExpansionPanelTitle>
+                  <VExpansionPanelText>
+                    <div class="pa-1 rounded-lg collect-subpanel">
+                      <VRow dense no-gutters>
+                        <VCol cols="12" md="7" class="pr-md-1 pb-1 pb-md-0">
+                          <VTextField
+                            v-model="element.base_url"
+                            :label="t('setting.collect.ptgenSourceRefactorBaseUrl')"
+                            :hint="t('setting.collect.ptgenSourceRefactorBaseUrlHint')"
+                            placeholder="https://pt-gen.hares.dpdns.org"
+                            persistent-hint
+                            density="compact"
+                            prepend-inner-icon="mdi-api"
+                          />
+                        </VCol>
+                        <VCol cols="12" md="5" class="pl-md-1">
+                          <VTextField
+                            v-model="element.secret"
+                            :label="t('setting.collect.ptgenSourceRefactorSecret')"
+                            :hint="t('setting.collect.ptgenSourceRefactorSecretHint')"
+                            persistent-hint
+                            density="compact"
+                            prepend-inner-icon="mdi-key-variant"
+                          />
+                        </VCol>
+                      </VRow>
+                    </div>
+                  </VExpansionPanelText>
+                </VExpansionPanel>
+              </VExpansionPanels>
             </VCard>
           </template>
         </draggable>
       </VForm>
-          </VExpansionPanelText>
-        </VExpansionPanel>
-      </VExpansionPanels>
     </VCardText>
     <VCardText>
       <VForm @submit.prevent="() => {}">

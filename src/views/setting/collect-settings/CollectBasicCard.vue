@@ -4,20 +4,54 @@
 import { useToast } from 'vue-toastification'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
-import { buildEnvPayload } from './share'
 
-// 基础设置卡：目录 / 下载参数 / 标签与调试 / 简介与豆瓣 / 种子。
-// basic 由父级 provide（CollectSettings.Basic 响应式引用，读写同一对象）；
-// 提交 system/env 时剔除截图组键（由截图卡独占保存，见 share.ts）。
+// 基础设置卡：目录 / 下载参数 / 标签与调试 / 截图 / 简介与豆瓣 / 种子。
+// basic 由父级 provide（CollectSettings.Basic 响应式引用，读写同一对象），
+// 整组提交 system/env；截图模板 JSON 由截图卡保存后回写 SCREENSHOT_TEMPLATE_CONFIG。
 const basic = inject('collectSettingsBasic')
 
 const { t } = useI18n()
 const $toast = useToast()
 
-// 保存基础设置（截图组键由截图卡独占保存，此处剔除）
+// 截图 HDR/DV 色彩处理引擎选项
+const screenshotHdrEngineOptions = computed(() => [
+  { title: t('setting.collect.hdrEngineAuto'), value: 'auto' },
+  { title: t('setting.collect.hdrEngineLibplacebo'), value: 'libplacebo' },
+  { title: t('setting.collect.hdrEngineZscale'), value: 'zscale' },
+])
+
+// 截图体积上限/下限以 MB 展示（后端存字节）。
+// 双向 computed 的 setter 在「清空输入」时无法区分「正在编辑」与「放弃编辑」，
+// 会立刻把 getter 换算值顶回来（表现为数值被清空）——改为草稿态：
+// 源值变化同步草稿，输入只在 blur 时校验写回（空串/非法=放弃编辑，回显源值）。
+const MB = 1024 * 1024
+function bytesToMbStr(value: unknown) {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? String(Math.round((n / MB) * 100) / 100) : ''
+}
+const compressLimitMb = ref('')
+const minSizeLimitMb = ref('')
+watch(() => basic.SCREENSHOT_COMPRESS_LIMIT, (v) => { compressLimitMb.value = bytesToMbStr(v) }, { immediate: true })
+watch(() => basic.SCREENSHOT_MIN_SIZE_LIMIT, (v) => { minSizeLimitMb.value = bytesToMbStr(v) }, { immediate: true })
+function commitMbInput(target: 'compress' | 'min') {
+  const draft = target === 'compress' ? compressLimitMb : minSizeLimitMb
+  const key = target === 'compress' ? 'SCREENSHOT_COMPRESS_LIMIT' : 'SCREENSHOT_MIN_SIZE_LIMIT'
+  const raw = draft.value.trim()
+  const n = Number(raw)
+  if (raw === '' || !Number.isFinite(n) || n < 0) {
+    // 放弃编辑：回显当前源值
+    draft.value = bytesToMbStr(basic[key])
+    return
+  }
+  const bytes = Math.round(n * MB)
+  draft.value = bytesToMbStr(bytes)
+  basic[key] = bytes
+}
+
+// 保存基础设置（整组含截图参数键；模板 JSON 键由截图卡保存后回写，值保持最新）
 async function saveBasicSettings() {
   try {
-    await api.post('system/env', buildEnvPayload(basic))
+    await api.post('system/env', basic)
     $toast.success(t('setting.collect.basicSaveSuccess'))
   } catch (error) {
     console.log(error)
@@ -157,7 +191,87 @@ async function saveBasicSettings() {
             />
           </VCol>
         </VRow>
-        <!-- 截图参数已迁入「截图拼接模板」卡（含 MB 展示/字节提交），此处不再重复 -->
+        <!-- 截图 -->
+        <div class="settings-section-title">{{ t('setting.collect.sectionScreenshot') }}</div>
+        <VRow>
+          <VCol cols="12" md="6">
+            <VSelect
+              v-model="basic.SCREENSHOT_HDR_PROCESSOR"
+              :items="screenshotHdrEngineOptions"
+              :label="t('setting.collect.screenshotHdrEngine')"
+              :hint="t('setting.collect.screenshotHdrEngineHint')"
+              persistent-hint
+              prepend-inner-icon="mdi-palette"
+            />
+          </VCol>
+          <VCol cols="12" md="6">
+            <VSwitch
+              v-model="basic.SCREENSHOT_GRID_ENABLED"
+              :label="t('setting.collect.screenshotGridEnabled')"
+              :hint="t('setting.collect.screenshotGridEnabledHint')"
+              persistent-hint
+            />
+          </VCol>
+          <VCol cols="12" md="6">
+            <VSwitch
+              v-model="basic.SCREENSHOT_CACHE_ENABLED"
+              :label="t('setting.collect.screenshotCacheEnabled')"
+              :hint="t('setting.collect.screenshotCacheEnabledHint')"
+              persistent-hint
+            />
+          </VCol>
+          <VCol cols="12" md="6">
+            <VTextField
+              v-model.number="basic.SCREENSHOT_COUNT"
+              type="number"
+              :label="t('setting.collect.screenshotCount')"
+              :hint="t('setting.collect.screenshotCountHint')"
+              placeholder="4"
+              suffix="张"
+              min="1"
+              persistent-hint
+              prepend-inner-icon="mdi-image-multiple"
+            />
+          </VCol>
+          <VCol cols="12" md="6">
+            <VTextField
+              v-model="compressLimitMb"
+              type="number"
+              :label="t('setting.collect.screenshotCompressLimitMb')"
+              :hint="t('setting.collect.screenshotCompressLimitHint')"
+              placeholder="5"
+              suffix="MB"
+              min="0"
+              step="0.5"
+              persistent-hint
+              prepend-inner-icon="mdi-image-size-select-large"
+              @blur="commitMbInput('compress')"
+            />
+          </VCol>
+          <VCol cols="12" md="6">
+            <VTextField
+              v-model="minSizeLimitMb"
+              type="number"
+              :label="t('setting.collect.screenshotMinSizeLimitMb')"
+              :hint="t('setting.collect.screenshotMinSizeLimitHint')"
+              placeholder="1.75"
+              suffix="MB"
+              min="0"
+              step="0.25"
+              persistent-hint
+              prepend-inner-icon="mdi-image-size-select-small"
+              @blur="commitMbInput('min')"
+            />
+          </VCol>
+          <VCol cols="12" md="6">
+            <VSwitch
+              v-model="basic.SCREENSHOT_QUALITY_CHECK"
+              :label="t('setting.collect.screenshotQualityCheck')"
+              :hint="t('setting.collect.screenshotQualityCheckHint')"
+              persistent-hint
+            />
+          </VCol>
+        </VRow>
         <!-- 简介与豆瓣 -->
         <div class="settings-section-title">{{ t('setting.collect.sectionIntroDouban') }}</div>
         <VRow>

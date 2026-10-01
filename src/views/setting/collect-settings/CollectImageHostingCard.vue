@@ -16,6 +16,14 @@ const imageHosting = ref<Record<string, any>>({})
 // 图床优先级拖拽列表（与 imageHosting 双向同步；字段以引用共享，行内编辑直接写回）
 const hostingOrder = ref<{ key: string; [field: string]: any }[]>([])
 
+// 带凭据的图床（行内折叠编辑；免账号图床无凭据段不渲染折叠）
+const CREDENTIAL_HOSTING_KEYS = ['imgbb', 'panda', 'imgbox']
+function hasCredentials(key: string) {
+  return CREDENTIAL_HOSTING_KEYS.includes(key)
+}
+// 行内折叠状态：键为图床 key，值为展开面板索引（null=收起）
+const openHostingPanels = ref<Record<string, number | null>>({})
+
 // 调用API查询图床设置
 async function loadImageHostingSetting() {
   const defaultImageHostingSettings = {
@@ -133,12 +141,6 @@ onMounted(() => {
       <VCardSubtitle>{{ t('setting.collect.imageHostingDesc') }}</VCardSubtitle>
     </VCardItem>
     <VCardText>
-      <VExpansionPanels variant="accordion">
-        <VExpansionPanel>
-          <VExpansionPanelTitle>
-            <span class="text-subtitle-1 font-weight-bold">{{ t('setting.collect.imageHostingPanelTitle') }}</span>
-          </VExpansionPanelTitle>
-          <VExpansionPanelText>
       <VForm @submit.prevent="() => {}">
         <div class="text-medium-emphasis text-body-2 mb-3">
           {{ t('setting.collect.imageHostingOrderHint') }}
@@ -174,48 +176,59 @@ onMounted(() => {
                   class="flex-shrink-0"
                 />
               </div>
-              <!-- 各图床凭据字段（免账号图床无凭据段）；浅底子面板与头行分层 -->
-              <div v-if="element.key === 'imgbb' || element.key === 'panda'" class="mt-2 pa-3 rounded-lg collect-subpanel">
-                <VTextField
-                  v-model="element.apikey"
-                  :label="t('setting.collect.apikey')"
-                  prepend-inner-icon="mdi-key"
-                  density="compact"
-                  variant="outlined"
-                  hide-details
-                />
-              </div>
-              <div v-else-if="element.key === 'imgbox'" class="mt-2 pa-3 rounded-lg collect-subpanel">
-                <VRow dense no-gutters>
-                  <VCol cols="12" md="6" class="pr-md-1 pb-1 pb-md-0">
-                    <VTextField
-                      v-model="element.username"
-                      :label="t('setting.collect.username')"
-                      prepend-inner-icon="mdi-account"
-                      density="compact"
-                      variant="outlined"
-                      hide-details
-                    />
-                  </VCol>
-                  <VCol cols="12" md="6" class="pl-md-1">
-                    <VTextField
-                      v-model="element.password"
-                      :label="t('setting.collect.password')"
-                      prepend-inner-icon="mdi-account-key"
-                      density="compact"
-                      variant="outlined"
-                      hide-details
-                    />
-                  </VCol>
-                </VRow>
-              </div>
+              <!-- 带凭据的图床：行内手风琴展开编辑（免账号图床无此段）；浅底子面板与头行分层 -->
+              <VExpansionPanels
+                v-if="hasCredentials(element.key)"
+                v-model="openHostingPanels[element.key]"
+                variant="accordion"
+                class="mt-2"
+              >
+                <VExpansionPanel :data-testid="`hosting-panel-${element.key}`">
+                  <VExpansionPanelTitle>
+                    <span class="text-caption text-medium-emphasis">{{ t('setting.collect.credentialPanelTitle') }}</span>
+                  </VExpansionPanelTitle>
+                  <VExpansionPanelText>
+                    <div v-if="element.key === 'imgbb' || element.key === 'panda'" class="pa-1 rounded-lg collect-subpanel">
+                      <VTextField
+                        v-model="element.apikey"
+                        :label="t('setting.collect.apikey')"
+                        prepend-inner-icon="mdi-key"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                      />
+                    </div>
+                    <div v-else-if="element.key === 'imgbox'" class="pa-1 rounded-lg collect-subpanel">
+                      <VRow dense no-gutters>
+                        <VCol cols="12" md="6" class="pr-md-1 pb-1 pb-md-0">
+                          <VTextField
+                            v-model="element.username"
+                            :label="t('setting.collect.username')"
+                            prepend-inner-icon="mdi-account"
+                            density="compact"
+                            variant="outlined"
+                            hide-details
+                          />
+                        </VCol>
+                        <VCol cols="12" md="6" class="pl-md-1">
+                          <VTextField
+                            v-model="element.password"
+                            :label="t('setting.collect.password')"
+                            prepend-inner-icon="mdi-account-key"
+                            density="compact"
+                            variant="outlined"
+                            hide-details
+                          />
+                        </VCol>
+                      </VRow>
+                    </div>
+                  </VExpansionPanelText>
+                </VExpansionPanel>
+              </VExpansionPanels>
             </VCard>
           </template>
         </draggable>
       </VForm>
-          </VExpansionPanelText>
-        </VExpansionPanel>
-      </VExpansionPanels>
     </VCardText>
     <VCardText>
       <VForm @submit.prevent="() => {}">

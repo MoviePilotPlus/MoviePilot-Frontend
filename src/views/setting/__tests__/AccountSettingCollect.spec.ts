@@ -134,11 +134,12 @@ async function renderCollectSettings() {
   return result
 }
 
-/** 展开图床/简介线路卡的手风琴面板（Vuetify 折叠面板内容默认收起）。 */
-async function openAccordion(cardTitle: string) {
+/** 取设置卡并展开其内全部行内折叠面板（图床凭据/refactor 参数，内容默认收起）。 */
+async function openCardPanels(cardTitle: string) {
   const card = getCardByTitle(cardTitle)
-  const header = card.element.querySelector('.v-expansion-panel-title') as HTMLElement
-  await fireEvent.click(header)
+  for (const header of Array.from(card.element.querySelectorAll('.v-expansion-panel-title'))) {
+    await fireEvent.click(header as HTMLElement)
+  }
   return card
 }
 
@@ -199,7 +200,7 @@ describe('AccountSettingCollect', () => {
     await renderCollectSettings()
 
     // 存量配置里 imgbb 的 apikey 应回填进表单；未配置的图床保留默认开关
-    const hostingCard = await openAccordion('图床设置')
+    const hostingCard = await openCardPanels('图床设置')
     const inputs = hostingCard.element.querySelectorAll('input, textarea')
     const values = Array.from(inputs).map(el => (el as HTMLInputElement).value)
     expect(values).toContain('bb-key')
@@ -219,7 +220,7 @@ describe('AccountSettingCollect', () => {
     await renderCollectSettings()
 
     // 打开图床卡片保存动作，断言 POST 载荷不含 smms
-    const hostingCard = await openAccordion('图床设置')
+    const hostingCard = await openCardPanels('图床设置')
     await fireEvent.click(hostingCard.getAllByRole('button', { name: /保存/ })[0])
     await waitFor(() => {
       const call = mocks.apiPost.mock.calls.find(([path]) => path === 'system/setting/ImageHostingParams')
@@ -231,7 +232,7 @@ describe('AccountSettingCollect', () => {
   it('图床保存载荷含 order 优先级序（拖拽列表顺序回写）', async () => {
     await renderCollectSettings()
 
-    const hostingCard = await openAccordion('图床设置')
+    const hostingCard = await openCardPanels('图床设置')
     await fireEvent.click(hostingCard.getAllByRole('button', { name: /保存/ })[0])
     await waitFor(() => {
       const call = mocks.apiPost.mock.calls.find(([path]) => path === 'system/setting/ImageHostingParams')
@@ -262,7 +263,7 @@ describe('AccountSettingCollect', () => {
 
     await renderCollectSettings()
 
-    const hostingCard = await openAccordion('图床设置')
+    const hostingCard = await openCardPanels('图床设置')
     await fireEvent.click(hostingCard.getAllByRole('button', { name: /保存/ })[0])
     await waitFor(() => {
       const call = mocks.apiPost.mock.calls.find(([path]) => path === 'system/setting/ImageHostingParams')
@@ -291,7 +292,7 @@ describe('AccountSettingCollect', () => {
 
     await renderCollectSettings()
 
-    const hostingCard = await openAccordion('图床设置')
+    const hostingCard = await openCardPanels('图床设置')
     const values = Array.from(hostingCard.element.querySelectorAll('input'))
       .map(el => (el as HTMLInputElement).value)
     // 用户序 imgbox 首位：账号/密码回填
@@ -320,7 +321,7 @@ describe('AccountSettingCollect', () => {
 
     await renderCollectSettings()
 
-    const hostingCard = await openAccordion('图床设置')
+    const hostingCard = await openCardPanels('图床设置')
     const text = hostingCard.element.textContent ?? ''
     // 优先级徽标按拖拽顺序编号（顺序 = 实际取用优先级）
     expect(text).toMatch(/优先级\s*1/)
@@ -336,7 +337,7 @@ describe('AccountSettingCollect', () => {
   it('线路卡片渲染优先级序号；refactor 参数段独占子面板；三条线路开关均可用', async () => {
     await renderCollectSettings()
 
-    const sourceCard = await openAccordion('简介抓取线路')
+    const sourceCard = await openCardPanels('简介抓取线路')
     const text = sourceCard.element.textContent ?? ''
     // 默认序 douban → ptgen_refactor → wmdb
     expect(text).toMatch(/优先级\s*1/)
@@ -365,7 +366,7 @@ describe('AccountSettingCollect', () => {
     expect(mocks.toastSuccess).toHaveBeenCalledWith('腾讯视频Cookie保存成功')
   })
 
-  it('基础设置保存 POST system/env 且只含表单声明键（截图键由截图卡独占）', async () => {
+  it('基础设置保存 POST system/env 整组（含截图参数键）', async () => {
     await renderCollectSettings()
 
     const basicCard = getCardByTitle('基础设置')
@@ -376,25 +377,55 @@ describe('AccountSettingCollect', () => {
       const payload = call?.[1] as Record<string, unknown>
       expect(payload.MEDIA_DIR).toBe('/media')
       expect(payload.YOUKU_DOWNLOAD_LINE).toBeUndefined()
-      // 截图组键已并入截图卡保存，基础设置不再提交
-      expect(payload.SCREENSHOT_QUALITY_CHECK).toBeUndefined()
-      expect(payload.SCREENSHOT_TEMPLATE_CONFIG).toBeUndefined()
+      // 截图参数键随基础设置整组提交
+      expect(payload.SCREENSHOT_QUALITY_CHECK).toBe(true)
     })
   })
 
-  it('截图参数随截图卡整卡提交（模板 JSON + 质量校验开关）', async () => {
+  it('截图卡保存只提交模板 JSON（参数键归基础设置卡）', async () => {
     await renderCollectSettings()
 
     const screenshotCard = getCardByTitle('截图拼接模板')
-    expect(screenshotCard.getByText('截图质量校验')).toBeTruthy()
     await fireEvent.click(screenshotCard.getByRole('button', { name: /保存/ }))
     await waitFor(() => {
       const call = mocks.apiPost.mock.calls.find(([path]) => path === 'system/env')
       expect(call).toBeTruthy()
       const payload = call?.[1] as Record<string, unknown>
-      expect(payload.SCREENSHOT_QUALITY_CHECK).toBe(true)
       expect(typeof payload.SCREENSHOT_TEMPLATE_CONFIG).toBe('string')
-      expect(payload.MEDIA_DIR).toBeUndefined()
+      expect(Object.keys(payload)).toEqual(['SCREENSHOT_TEMPLATE_CONFIG'])
+    })
+  })
+
+  it('截图体积上下限随基础设置卡以 MB 展示、字节提交（空输入不清值）', async () => {
+    await renderCollectSettings()
+
+    const basicCard = getCardByTitle('基础设置')
+    const mbInputs = Array.from(basicCard.element.querySelectorAll('input[type="number"]'))
+      .filter(el => (el.closest('.v-input')?.textContent ?? '').includes('MB'))
+    expect(mbInputs.length).toBe(2)
+    // 默认 5242880 字节 → 显示 5MB
+    expect((mbInputs[0] as HTMLInputElement).value).toBe('5')
+    // 改成 4MB → 保存载荷回字节
+    await fireEvent.update(mbInputs[0], '4')
+    await fireEvent.blur(mbInputs[0])
+    await waitFor(() => {
+      expect((mbInputs[0] as HTMLInputElement).value).toBe('4')
+    })
+    // 清空输入后 blur = 放弃编辑：写回源值换算（输入保持合法，不误存 0）
+    await fireEvent.update(mbInputs[0], '')
+    await fireEvent.blur(mbInputs[0])
+    await waitFor(() => {
+      expect((mbInputs[0] as HTMLInputElement).value).toBe('4')
+    })
+    // 重设 4MB 再保存
+    await fireEvent.update(mbInputs[0], '4')
+    await fireEvent.blur(mbInputs[0])
+    await fireEvent.click(basicCard.getByRole('button', { name: /保存/ }))
+    await waitFor(() => {
+      const call = mocks.apiPost.mock.calls.find(([path]) => path === 'system/env')
+      expect(call).toBeTruthy()
+      const payload = call?.[1] as Record<string, unknown>
+      expect(payload.SCREENSHOT_COMPRESS_LIMIT).toBe(4 * 1024 * 1024)
     })
   })
 
