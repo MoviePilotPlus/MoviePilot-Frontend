@@ -1,4 +1,4 @@
-- v3name: Build Moviepilot-Frontend v3
+name: Build Moviepilot-Frontend v3
 
 on:
   workflow_dispatch:
