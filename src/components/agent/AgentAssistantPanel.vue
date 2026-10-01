@@ -32,10 +32,16 @@ interface AgentMessageToolSegment {
   toolIndex: number
 }
 
-type AgentMessageSegment = AgentMessageTextSegment | AgentMessageToolSegment
+interface AgentMessageThinkingSegment {
+  type: 'thinking'
+}
+
+type AgentMessageSegment = AgentMessageTextSegment | AgentMessageToolSegment | AgentMessageThinkingSegment
 
 type AgentRenderableMessageSegment =
-  (AgentMessageTextSegment & { key: string }) | { type: 'tool'; key: string; tool: AgentToolCall }
+  | (AgentMessageTextSegment & { key: string })
+  | { type: 'tool'; key: string; tool: AgentToolCall }
+  | { type: 'thinking'; key: string }
 
 interface AgentMessageAttachment {
   kind: AgentAttachmentKind
@@ -104,6 +110,9 @@ interface AgentChatMessage {
   steeringStatus?: 'queued' | 'applied'
   steeringMessageId?: string
   steeringAnchorAssistantId?: string
+  thinking?: boolean
+  thinkingStartedAt?: number
+  thinkingElapsedMs?: number
 }
 
 interface AgentSessionHistoryItem {
@@ -120,7 +129,8 @@ interface AgentSessionHistoryItem {
 }
 
 interface AgentStreamEvent {
-  type: 'start' | 'delta' | 'tool' | 'attachment' | 'choice' | 'message_update' | 'steering' | 'done' | 'error'
+  type:
+    'start' | 'delta' | 'tool' | 'thinking' | 'attachment' | 'choice' | 'message_update' | 'steering' | 'done' | 'error'
   attachment?: AgentMessageAttachment
   choice?: Omit<AgentChoiceCard, 'status'>
   content?: string
@@ -136,12 +146,15 @@ interface AgentStreamEvent {
   target_message?: Partial<AgentChatMessage> & { id?: string }
   session_id?: string
   status?: 'queued' | 'applied' | 'running' | 'done' | 'error'
+  started_at?: number
+  elapsed_ms?: number
 }
 
 const AGENT_STREAM_EVENT_TYPES = new Set<AgentStreamEvent['type']>([
   'start',
   'delta',
   'tool',
+  'thinking',
   'attachment',
   'choice',
   'message_update',
@@ -259,6 +272,7 @@ const inputText = ref('')
 const messages = ref<AgentChatMessage[]>([])
 // 受保护内容只驻留当前组件内存，不进入消息历史或本地持久化。
 const protectedDeliveries = ref<string[]>([])
+const thinkingClock = ref(Date.now())
 const historySessions = ref<AgentSessionHistoryItem[]>([])
 const sessionId = ref('')
 const sending = ref(false)
@@ -286,6 +300,7 @@ let abortController: AbortController | null = null
 let mediaRecorder: MediaRecorder | null = null
 let mediaRecorderStream: MediaStream | null = null
 let recordingTimer: number | null = null
+let thinkingTimer: number | null = null
 let recordingChunks: BlobPart[] = []
 let messageScrollFrame: number | null = null
 let pendingMessageScrollToBottom = false
@@ -312,6 +327,20 @@ let sendingRequestId = 0
 
 // 汇总正在运行的 Agent 与后台恢复状态；提交输入单独由 sending 控制。
 const isBusy = computed(() => runnerActive.value || Boolean(pendingStreamRecovery.value))
+const activeThinkingMessage = computed(() =>
+  [...messages.value].reverse().find(message => message.role === 'assistant' && message.thinking),
+)
+function formatThinkingDuration(message?: AgentChatMessage) {
+  if (!message) return '0s'
+  const elapsed = Math.max(
+    0,
+    (message.thinkingElapsedMs || 0) +
+      (message.thinking ? thinkingClock.value - (message.thinkingStartedAt || thinkingClock.value) : 0),
+  )
+  const totalSeconds = Math.floor(elapsed / 1000)
+  if (totalSeconds < 60) return `${totalSeconds}s`
+  return `${Math.floor(totalSeconds / 60)}m ${totalSeconds % 60}s`
+}
 const canSend = computed(
   () =>
     (inputText.value.trim().length > 0 || pendingAttachments.value.length > 0) && !sending.value && !recording.value,
@@ -630,6 +659,10 @@ function normalizeMessageSegments(value: unknown, content: string, tools: AgentT
       if (!rawSegment || typeof rawSegment !== 'object' || Array.isArray(rawSegment)) return
 
       const segment = rawSegment as Record<string, unknown>
+      if (segment.type === 'thinking') {
+        normalizedSegments.push({ type: 'thinking' })
+        return
+      }
       if (segment.type === 'text' && typeof segment.content === 'string' && segment.content.trim()) {
         normalizedSegments.push({ type: 'text', content: segment.content })
         return
@@ -657,7 +690,16 @@ function normalizeStoredMessages(value: unknown) {
     const message = rawMessage && typeof rawMessage === 'object' ? (rawMessage as Record<string, unknown>) : {}
     const role = message.role === 'assistant' ? 'assistant' : 'user'
     const content = typeof message.content === 'string' ? message.content : stringifyChoiceField(message.content)
+    const status = normalizeMessageStatus(message.status)
     const tools = normalizeToolCalls(message.tools)
+    // 已结束的消息不能恢复成 thinking，避免旧的中止快照在重新打开面板后继续计时。
+    const thinking = message.thinking === true && status === 'streaming'
+    const segments = normalizeMessageSegments(message.segments, content, tools).filter(
+      segment => segment.type !== 'thinking' || thinking,
+    )
+    if (thinking && !segments.some(segment => segment.type === 'thinking')) {
+      segments.push({ type: 'thinking' })
+    }
 
     return {
       ...message,
@@ -665,13 +707,13 @@ function normalizeStoredMessages(value: unknown) {
       role,
       content,
       createdAt: Number(message.createdAt) || Number(message.created_at) || Date.now(),
-      status: normalizeMessageStatus(message.status),
+      status,
       attachments: Array.isArray(message.attachments) ? message.attachments : [],
       choices: Array.isArray(message.choices)
         ? (message.choices.map(normalizeChoiceCard).filter(Boolean) as AgentChoiceCard[])
         : [],
       tools,
-      segments: normalizeMessageSegments(message.segments, content, tools),
+      segments,
       choice_selection: normalizeChoiceSelection(message.choice_selection || message.choiceSelection),
       steeringStatus:
         message.steeringStatus === 'queued' || message.steeringStatus === 'applied'
@@ -680,6 +722,9 @@ function normalizeStoredMessages(value: unknown) {
       steeringMessageId: stringifyChoiceField(message.steeringMessageId || message.steering_message_id) || undefined,
       steeringAnchorAssistantId:
         stringifyChoiceField(message.steeringAnchorAssistantId || message.steering_anchor_assistant_id) || undefined,
+      thinking,
+      thinkingStartedAt: Number(message.thinkingStartedAt || message.thinking_started_at) || undefined,
+      thinkingElapsedMs: Number(message.thinkingElapsedMs || message.thinking_elapsed_ms) || 0,
     } as AgentChatMessage
   })
 
@@ -689,9 +734,10 @@ function normalizeStoredMessages(value: unknown) {
 // 将本地 camelCase 消息字段转换为后端展示接口使用的 snake_case 字段。
 function serializeMessagesForServer(value: AgentChatMessage[]) {
   return normalizeStoredMessages(value).map(message => {
-    const { steeringMessageId, steeringAnchorAssistantId, ...rest } = message
+    const { steeringMessageId, steeringAnchorAssistantId, segments, ...rest } = message
     return {
       ...rest,
+      segments: segments.filter(segment => segment.type !== 'thinking'),
       ...(steeringMessageId ? { steering_message_id: steeringMessageId } : {}),
       ...(steeringAnchorAssistantId ? { steering_anchor_assistant_id: steeringAnchorAssistantId } : {}),
     }
@@ -977,6 +1023,7 @@ function failStreamRecovery() {
     .find(message => message.role === 'assistant' && message.status === 'streaming')
   if (assistantMessage) {
     assistantMessage.status = 'error'
+    removeThinkingSegments(assistantMessage)
     if (!assistantMessage.content) appendAssistantTextSegment(assistantMessage, t('agentAssistant.recoveryFailed'))
     markToolsDone(assistantMessage)
     refreshMessageList()
@@ -1048,6 +1095,7 @@ async function restoreCurrentSessionFromServer(targetSessionId: string, startedA
     if (message.status !== 'streaming') return
 
     message.status = 'done'
+    removeThinkingSegments(message)
     markToolsDone(message)
   })
   messages.value = mergeServerMessagesWithLocalSteering(restoredMessages)
@@ -1467,6 +1515,8 @@ function createChatMessage(
     choice_selection: choiceSelection,
     steeringStatus,
     steeringMessageId,
+    thinking: false,
+    thinkingElapsedMs: 0,
   }
 }
 
@@ -1610,6 +1660,36 @@ function appendAssistantTextSegment(message: AgentChatMessage, content: string) 
   }
 }
 
+// 将思考状态作为有序独立片段插入当前助手消息，保留它与正文、工具事件的时间线位置。
+function applyThinkingLifecycleEvent(event: AgentStreamEvent, message: AgentChatMessage) {
+  const isThinking = event.status === 'running'
+  message.thinking = isThinking
+  if (isThinking) {
+    message.thinkingStartedAt = Number(event.started_at) || Date.now()
+    message.thinkingElapsedMs = 0
+    if (!message.segments.some(segment => segment.type === 'thinking')) {
+      message.segments.push({ type: 'thinking' })
+    }
+    return
+  }
+
+  if (event.elapsed_ms !== undefined) {
+    message.thinkingElapsedMs = Number(event.elapsed_ms) || message.thinkingElapsedMs || 0
+  }
+  message.segments = message.segments.filter(segment => segment.type !== 'thinking')
+}
+
+// 结束思考生命周期并冻结已用时，避免中止或异常终态继续驱动计时器。
+function removeThinkingSegments(message: AgentChatMessage) {
+  if (message.thinking) {
+    const startedAt = message.thinkingStartedAt || Date.now()
+    const runningElapsed = Math.max(0, Date.now() - startedAt)
+    message.thinkingElapsedMs = Math.max(message.thinkingElapsedMs || 0, runningElapsed)
+  }
+  message.thinking = false
+  message.segments = message.segments.filter(segment => segment.type !== 'thinking')
+}
+
 // 替换助手文本但保留工具片段，用于无法继续流式处理时显示错误。
 function replaceAssistantTextSegments(message: AgentChatMessage, content: string) {
   message.content = content
@@ -1620,6 +1700,11 @@ function replaceAssistantTextSegments(message: AgentChatMessage, content: string
 // 按 SSE 事件顺序渲染文本与工具，只跳过无法产生可见内容的空白文本。
 function getRenderableMessageSegments(message: AgentChatMessage): AgentRenderableMessageSegment[] {
   return message.segments.reduce<AgentRenderableMessageSegment[]>((renderableSegments, segment, index) => {
+    if (segment.type === 'thinking') {
+      if (message.thinking) renderableSegments.push({ type: 'thinking', key: `thinking-${index}` })
+      return renderableSegments
+    }
+
     if (segment.type === 'text') {
       if (segment.content.trim()) renderableSegments.push({ ...segment, key: `text-${index}` })
       return renderableSegments
@@ -1677,6 +1762,13 @@ function applyMessageUpdate(event: AgentStreamEvent) {
     ? (target.choices.map(normalizeChoiceCard).filter(Boolean) as AgentChoiceCard[])
     : []
   message.status = normalizeMessageStatus(target?.status || 'done')
+  if (message.status === 'streaming' && message.thinking) {
+    if (!message.segments.some(segment => segment.type === 'thinking')) {
+      message.segments.push({ type: 'thinking' })
+    }
+  } else {
+    removeThinkingSegments(message)
+  }
   refreshMessageList()
   persistState()
   return true
@@ -1909,6 +2001,9 @@ function applyStreamEvent(event: AgentStreamEvent, assistantMessage: AgentChatMe
     case 'tool':
       applyToolLifecycleEvent(event, routedAssistantMessage)
       break
+    case 'thinking':
+      applyThinkingLifecycleEvent(event, routedAssistantMessage)
+      break
     case 'attachment':
       if (event.attachment?.url) {
         routedAssistantMessage.attachments.push(event.attachment)
@@ -1926,6 +2021,7 @@ function applyStreamEvent(event: AgentStreamEvent, assistantMessage: AgentChatMe
       applyMessageUpdate(event)
       break
     case 'done':
+      removeThinkingSegments(routedAssistantMessage)
       if (routedAssistantMessage.status !== 'error') {
         routedAssistantMessage.status = 'done'
       }
@@ -1933,6 +2029,7 @@ function applyStreamEvent(event: AgentStreamEvent, assistantMessage: AgentChatMe
       break
     case 'error':
       routedAssistantMessage.status = 'error'
+      removeThinkingSegments(routedAssistantMessage)
       // 后端流式错误已经以 AI 消息展示，避免底部提示条重复且持续占位。
       if (!routedAssistantMessage.content) {
         appendAssistantTextSegment(
@@ -2432,6 +2529,7 @@ async function streamAgentMessage(
       return
     }
     if (assistantMessage?.status === 'streaming') {
+      removeThinkingSegments(assistantMessage)
       assistantMessage.status = 'done'
       markToolsDone(assistantMessage)
       refreshMessageList()
@@ -2446,6 +2544,7 @@ async function streamAgentMessage(
       }
       if (!assistantMessage) return
       assistantMessage.status = 'done'
+      removeThinkingSegments(assistantMessage)
       markToolsDone(assistantMessage)
       refreshMessageList()
       return
@@ -2481,6 +2580,7 @@ async function streamAgentMessage(
     }
     assistantMessage ||= addMessage('assistant', '', 'streaming')
     assistantMessage.status = 'error'
+    removeThinkingSegments(assistantMessage)
     replaceAssistantTextSegments(assistantMessage, error?.message || t('agentAssistant.error'))
     markToolsDone(assistantMessage)
     refreshMessageList()
@@ -2748,6 +2848,7 @@ function stopGeneration() {
     .reverse()
     .find(message => message.role === 'assistant' && message.status === 'streaming')
   if (assistantMessage) {
+    removeThinkingSegments(assistantMessage)
     if (isEmptyAssistantMessage(assistantMessage)) {
       messages.value = messages.value.filter(message => message.id !== assistantMessage.id)
     } else {
@@ -2945,6 +3046,9 @@ watch(isOpen, open => {
 watch(isBusy, value => emit('thinking-change', value), { immediate: true })
 
 onMounted(() => {
+  thinkingTimer = window.setInterval(() => {
+    if (activeThinkingMessage.value) thinkingClock.value = Date.now()
+  }, 1000)
   restoreHistorySessions()
   restoreState()
   loadServerHistorySessions()
@@ -2956,6 +3060,9 @@ onMounted(() => {
 })
 
 onScopeDispose(clearAgentAssistantOpenState)
+onScopeDispose(() => {
+  if (thinkingTimer !== null) window.clearInterval(thinkingTimer)
+})
 onScopeDispose(clearPendingAttachments)
 onScopeDispose(cancelVoiceRecording)
 onScopeDispose(clearMessageScrollFrame)
@@ -3004,7 +3111,13 @@ onScopeDispose(() => {
           <div>
             <div class="text-subtitle-1 font-weight-semibold">{{ t('agentAssistant.title') }}</div>
             <div class="agent-assistant-status">
-              {{ isBusy ? t('agentAssistant.thinking') : t('agentAssistant.ready') }}
+              {{
+                activeThinkingMessage
+                  ? `${t('agentAssistant.thinking')} · ${formatThinkingDuration(activeThinkingMessage)}`
+                  : isBusy
+                    ? t('agentAssistant.thinking')
+                    : t('agentAssistant.ready')
+              }}
             </div>
           </div>
         </div>
@@ -3150,12 +3263,20 @@ onScopeDispose(() => {
             </div>
 
             <div
-              v-if="message.role === 'assistant' && (message.tools.length || message.content.trim())"
+              v-if="message.role === 'assistant' && message.segments.length"
               class="agent-assistant-segments"
             >
               <template v-for="segment in getRenderableMessageSegments(message)" :key="segment.key">
+                <div v-if="segment.type === 'thinking'" class="agent-assistant-thinking" role="status">
+                  <span class="agent-assistant-thinking__dots" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                  <span>{{ t('agentAssistant.thinking') }} · {{ formatThinkingDuration(message) }}</span>
+                </div>
                 <AgentMarkdownContent
-                  v-if="segment.type === 'text'"
+                  v-else-if="segment.type === 'text'"
                   :content="segment.content"
                   :streaming="message.status === 'streaming'"
                 />
@@ -3975,6 +4096,42 @@ onScopeDispose(() => {
   padding-inline: 0.6rem;
 }
 
+.agent-assistant-thinking {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-block: 0.1rem;
+  min-inline-size: 0;
+  padding-inline-start: 0.85rem;
+  color: rgba(var(--v-theme-on-surface), 0.48);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.agent-assistant-thinking__dots {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 0.18rem;
+  block-size: 1rem;
+}
+
+.agent-assistant-thinking__dots span {
+  border-radius: 999px;
+  animation: agent-typing 1s infinite ease-in-out;
+  background: rgba(var(--v-theme-on-surface), 0.56);
+  block-size: 0.3rem;
+  inline-size: 0.3rem;
+}
+
+.agent-assistant-thinking__dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.agent-assistant-thinking__dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
 .agent-assistant-tool span {
   min-inline-size: 0;
   overflow-wrap: anywhere;
@@ -4561,7 +4718,8 @@ onScopeDispose(() => {
 
 @media (prefers-reduced-motion: reduce) {
   .agent-assistant-mini-bot__eye,
-  .agent-assistant-typing span {
+  .agent-assistant-typing span,
+  .agent-assistant-thinking__dots span {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
