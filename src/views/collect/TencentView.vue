@@ -150,23 +150,29 @@ function openLoginDialog() {
   getQRCode()
 }
 
-// 获取二维码
+// 获取二维码（TV 设备绑定扫码链：二维码图由后端出 base64 PNG，
+// 轮询/确认走 tv/* 端点；网页端 qrcode 链的登录态取不到 VIP 档已弃用）
 async function getQRCode() {
   try {
-    const response = await api.get('tencent/qrcode')
-    qrCodeUrl.value = response.url
+    const response = await api.get('tencent/tv/qrcode')
+    qrCodeUrl.value = response.qrcode_image
     qrCodeId.value = response.qrcode_key
+    if (!qrCodeId.value) {
+      pollingStatus.value = response.message || '二维码获取失败'
+      $toast.error(response.message || '获取二维码失败')
+      return
+    }
     pollingStatus.value = '等待扫码'
 
     // 开始轮询
     startPolling()
 
-    // 设置登录超时
+    // 设置登录超时（TV 链 ws 等待窗口 180s，留余量）
     loginTimeoutTimer.value = window.setTimeout(() => {
       stopPolling()
       pollingStatus.value = '登录超时'
       $toast.error('登录超时，请重新扫码')
-    }, 300000)
+    }, 200000)
   } catch (error) {
     console.error('获取二维码失败:', error)
     $toast.error('获取二维码失败')
@@ -183,15 +189,15 @@ function startPolling() {
 
   pollingTimer.value = window.setInterval(async () => {
     try {
-      const response = await api.get('tencent/login_status', {
+      const response = await api.get('tencent/tv/login_status', {
         params: { qr_code_id: qrCodeId.value }
       })
 
       pollingStatus.value = response.message
 
-      if (response.status === 3) {
-        // 已完成扫码，进行登录
-        const loginResponse = await api.post('tencent/login?qr_code_id=' + qrCodeId.value)
+      // TV 链状态码：0=等待 1=已扫码 2=确认成功（-1/其他=失败或过期）
+      if (response.status === 2) {
+        const loginResponse = await api.post('tencent/tv/login?qr_code_id=' + qrCodeId.value)
 
         if (loginResponse.code === 0) {
           // 登录成功
@@ -202,9 +208,12 @@ function startPolling() {
           await checkLoginStatus()
         } else {
           stopPolling()
-          pollingStatus.value = '登录失败'
-          $toast.error('登录失败，请重试')
+          pollingStatus.value = loginResponse.message || '登录失败'
+          $toast.error(loginResponse.message || '登录失败，请重试')
         }
+      } else if (response.status === -1) {
+        stopPolling()
+        pollingStatus.value = response.message || '会话已失效'
       }
     } catch (error) {
       console.error('轮询登录状态失败:', error)
@@ -345,15 +354,15 @@ watch(filterParams, () => {
         :cate="cate" />
     </div>
 
-    <!-- 登录弹窗 -->
+    <!-- 登录弹窗（TV 设备绑定扫码：腾讯视频 APP 扫码后在手机上确认） -->
     <VDialog v-model="loginDialogVisible" max-width="500px">
       <VCard>
         <VCardTitle>腾讯视频扫码登录</VCardTitle>
         <VCardText class="text-center">
-          <VImg :src="`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrCodeUrl)}`"
+          <VImg v-if="qrCodeUrl" :src="qrCodeUrl"
             class="mx-auto" style=" block-size: 200px;inline-size: 200px;" />
           <p class="mt-4">{{ pollingStatus }}</p>
-          <p class="text-sm text-gray-500 mt-2">请使用腾讯视频APP扫描二维码登录</p>
+          <p class="text-sm text-gray-500 mt-2">请使用腾讯视频APP扫描二维码，并在手机上确认登录</p>
         </VCardText>
         <VCardActions class="justify-center">
           <VBtn color="primary" @click="getQRCode()">刷新二维码</VBtn>
