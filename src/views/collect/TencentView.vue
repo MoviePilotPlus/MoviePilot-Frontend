@@ -362,7 +362,7 @@ watch(filterParams, () => {
           <VImg v-if="qrCodeUrl" :src="qrCodeUrl"
             class="mx-auto" style=" block-size: 200px;inline-size: 200px;" />
           <p class="mt-4">{{ pollingStatus }}</p>
-          <p class="text-sm text-gray-500 mt-2">请使用腾讯视频APP扫描二维码，并在手机上确认登录</p>
+          <p class="text-sm text-gray-500 mt-2">请使用腾讯视频APP（或 QQ/微信）扫描二维码，并在手机上确认登录</p>
         </VCardText>
         <VCardActions class="justify-center">
           <VBtn color="primary" @click="getQRCode()">刷新二维码</VBtn>
