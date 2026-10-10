@@ -19,6 +19,7 @@ import { formatFileSize } from '@/@core/utils/formatters'
 import { useI18n } from 'vue-i18n'
 import { usePWA } from '@/composables/usePWA'
 import ProgressiveCardGrid from '@/components/misc/ProgressiveCardGrid.vue'
+import NoDataFound from '@/components/states/NoDataFound.vue'
 import { useDynamicButton, type DynamicButtonMenuItem } from '@/composables/useDynamicButton'
 import { useAvailableHeight } from '@/composables/useAvailableHeight'
 import { useBackground } from '@/composables/useBackground'
@@ -33,7 +34,7 @@ const TransferHistoryDeleteDialog = defineAsyncComponent(
 )
 
 // i18n
-const { t, te } = useI18n()
+const { t, te, locale } = useI18n()
 
 // 全局设置
 const globalSettingsStore = useGlobalSettingsStore()
@@ -46,8 +47,20 @@ const isMobile = computed(() => display.smAndDown.value)
 const { appMode } = usePWA()
 const { useProgressSSE } = useBackground()
 
-// 计算列表可用高度
-const { availableHeight } = useAvailableHeight(135, 300)
+// 按视口和框架留白限定桌面页高度，保证标题与分页留在可视区域。
+const { availableHeight, viewportHeight } = useAvailableHeight(135, 300)
+const desktopToolbarRef = ref<HTMLElement | null>(null)
+const { top: desktopToolbarTop } = useElementBounding(desktopToolbarRef)
+// 框架预留 Dock 与页面内边距，真实起点负责兼容工具栏上方的布局高度。
+// 桌面页自身不滚动，标题、批量操作与分页占固定空间，剩余高度交给虚拟记录区。
+const desktopPageHeight = computed(() =>
+  Math.max(0, Math.min(availableHeight.value + 135, viewportHeight.value - desktopToolbarTop.value - 24)),
+)
+
+// 按分页栏的实际顶边抬高桌面 FAB，兼容分页换行及窗口尺寸变化。
+const desktopPaginationRef = ref<HTMLElement | null>(null)
+const { top: desktopPaginationTop } = useElementBounding(desktopPaginationRef)
+const desktopFabBottom = computed(() => Math.max(72, viewportHeight.value - desktopPaginationTop.value + 24))
 
 // 提示框
 const $toast = useToast()
@@ -90,6 +103,7 @@ const redoTargetStorage = ref<string>()
 // 已选中的数据
 const selected = ref<TransferHistory[]>([])
 
+/** 带分组身份的历史记录展示对象，业务请求仍使用原始字段。 */
 interface TransferHistoryDisplayItem extends TransferHistory {
   history_group_album_path: string
   history_group_is_music_album: boolean
@@ -101,6 +115,7 @@ interface TransferHistoryDisplayItem extends TransferHistory {
   history_group_uses_destination: boolean
 }
 
+/** 当前页音乐专辑的摘要，不代表跨分页的专辑总计。 */
 interface TransferHistoryGroupSummary {
   albumPath: string
   artist: string
@@ -121,6 +136,7 @@ const completedDeleteSteps = new Map<number, { source: boolean; destination: boo
 
 type TransferHistoryStatusFilter = 'all' | 'success' | 'failed'
 
+/** 状态筛选的稳定协议值与本地化显示信息。 */
 interface TransferHistoryStatusFilterItem {
   title: string
   value: TransferHistoryStatusFilter
@@ -191,7 +207,7 @@ function sortBySourceSize(a: TransferHistory, b: TransferHistory) {
   return (a.src_fileitem?.size ?? 0) - (b.src_fileitem?.size ?? 0)
 }
 
-// 表头
+// 排序字段沿用原表头协议，卡片视图的排序选择器与虚拟列表共享比较器。
 const headers = [
   {
     title: t('transferHistory.titleColumn'),
@@ -232,46 +248,44 @@ const headers = [
   },
 ]
 
-// 分组表头
-const groupHeaders = [
-  {
-    title: t('transferHistory.seasonEpisode'),
-    key: 'title',
-    sortable: true,
-    sortRaw: sortByTitle,
-  },
-  {
-    title: t('transferHistory.pathColumn'),
-    key: 'src',
-    sortable: true,
-  },
-  {
-    title: t('transferHistory.modeColumn'),
-    key: 'mode',
-    sortable: true,
-  },
-  {
-    title: t('transferHistory.sizeColumn'),
-    key: 'size',
-    sortable: true,
-    sortRaw: sortBySourceSize,
-  },
-  {
-    title: t('transferHistory.dateColumn'),
-    key: 'date',
-    sortable: true,
-  },
-  {
-    title: t('transferHistory.statusColumn'),
-    key: 'status',
-    sortable: true,
-  },
-  {
-    title: '',
-    key: 'actions',
-    sortable: false,
-  },
-]
+// 桌面排序仍交给虚拟表格处理，保持当前页和原有自定义比较器的语义。
+const desktopSortBy = ref<Array<{ key: string; order: 'asc' | 'desc' }>>([])
+const desktopSortOptions = computed(() => [
+  { title: t('transferHistory.desktop.defaultOrder'), value: '' },
+  ...headers.filter(header => header.sortable).map(header => ({ title: header.title, value: header.key })),
+])
+
+/** 更换排序字段时沿用当前方向；清空字段恢复接口返回顺序。 */
+function setDesktopSort(value: string) {
+  desktopSortBy.value = value ? [{ key: value, order: desktopSortBy.value[0]?.order || 'asc' }] : []
+}
+
+/** 只翻转当前排序字段的方向，不重新请求或扩大到其它分页。 */
+function toggleDesktopSortOrder() {
+  const current = desktopSortBy.value[0]
+  if (current) desktopSortBy.value = [{ ...current, order: current.order === 'asc' ? 'desc' : 'asc' }]
+}
+
+// 本页选择基于业务 ID，虚拟节点回收和分组折叠不会丢失选中状态。
+const desktopSelectedCount = computed(() => dataList.value.filter(item => selectedIdSet.value.has(item.id)).length)
+const desktopAllSelected = computed(
+  () => dataList.value.length > 0 && desktopSelectedCount.value === dataList.value.length,
+)
+
+/** 顶部全选只覆盖后端当前页，避免影响未加载或被过滤的记录。 */
+function selectDesktopPage(checked: boolean | null) {
+  updateHistorySelection(dataList.value, checked)
+}
+
+/** 清除当前选择，同时复用现有批量操作状态。 */
+function clearDesktopSelection() {
+  selected.value = []
+}
+
+/** 明确切换到指定视图，继续使用现有地址栏和本地偏好同步。 */
+function setDesktopGrouping(grouped: boolean) {
+  if (group.value !== grouped) toggleHistoryGrouping()
+}
 
 const pageRange = [
   { title: '25', value: 25 },
@@ -324,10 +338,22 @@ const loading = ref(false)
 // 总条数
 const totalItems = ref(0)
 
-// 是否要分组
-const group = ref<boolean>(route.query.grouped === 'true')
+const HISTORY_GROUPING_KEY = 'transferHistory.grouped'
+
+// 是否要分组；地址栏优先，其次恢复用户上次手动选择。
+const group = ref(false)
 // 区分默认平铺与用户显式选择平铺，避免搜索/翻页提前关闭后续专辑自动分组。
-const groupPreferenceExplicit = ref(route.query.grouped !== undefined)
+const groupPreferenceExplicit = ref(false)
+restoreHistoryGroupingPreference()
+
+/** 恢复分组偏好，未保存选择时继续允许按音乐专辑自动分组。 */
+function restoreHistoryGroupingPreference() {
+  const saved = localStorage.getItem(HISTORY_GROUPING_KEY)
+  const preference =
+    route.query.grouped !== undefined ? route.query.grouped : saved === 'true' || saved === 'false' ? saved : undefined
+  group.value = preference === 'true'
+  groupPreferenceExplicit.value = preference !== undefined
+}
 
 // 分组条件
 const groupBy = ref<Array<{ key: string }>>([
@@ -350,6 +376,8 @@ const progressValue = ref(0)
 
 // 是否已刷新
 const isRefreshed = ref(false)
+// 只有成功加载后的空列表显示 404，避免加载或请求失败时闪现空状态。
+const desktopEmpty = computed(() => isRefreshed.value && !loading.value && dataList.value.length === 0)
 
 // 是否已完成首次激活
 const hasActivatedOnce = ref(false)
@@ -556,6 +584,7 @@ function normalizeHistoryPath(path?: string) {
   return normalized
 }
 
+/** 提取有效父目录，缺少目录的记录不参与专辑路径分组。 */
 function getHistoryParentPath(path?: string) {
   const normalized = normalizeHistoryPath(path)
   const separator = normalized.lastIndexOf('/')
@@ -661,6 +690,7 @@ function hasMusicAlbumGroup(items: TransferHistoryDisplayItem[]) {
 }
 
 // 获取历史记录数据，keep-alive 重新进入时可静默刷新，避免表格出现重新加载感。
+/** 加载整理历史当前页并拒绝过期响应，保留选择及音乐自动分组策略。 */
 async function fetchData(page = currentPage.value, count = itemsPerPage.value, options: { silent?: boolean } = {}) {
   if (!historyViewActive) return
   const requestSeed = ++fetchDataRequestSeed
@@ -695,7 +725,7 @@ async function fetchData(page = currentPage.value, count = itemsPerPage.value, o
     totalItems.value = ensureNumber(result.total, 0)
     updateSearchHintList(list)
 
-    if (historyViewActive && isDesktop.value && route.query.grouped === undefined && hasMusicAlbumGroup(displayList)) {
+    if (historyViewActive && isDesktop.value && !groupPreferenceExplicit.value && hasMusicAlbumGroup(displayList)) {
       group.value = true
     }
 
@@ -715,10 +745,12 @@ async function fetchData(page = currentPage.value, count = itemsPerPage.value, o
 
 const completedDeleteStatuses: TransferHistoryDeleteStepStatus[] = ['deleted', 'already_missing']
 
+/** 删除成功与文件已不存在都视为完成，重试时无需再次操作。 */
 function isCompletedDeleteStatus(status: TransferHistoryDeleteStepStatus) {
   return completedDeleteStatuses.includes(status)
 }
 
+/** 校验删除响应中的各步骤状态，避免将不完整响应视为成功。 */
 function parseDeleteResult(value: unknown): TransferHistoryDeleteResult | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
   const record = value as Record<string, unknown>
@@ -746,6 +778,7 @@ function parseDeleteResult(value: unknown): TransferHistoryDeleteResult | undefi
   }
 }
 
+/** 保留部分删除的完成进度，历史记录移除后释放重试状态。 */
 function rememberDeleteResult(item: TransferHistory, result: TransferHistoryDeleteResult) {
   if (result.history === 'deleted' || result.history === 'not_found') {
     completedDeleteSteps.delete(item.id)
@@ -758,6 +791,7 @@ function rememberDeleteResult(item: TransferHistory, result: TransferHistoryDele
   })
 }
 
+/** 重试只提交用户选择且尚未完成的文件删除步骤。 */
 function getDeleteFlags(item: TransferHistory, deleteSrc: boolean, deleteDest: boolean) {
   const completed = completedDeleteSteps.get(item.id)
   return {
@@ -766,6 +800,7 @@ function getDeleteFlags(item: TransferHistory, deleteSrc: boolean, deleteDest: b
   }
 }
 
+/** 按完成与失败分类生成删除步骤摘要，略过未请求的步骤。 */
 function formatDeleteStepSummary(result: TransferHistoryDeleteResult) {
   const completed: string[] = []
   const failed: string[] = []
@@ -781,6 +816,7 @@ function formatDeleteStepSummary(result: TransferHistoryDeleteResult) {
   return { completed: completed.join(', '), failed: failed.join(', ') }
 }
 
+/** 从业务失败响应中恢复部分删除结果，用于提示与重试。 */
 function getDeleteResultFromError(error: unknown): TransferHistoryDeleteResult | undefined {
   if (!isApiBusinessFailure(error)) return undefined
   const payload = error.payload
@@ -788,6 +824,7 @@ function getDeleteResultFromError(error: unknown): TransferHistoryDeleteResult |
   return parseDeleteResult((payload as Record<string, unknown>).data)
 }
 
+/** 根据调用方反馈策略展示部分失败及已完成的删除步骤。 */
 function notifyDeleteResult(result: TransferHistoryDeleteResult, notifyError: boolean) {
   if (!notifyError) return
   const summary = formatDeleteStepSummary(result)
@@ -837,8 +874,7 @@ function syncMobileSearchFromRouteQuery() {
   try {
     search.value = getRouteQueryString(route.query.search)
     statusFilter.value = getRouteStatusFilter(route.query.status)
-    group.value = route.query.grouped === 'true'
-    groupPreferenceExplicit.value = route.query.grouped !== undefined
+    restoreHistoryGroupingPreference()
   } finally {
     void nextTick(() => {
       syncingRouteQuery = false
@@ -846,7 +882,7 @@ function syncMobileSearchFromRouteQuery() {
   }
 }
 
-// 移动端触底加载历史记录，并将新页追加到虚拟列表数据源。
+/** 移动端触底加载历史记录，并将新页追加到虚拟列表数据源。 */
 async function loadMobileHistory({ done }: { done: (status: 'ok' | 'empty' | 'error') => void }) {
   if (mobileLoading.value) {
     done('ok')
@@ -937,8 +973,7 @@ async function syncStateFromRouteQuery() {
     statusFilter.value = getRouteStatusFilter(route.query.status)
     itemsPerPage.value = ensurePageSize(route.query.itemsPerPage, 50)
     currentPage.value = Math.max(1, ensureNumber(route.query.currentPage, 1))
-    group.value = route.query.grouped === 'true'
-    groupPreferenceExplicit.value = route.query.grouped !== undefined
+    restoreHistoryGroupingPreference()
   } finally {
     await nextTick()
     syncingRouteQuery = false
@@ -1428,6 +1463,7 @@ async function reloadMobileSearchPage() {
 function toggleHistoryGrouping() {
   groupPreferenceExplicit.value = true
   group.value = !group.value
+  localStorage.setItem(HISTORY_GROUPING_KEY, String(group.value))
 }
 
 // 确保值为number类型
@@ -1496,6 +1532,7 @@ function getHistoryCategory(item: TransferHistory) {
   return item.category
 }
 
+/** 从 Windows 或 POSIX 文件路径中提取用于类别识别的扩展名。 */
 function getFileExtension(path?: string) {
   const filename = path?.split(/[\\/]/).at(-1) || ''
   const dot = filename.lastIndexOf('.')
@@ -1619,6 +1656,28 @@ function getHistoryFailureHint(item: TransferHistory) {
   return lines.join('\n')
 }
 
+// 一次共享时钟更新所有桌面相对时间，避免为大量记录创建独立计时器。
+const desktopTimeNow = useNow({ interval: 60000 })
+const desktopRelativeTimeFormatter = computed(() => new Intl.RelativeTimeFormat(locale.value, { numeric: 'auto' }))
+
+/** 桌面时间按最大适用单位显示相对值；缺失或无法解析时保留原文本。 */
+function getDesktopRelativeTime(date?: string) {
+  if (!date) return ''
+  const timestamp = new Date(date.replace(' ', 'T')).getTime()
+  if (!Number.isFinite(timestamp)) return date
+  const seconds = (timestamp - desktopTimeNow.value.getTime()) / 1000
+  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ['year', 31536000],
+    ['month', 2592000],
+    ['day', 86400],
+    ['hour', 3600],
+    ['minute', 60],
+    ['second', 1],
+  ]
+  const [unit, duration] = units.find(([, length]) => Math.abs(seconds) >= length) || units.at(-1)!
+  return desktopRelativeTimeFormatter.value.format(Math.trunc(seconds / duration), unit)
+}
+
 // 将历史记录时间压缩成移动端卡片展示文本。
 function getHistoryDateText(date?: string) {
   if (!date) return ''
@@ -1739,6 +1798,7 @@ const selectedCountsGroupedByKey = computed(() => {
   )
 })
 
+/** Vuetify 分组内部记录包装，保留原始展示对象。 */
 interface TransferHistoryGroupItem {
   value: TransferHistoryDisplayItem
 }
@@ -1758,8 +1818,9 @@ function getHistoryGroupSummary(items: readonly TransferHistoryGroupItem[]) {
   return items[0]?.value?.history_group_summary
 }
 
+/** 复用专辑摘要选定的封面记录及统一图片代理规则。 */
 function getHistoryGroupPosterUrl(items: readonly TransferHistoryGroupItem[]) {
-  const coverItem = getHistoryGroupSummary(items)?.coverItem
+  const coverItem = getHistoryGroupSummary(items)?.coverItem || items.find(item => item.value.image)?.value
   return coverItem ? getHistoryPosterUrl(coverItem) : ''
 }
 
@@ -1965,87 +2026,206 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <VCard v-if="isDesktop">
-    <VCardItem>
-      <VCardTitle>
-        <VRow>
-          <VCol cols="8" class="flex">
-            <div
-              class="transfer-history-desktop-filter-group"
-              role="group"
+  <section v-if="isDesktop" class="transfer-history-desktop-page" :style="{ blockSize: `${desktopPageHeight}px` }">
+    <header ref="desktopToolbarRef" class="transfer-history-desktop-toolbar">
+      <VPageContentTitle :title="t('navItems.mediaOrganize')" class="my-0" style="margin-block: 0" />
+      <div class="transfer-history-desktop-tools">
+        <VCombobox
+          key="search_navbar"
+          :model-value="search"
+          @update:model-value="setSearchValue"
+          :items="searchHintList"
+          @compositionstart="isComposing = true"
+          @compositionend="isComposing = false"
+          class="transfer-history-desktop-search"
+          density="compact"
+          :placeholder="t('transferHistory.searchPlaceholder')"
+          :aria-label="t('transferHistory.searchPlaceholder')"
+          prepend-inner-icon="mdi-magnify"
+          variant="solo"
+          flat
+          rounded="pill"
+          single-line
+          hide-details
+          clearable
+        />
+        <VMenu location="bottom end">
+          <template #activator="{ props }">
+            <IconBtn
+              v-bind="props"
+              :color="statusFilterButtonColor"
+              :variant="statusFilter === 'all' ? 'text' : 'tonal'"
               :aria-label="t('transferHistory.statusFilter.label')"
+              :title="t('transferHistory.statusFilter.label')"
             >
-              <VCombobox
-                key="search_navbar"
-                :model-value="search"
-                @update:model-value="setSearchValue"
-                :items="searchHintList"
-                @compositionstart="isComposing = true"
-                @compositionend="isComposing = false"
-                class="text-disabled transfer-history-desktop-search"
-                density="compact"
-                :placeholder="t('transferHistory.searchPlaceholder')"
-                :aria-label="t('transferHistory.searchPlaceholder')"
-                prepend-inner-icon="mdi-magnify"
-                variant="outlined"
-                single-line
-                hide-details
-                clearable
-              />
-              <VSelect
-                v-model="statusFilter"
-                :items="statusFilterItems"
-                item-title="title"
-                item-value="value"
-                :prepend-inner-icon="currentStatusFilter.icon"
-                density="compact"
-                variant="outlined"
-                hide-details
-                class="transfer-history-desktop-status"
-                :aria-label="t('transferHistory.statusFilter.label')"
-              />
-            </div>
-          </VCol>
-          <VCol cols="4" md="4" class="text-end">
-            <VBtnGroup variant="outlined" divided rounded>
-              <VBtn
-                :icon="group ? 'mdi-format-list-bulleted' : 'mdi-format-list-group'"
-                @click="toggleHistoryGrouping"
-              />
-            </VBtnGroup>
-          </VCol>
-        </VRow>
-      </VCardTitle>
-    </VCardItem>
-    <!-- 分组模式 -->
+              <VIcon :icon="currentStatusFilter.icon" />
+            </IconBtn>
+          </template>
+          <VCard min-width="200"
+            ><VList class="px-2">
+              <VListSubheader>{{ t('transferHistory.statusFilter.label') }}</VListSubheader>
+              <VListItem
+                v-for="option in statusFilterItems"
+                :key="option.value"
+                :active="statusFilter === option.value"
+                @click="selectStatusFilter(option.value)"
+              >
+                <template #prepend><VIcon :icon="option.icon" :color="option.color" /></template>
+                <VListItemTitle>{{ option.title }}</VListItemTitle>
+                <template #append
+                  ><VIcon v-if="statusFilter === option.value" icon="mdi-check" color="primary"
+                /></template>
+              </VListItem> </VList
+          ></VCard>
+        </VMenu>
+        <VMenu location="bottom end" :close-on-content-click="false">
+          <template #activator="{ props }">
+            <IconBtn
+              v-bind="props"
+              :color="desktopSortBy.length ? 'primary' : 'gray'"
+              :aria-label="t('transferHistory.desktop.sort')"
+              :title="t('transferHistory.desktop.sort')"
+              ><VIcon icon="mdi-sort-variant"
+            /></IconBtn>
+          </template>
+          <VCard min-width="220"
+            ><VList class="px-2">
+              <VListSubheader>{{ t('transferHistory.desktop.sort') }}</VListSubheader>
+              <VListItem
+                v-for="option in desktopSortOptions"
+                :key="option.value"
+                :active="(desktopSortBy[0]?.key || '') === option.value"
+                @click="setDesktopSort(option.value)"
+              >
+                <VListItemTitle>{{ option.title }}</VListItemTitle>
+                <template #append
+                  ><VIcon v-if="(desktopSortBy[0]?.key || '') === option.value" icon="mdi-check" color="primary"
+                /></template>
+              </VListItem>
+              <VDivider />
+              <VListItem :disabled="desktopSortBy.length === 0" @click="toggleDesktopSortOrder">
+                <template #prepend
+                  ><VIcon :icon="desktopSortBy[0]?.order === 'desc' ? 'mdi-sort-descending' : 'mdi-sort-ascending'"
+                /></template>
+                <VListItemTitle>{{
+                  desktopSortBy[0]?.order === 'desc' ? t('common.ascending') : t('common.descending')
+                }}</VListItemTitle>
+              </VListItem>
+            </VList></VCard
+          >
+        </VMenu>
+        <VMenu location="bottom end">
+          <template #activator="{ props }">
+            <IconBtn
+              v-bind="props"
+              :color="group ? 'primary' : 'gray'"
+              :aria-label="t('transferHistory.groupMode')"
+              :title="t('transferHistory.groupMode')"
+              ><VIcon :icon="group ? 'mdi-format-list-group' : 'mdi-format-list-bulleted'"
+            /></IconBtn>
+          </template>
+          <VCard min-width="200"
+            ><VList class="px-2">
+              <VListItem :active="!group" prepend-icon="mdi-format-list-bulleted" @click="setDesktopGrouping(false)"
+                ><VListItemTitle>{{ t('transferHistory.listMode') }}</VListItemTitle></VListItem
+              >
+              <VListItem :active="group" prepend-icon="mdi-format-list-group" @click="setDesktopGrouping(true)"
+                ><VListItemTitle>{{ t('transferHistory.groupMode') }}</VListItemTitle></VListItem
+              >
+            </VList></VCard
+          >
+        </VMenu>
+        <IconBtn :aria-label="t('common.refresh')" :disabled="loading" @click="fetchData()">
+          <VIcon icon="mdi-refresh" />
+        </IconBtn>
+      </div>
+    </header>
+
+    <div
+      v-if="desktopSelectedCount > 0"
+      class="transfer-history-desktop-selection"
+      role="group"
+      :aria-label="t('transferHistory.actions.batchSelect')"
+    >
+      <VCheckbox
+        :model-value="desktopAllSelected"
+        :indeterminate="desktopSelectedCount > 0 && !desktopAllSelected"
+        :disabled="dataList.length === 0"
+        :label="t('transferHistory.desktop.selectPage')"
+        density="compact"
+        hide-details
+        @update:model-value="selectDesktopPage"
+      />
+      <span class="transfer-history-desktop-selection__count">
+        {{ t('transferHistory.selectedCount', { count: desktopSelectedCount, total: dataList.length }) }}
+      </span>
+      <template v-if="canManage && desktopSelectedCount > 0">
+        <VBtn
+          size="small"
+          variant="tonal"
+          color="primary"
+          prepend-icon="mdi-redo-variant"
+          :disabled="hasRunningAiRedo"
+          @click="retransferBatch"
+          >{{ t('transferHistory.actions.batchRedo') }}</VBtn
+        >
+        <VBtn
+          size="small"
+          variant="tonal"
+          color="info"
+          prepend-icon="mdi-robot-outline"
+          :disabled="hasRunningAiRedo"
+          @click="triggerBatchAiRedo"
+          >{{ t('transferHistory.actions.batchAiRedo') }}</VBtn
+        >
+        <VBtn
+          size="small"
+          variant="tonal"
+          color="error"
+          prepend-icon="mdi-trash-can-outline"
+          :disabled="hasRunningAiRedo"
+          @click="removeHistoryBatch"
+          >{{ t('transferHistory.actions.batchDelete') }}</VBtn
+        >
+      </template>
+      <VBtn v-if="desktopSelectedCount > 0" size="small" variant="text" @click="clearDesktopSelection">
+        {{ t('transferHistory.actions.deselectAll') }}
+      </VBtn>
+    </div>
+
+    <div v-else-if="!desktopEmpty" class="transfer-history-desktop-summary">
+      {{ t('transferHistory.desktop.summary', { count: totalItems, pages: totalPage }) }}
+    </div>
+
+    <!-- 仅替换桌面呈现；保留 Vuetify 的虚拟测高、排序、分组和分页数据契约。 -->
     <VDataTableVirtual
-      v-if="group"
+      v-if="!desktopEmpty"
       v-model="selected"
-      :groupBy="groupBy"
-      :headers="groupHeaders"
+      v-model:sort-by="desktopSortBy"
+      :group-by="group ? groupBy : []"
+      :headers="headers"
       :items="dataList"
       :loading="loading"
       density="compact"
       return-object
-      fixed-header
+      hide-default-header
       show-select
       :loading-text="t('transferHistory.loading')"
-      hover
-      :style="{ height: `${availableHeight}px` }"
-      class="rounded-0"
+      height="100%"
+      :item-height="100"
+      class="transfer-history-desktop-virtual"
+      :aria-label="t('transferHistory.desktop.title')"
     >
-      <template #header.data-table-group>
-        <span>{{ t('transferHistory.titleColumn') }}</span>
-      </template>
       <template v-slot:group-header="{ item, columns, toggleGroup, isGroupOpen }">
         <tr
           v-if="isMusicAlbumGroup(item.items)"
-          class="transfer-history-album-group-row"
+          class="transfer-history-album-group-row transfer-history-desktop-group-row"
           :class="{ 'transfer-history-album-group-row--open': isGroupOpen(item) }"
         >
-          <td :colspan="columns.length">
+          <td :colspan="columns.length" @click="toggleGroup(item)">
             <div class="transfer-history-album-summary">
-              <div class="transfer-history-album-summary__controls">
+              <!-- 控制区自行处理展开与多选，阻止整行再次切换。 -->
+              <div class="transfer-history-desktop-group-controls" @click.stop>
                 <VBtn
                   :aria-label="isGroupOpen(item) ? t('setting.about.collapse') : t('setting.about.expand')"
                   :icon="isGroupOpen(item) ? '$expand' : '$next'"
@@ -2054,6 +2234,7 @@ onUnmounted(() => {
                   @click="toggleGroup(item)"
                 />
                 <VCheckbox
+                  :aria-label="t('transferHistory.desktop.selectRecord', { title: getHistoryGroupLabel(item.items) })"
                   density="compact"
                   hide-details
                   :model-value="selectedCountsGroupedByKey[item.value] == item.items.length"
@@ -2083,7 +2264,11 @@ onUnmounted(() => {
                 <div class="transfer-history-album-summary__title-line">
                   <strong>{{ getHistoryGroupSummary(item.items)?.label }}</strong>
                   <VChip size="x-small" variant="tonal" color="primary">
-                    {{ t('music.trackCount', { count: getHistoryGroupSummary(item.items)?.trackCount || 0 }) }}
+                    {{
+                      t('transferHistory.desktop.pageTracks', {
+                        count: getHistoryGroupSummary(item.items)?.trackCount || 0,
+                      })
+                    }}
                   </VChip>
                 </div>
                 <div class="transfer-history-album-summary__meta">
@@ -2118,9 +2303,13 @@ onUnmounted(() => {
                   <VIcon icon="mdi-database-outline" size="15" />
                   {{ formatFileSize(getHistoryGroupSummary(item.items)?.size || 0) }}
                 </span>
-                <span v-if="getHistoryGroupSummary(item.items)?.date" class="transfer-history-album-summary__fact">
+                <span
+                  v-if="getHistoryGroupSummary(item.items)?.date"
+                  :title="getHistoryGroupSummary(item.items)?.date"
+                  class="transfer-history-album-summary__fact"
+                >
                   <VIcon icon="mdi-clock-outline" size="15" />
-                  {{ getHistoryDateText(getHistoryGroupSummary(item.items)?.date) }}
+                  {{ getDesktopRelativeTime(getHistoryGroupSummary(item.items)?.date) }}
                 </span>
                 <VChip size="x-small" color="success" variant="tonal">
                   {{ t('transferHistory.status.success') }} {{ getHistoryGroupSummary(item.items)?.successCount || 0 }}
@@ -2137,258 +2326,189 @@ onUnmounted(() => {
             </div>
           </td>
         </tr>
-        <tr v-else>
-          <td :colspan="columns.length">
-            <div class="d-flex align-center gap-2">
-              <VBtn
-                :icon="isGroupOpen(item) ? '$expand' : '$next'"
-                size="small"
-                variant="text"
-                @click="toggleGroup(item)"
-              />
-              <VCheckbox
-                :model-value="selectedCountsGroupedByKey[item.value] == item.items.length"
-                :indeterminate="
-                  selectedCountsGroupedByKey[item.value] > 0 &&
-                  selectedCountsGroupedByKey[item.value] < item.items.length
-                "
-                @update:modelValue="checked => toggleGroupSelection(checked, item.items)"
-              />
-              <span>{{ getHistoryGroupLabel(item.items) }}</span>
+        <tr v-else class="transfer-history-desktop-group-row">
+          <td :colspan="columns.length" @click="toggleGroup(item)">
+            <div class="transfer-history-desktop-group-summary">
+              <!-- 控制区自行处理展开与多选，阻止整行再次切换。 -->
+              <div class="transfer-history-desktop-group-controls" @click.stop>
+                <VBtn
+                  :aria-label="isGroupOpen(item) ? t('setting.about.collapse') : t('setting.about.expand')"
+                  :icon="isGroupOpen(item) ? '$expand' : '$next'"
+                  size="small"
+                  variant="text"
+                  @click="toggleGroup(item)"
+                />
+                <VCheckbox
+                  density="compact"
+                  hide-details
+                  :aria-label="t('transferHistory.desktop.selectRecord', { title: getHistoryGroupLabel(item.items) })"
+                  :model-value="selectedCountsGroupedByKey[item.value] == item.items.length"
+                  :indeterminate="
+                    selectedCountsGroupedByKey[item.value] > 0 &&
+                    selectedCountsGroupedByKey[item.value] < item.items.length
+                  "
+                  @update:modelValue="checked => toggleGroupSelection(checked, item.items)"
+                />
+              </div>
+              <div class="transfer-history-album-summary__cover">
+                <VImg
+                  v-if="getHistoryGroupPosterUrl(item.items)"
+                  :src="getHistoryGroupPosterUrl(item.items)"
+                  :alt="getHistoryGroupLabel(item.items)"
+                  cover
+                />
+                <VIcon v-else :icon="getPlaceholderIcon(item.items[0]?.value?.type || '')" size="22" />
+              </div>
+              <div class="transfer-history-desktop-group-identity">
+                <strong>{{ getHistoryGroupLabel(item.items) }}</strong>
+                <small>{{ t('transferHistory.desktop.pageRecords', { count: item.items.length }) }}</small>
+              </div>
+              <div class="transfer-history-desktop-group-counts">
+                <VChip color="success" size="x-small" variant="tonal"
+                  >{{ t('transferHistory.status.success') }}
+                  {{ item.items.filter(entry => entry.value.status).length }}</VChip
+                >
+                <VChip v-if="item.items.some(entry => !entry.value.status)" color="error" size="x-small" variant="tonal"
+                  >{{ t('transferHistory.status.failed') }}
+                  {{ item.items.filter(entry => !entry.value.status).length }}</VChip
+                >
+              </div>
             </div>
           </td>
         </tr>
       </template>
-      <template #item.title="{ item }">
-        <div class="transfer-history-desktop-media-cell">
-          <div class="transfer-history-desktop-poster-frame">
-            <VImg
-              v-if="getHistoryPosterUrl(item)"
-              :src="getHistoryPosterUrl(item)"
-              :alt="item.title"
-              cover
-              class="transfer-history-desktop-poster"
+      <template #item="{ item, columns, itemRef }">
+        <tr :ref="itemRef" class="transfer-history-desktop-record-row" :data-history-id="item.id">
+          <td :colspan="columns.length">
+            <article
+              class="transfer-history-desktop-record"
+              :class="{
+                'transfer-history-desktop-record--child': group,
+                'transfer-history-desktop-record--selected': isHistorySelected(item),
+                'transfer-history-desktop-record--failed': !item.status,
+              }"
             >
-              <template #error>
-                <div class="transfer-history-desktop-poster-placeholder">
-                  <VIcon :icon="getPlaceholderIcon(item.type || '')" size="20" color="medium-emphasis" />
+              <VCheckbox
+                :model-value="isHistorySelected(item)"
+                density="compact"
+                hide-details
+                :aria-label="t('transferHistory.desktop.selectRecord', { title: getHistoryDisplayTitle(item) })"
+                @update:model-value="checked => toggleHistorySelection(item, checked)"
+              />
+              <div class="transfer-history-desktop-media-cell">
+                <div class="transfer-history-desktop-poster-frame rounded-md">
+                  <VImg
+                    v-if="getHistoryPosterUrl(item)"
+                    :src="getHistoryPosterUrl(item)"
+                    :alt="item.title"
+                    cover
+                    class="transfer-history-desktop-poster"
+                    rounded="md"
+                  >
+                    <template #error
+                      ><div class="transfer-history-desktop-poster-placeholder">
+                        <VIcon :icon="getPlaceholderIcon(item.type || '')" size="20" color="medium-emphasis" /></div
+                    ></template>
+                  </VImg>
+                  <div v-else class="transfer-history-desktop-poster-placeholder">
+                    <VIcon :icon="getPlaceholderIcon(item.type || '')" size="20" color="medium-emphasis" />
+                  </div>
                 </div>
-              </template>
-            </VImg>
-            <div v-else class="transfer-history-desktop-poster-placeholder">
-              <VIcon :icon="getPlaceholderIcon(item.type || '')" size="20" color="medium-emphasis" />
-            </div>
-          </div>
-          <div class="d-flex flex-column">
-            <span v-if="item.type === '电视剧'" class="d-block text-high-emphasis min-w-20">
-              {{ item?.seasons }}{{ item?.episodes }}
-            </span>
-            <small>{{ getHistoryCategory(item) }}</small>
-          </div>
-        </div>
-      </template>
-      <template #item.src="{ item }">
-        <div>
-          <span>
-            <VChip variant="tonal" size="small" label class="my-1">
-              {{ getHistoryStorageName(item?.src_storage) }}
-            </VChip>
-            <small>{{ item?.src }}</small>
-          </span>
-          <span class="text-high-emphasis text-bold"> => </span>
-          <br />
-          <span v-if="item?.dest">
-            <VChip variant="tonal" size="small" label class="my-1">
-              {{ getHistoryStorageName(item?.dest_storage) }}
-            </VChip>
-            <small>{{ item?.dest }}</small>
-          </span>
-        </div>
-      </template>
-      <template #item.mode="{ item }">
-        <VChip variant="outlined" color="primary" size="small">
-          {{ TransferDict[item?.mode ?? ''] || t('common.unknown') }}
-        </VChip>
-      </template>
-      <template #item.status="{ item }">
-        <VTooltip :text="getHistoryFailureHint(item)" :disabled="!getHistoryFailureHint(item)">
-          <template #activator="{ props }">
-            <VChip
-              v-bind="props"
-              tag="button"
-              type="button"
-              :color="getHistoryStatusColor(item)"
-              size="small"
-              @click.stop="openRecoveryDialog(item)"
-            >
-              {{ getHistoryStatusText(item) }}
-            </VChip>
-          </template>
-        </VTooltip>
-      </template>
-      <template #item.size="{ item }">
-        <small>{{ formatFileSize(item?.src_fileitem?.size || 0) }}</small>
-      </template>
-      <template #item.date="{ item }">
-        <small>{{ item?.date }}</small>
-      </template>
-      <template #item.actions="{ item }">
-        <IconBtn>
-          <VIcon icon="mdi-dots-vertical" />
-          <VMenu activator="parent" close-on-content-click>
-            <VList>
-              <VListItem
-                v-for="(menu, i) in getDropdownItems(item)"
-                :key="i"
-                :base-color="menu.props.color"
-                :disabled="menu.props.disabled"
-                @click="menu.props.click()"
-              >
-                <template #prepend>
-                  <VIcon :icon="menu.props.prependIcon" />
-                </template>
-                <VListItemTitle v-text="menu.title" />
-              </VListItem>
-            </VList>
-          </VMenu>
-        </IconBtn>
-      </template>
-      <template #no-data> {{ t('transferHistory.noData') }} </template>
-    </VDataTableVirtual>
-    <!-- 列表模式 -->
-    <VDataTableVirtual
-      v-else
-      v-model="selected"
-      :headers="headers"
-      :items="dataList"
-      :loading="loading"
-      density="compact"
-      return-object
-      fixed-header
-      show-select
-      :loading-text="t('transferHistory.loading')"
-      hover
-      :style="{ height: `${availableHeight}px` }"
-      class="rounded-0"
-    >
-      <template #item.title="{ item }">
-        <div class="transfer-history-desktop-media-cell">
-          <div class="transfer-history-desktop-poster-frame">
-            <VImg
-              v-if="getHistoryPosterUrl(item)"
-              :src="getHistoryPosterUrl(item)"
-              :alt="item.title"
-              cover
-              class="transfer-history-desktop-poster"
-            >
-              <template #error>
-                <div class="transfer-history-desktop-poster-placeholder">
-                  <VIcon :icon="getPlaceholderIcon(item.type || '')" size="20" color="medium-emphasis" />
+                <div class="transfer-history-desktop-record__identity">
+                  <strong :title="getHistoryDisplayTitle(item)">{{ getHistoryDisplayTitle(item) }}</strong>
+                  <small>{{ getHistorySubtitle(item) || item.type }}</small>
                 </div>
-              </template>
-            </VImg>
-            <div v-else class="transfer-history-desktop-poster-placeholder">
-              <VIcon :icon="getPlaceholderIcon(item.type || '')" size="20" color="medium-emphasis" />
-            </div>
-          </div>
-          <div class="d-flex flex-column">
-            <span v-if="item.type === '电视剧'" class="d-block text-high-emphasis min-w-20">
-              {{ item?.title }} {{ item?.seasons }}{{ item?.episodes }}
-            </span>
-            <span v-else class="d-block text-high-emphasis min-w-20">
-              {{ item?.title }}
-            </span>
-            <small>{{ getHistoryCategory(item) }}</small>
-          </div>
-        </div>
-      </template>
-      <template #item.src="{ item }">
-        <div>
-          <span>
-            <VChip variant="tonal" size="small" label class="my-1">
-              {{ getHistoryStorageName(item?.src_storage) }}
-            </VChip>
-            <small>{{ item?.src }}</small>
-          </span>
-          <span class="text-high-emphasis text-bold"> => </span>
-          <br />
-          <span v-if="item?.dest">
-            <VChip variant="tonal" size="small" label class="my-1">
-              {{ getHistoryStorageName(item?.dest_storage) }}
-            </VChip>
-            <small>{{ item?.dest }}</small>
-          </span>
-        </div>
-      </template>
-      <template #item.mode="{ item }">
-        <VChip variant="outlined" color="primary" size="small">
-          {{ TransferDict[item?.mode ?? ''] || t('common.unknown') }}
-        </VChip>
-      </template>
-      <template #item.status="{ item }">
-        <VTooltip :text="getHistoryFailureHint(item)" :disabled="!getHistoryFailureHint(item)">
-          <template #activator="{ props }">
-            <VChip
-              v-bind="props"
-              tag="button"
-              type="button"
-              :color="getHistoryStatusColor(item)"
-              size="small"
-              @click.stop="openRecoveryDialog(item)"
-            >
-              {{ getHistoryStatusText(item) }}
-            </VChip>
-          </template>
-        </VTooltip>
-      </template>
-      <template #item.size="{ item }">
-        <small>{{ formatFileSize(item?.src_fileitem?.size || 0) }}</small>
-      </template>
-      <template #item.date="{ item }">
-        <small>{{ item?.date }}</small>
-      </template>
-      <template #item.actions="{ item }">
-        <IconBtn>
-          <VIcon icon="mdi-dots-vertical" />
-          <VMenu activator="parent" close-on-content-click>
-            <VList>
-              <VListItem
-                v-for="(menu, i) in getDropdownItems(item)"
-                :key="i"
-                :base-color="menu.props.color"
-                :disabled="menu.props.disabled"
-                @click="menu.props.click()"
-              >
-                <template #prepend>
-                  <VIcon :icon="menu.props.prependIcon" />
+              </div>
+              <div class="transfer-history-desktop-record__paths">
+                <template
+                  v-for="path in [
+                    { key: 'source', storage: item.src_storage, value: item.src },
+                    { key: 'destination', storage: item.dest_storage, value: item.dest },
+                  ]"
+                  :key="path.key"
+                >
+                  <div v-if="path.value" class="transfer-history-desktop-record__path" :title="path.value">
+                    <VChip variant="tonal" size="x-small" label>{{ getHistoryStorageName(path.storage) }}</VChip>
+                    <span class="transfer-history-desktop-record__path-text">{{ path.value }}</span>
+                  </div>
+                  <div
+                    v-if="path.key === 'source' && item.src && item.dest"
+                    class="transfer-history-desktop-record__path-arrow"
+                    aria-hidden="true"
+                  >
+                    <VIcon icon="mdi-arrow-down" size="18" />
+                  </div>
                 </template>
-                <VListItemTitle v-text="menu.title" />
-              </VListItem>
-            </VList>
-          </VMenu>
-        </IconBtn>
+              </div>
+              <div class="transfer-history-desktop-record__facts">
+                <div class="transfer-history-desktop-record__status">
+                  <VTooltip :text="getHistoryFailureHint(item)" :disabled="!getHistoryFailureHint(item)">
+                    <template #activator="{ props }">
+                      <VChip
+                        v-bind="props"
+                        tag="button"
+                        type="button"
+                        :color="getHistoryStatusColor(item)"
+                        variant="tonal"
+                        size="small"
+                        @click.stop="openRecoveryDialog(item)"
+                        >{{ getHistoryStatusText(item) }}</VChip
+                      >
+                    </template>
+                  </VTooltip>
+                  <IconBtn
+                    :aria-label="t('transferHistory.desktop.recordActions', { title: getHistoryDisplayTitle(item) })"
+                  >
+                    <VIcon icon="mdi-dots-vertical" />
+                    <VMenu activator="parent" close-on-content-click>
+                      <VList
+                        ><VListItem
+                          v-for="(menu, i) in getDropdownItems(item)"
+                          :key="i"
+                          :base-color="menu.props.color"
+                          :disabled="menu.props.disabled"
+                          @click="menu.props.click()"
+                        >
+                          <template #prepend><VIcon :icon="menu.props.prependIcon" /></template>
+                          <VListItemTitle>{{ menu.title }}</VListItemTitle>
+                        </VListItem></VList
+                      >
+                    </VMenu>
+                  </IconBtn>
+                </div>
+                <div class="transfer-history-desktop-record__metadata">
+                  <VChip variant="tonal" size="x-small">{{
+                    TransferDict[item.mode ?? ''] || t('common.unknown')
+                  }}</VChip>
+                  <span>{{ formatFileSize(item.src_fileitem?.size || 0) }}</span>
+                  <time :datetime="item.date" :title="item.date">{{ getDesktopRelativeTime(item.date) }}</time>
+                </div>
+              </div>
+            </article>
+          </td>
+        </tr>
       </template>
-      <template #no-data> {{ t('transferHistory.noData') }} </template>
+      <template #no-data />
     </VDataTableVirtual>
-    <VDivider />
-    <div class="flex items-center justify-between">
-      <div class="transfer-history-pagination__size w-auto">
-        <VSelect v-model="itemsPerPage" :items="pageRange" density="compact" flat class="ms-1" />
-      </div>
-      <div class="transfer-history-pagination__info w-auto text-sm">
-        {{ t('transferHistory.pageInfo', pageTip) }} {{ totalItems }}
-      </div>
-      <VPagination
-        v-model="currentPage"
-        show-first-last-page
-        :length="totalPage"
-        :total-visible="7"
-        @next="currentPage + 1"
-        @prev="currentPage - 1"
-      >
-      </VPagination>
-    </div>
-  </VCard>
+    <NoDataFound v-else class="transfer-history-desktop-empty" :error-title="t('transferHistory.noData')" />
+    <footer v-if="!desktopEmpty" ref="desktopPaginationRef" class="transfer-history-desktop-pagination">
+      <VSelect
+        v-model="itemsPerPage"
+        :items="pageRange"
+        density="compact"
+        variant="solo"
+        flat
+        rounded="pill"
+        hide-details
+        class="transfer-history-pagination__size"
+        :aria-label="t('transferHistory.pageSize')"
+      />
+      <span class="transfer-history-pagination__info">{{
+        t('transferHistory.pageInfo', { ...pageTip, total: totalItems })
+      }}</span>
+      <VPagination v-model="currentPage" show-first-last-page :length="totalPage" :total-visible="7" />
+    </footer>
+  </section>
 
   <section v-else class="transfer-history-mobile-page">
     <div class="transfer-history-mobile-titlebar">
@@ -2485,10 +2605,11 @@ onUnmounted(() => {
         </div>
       </template>
       <template #empty>
-        <div v-if="mobileDataList.length === 0" class="transfer-history-mobile-empty">
-          <VIcon icon="mdi-history" size="32" />
-          <span>{{ t('transferHistory.noData') }}</span>
-        </div>
+        <NoDataFound
+          v-if="mobileDataList.length === 0"
+          class="transfer-history-mobile-empty"
+          :error-title="t('transferHistory.noData')"
+        />
       </template>
       <template #error="{ props: retryProps }">
         <div class="transfer-history-mobile-state d-flex flex-column ga-2" role="alert">
@@ -2519,13 +2640,14 @@ onUnmounted(() => {
             @click="handleMobileRecordClick(item)"
           >
             <header class="transfer-history-mobile-record__header">
-              <div class="transfer-history-mobile-record__poster-wrapper">
+              <div class="transfer-history-mobile-record__poster-wrapper rounded-md">
                 <VImg
                   v-if="getHistoryPosterUrl(item)"
                   class="transfer-history-mobile-record__poster"
                   :src="getHistoryPosterUrl(item)"
                   :alt="item.title"
                   cover
+                  rounded="md"
                 >
                   <template #placeholder>
                     <div class="transfer-history-mobile-record__poster-skeleton">
@@ -2589,7 +2711,7 @@ onUnmounted(() => {
                       <template #prepend>
                         <VIcon :icon="menu.props.prependIcon" />
                       </template>
-                      <VListItemTitle v-text="menu.title" />
+                      <VListItemTitle>{{ menu.title }}</VListItemTitle>
                     </VListItem>
                   </VList>
                 </VMenu>
@@ -2645,9 +2767,14 @@ onUnmounted(() => {
 
   <!-- 非 app 模式下的 FAB 按钮 -->
   <Teleport to="body" v-if="!appMode && route.path === '/history'">
-    <div v-if="isRefreshed && canManage" class="compact-fab-stack compact-fab-stack--history">
+    <div
+      v-if="isRefreshed && canManage"
+      class="compact-fab-stack compact-fab-stack--history"
+      :class="{ 'compact-fab-stack--history-desktop': isDesktop }"
+      :style="isDesktop ? { insetBlockEnd: `${desktopFabBottom}px` } : undefined"
+    >
       <VFab
-        v-if="selected.length > 0 && !hasRunningAiRedo"
+        v-if="isMobile && selected.length > 0 && !hasRunningAiRedo"
         icon="mdi-trash-can-outline"
         color="warning"
         variant="tonal"
@@ -2656,7 +2783,7 @@ onUnmounted(() => {
         @click="removeHistoryBatch"
       />
       <VFab
-        v-if="selected.length > 0 && !hasRunningAiRedo"
+        v-if="isMobile && selected.length > 0 && !hasRunningAiRedo"
         icon="mdi-redo-variant"
         color="success"
         variant="tonal"
@@ -2665,7 +2792,7 @@ onUnmounted(() => {
         @click="retransferBatch"
       />
       <VFab
-        v-if="selected.length > 0 && !hasRunningAiRedo"
+        v-if="isMobile && selected.length > 0 && !hasRunningAiRedo"
         icon="mdi-robot-outline"
         color="info"
         variant="tonal"
@@ -2674,6 +2801,7 @@ onUnmounted(() => {
         @click="triggerBatchAiRedo"
       />
       <VFab
+        :aria-label="t('transferHistory.transferQueue')"
         icon="mdi-timer-sand-paused"
         color="primary"
         appear
@@ -2687,102 +2815,344 @@ onUnmounted(() => {
 <style lang="scss">
 /* stylelint-disable selector-pseudo-class-no-unknown */
 
-.v-table th {
+.transfer-history-desktop-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.transfer-history-desktop-toolbar,
+.transfer-history-desktop-tools,
+.transfer-history-desktop-selection,
+.transfer-history-desktop-sort,
+.transfer-history-desktop-pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.transfer-history-desktop-toolbar,
+.transfer-history-desktop-selection,
+.transfer-history-desktop-pagination {
+  flex-shrink: 0;
+}
+
+.transfer-history-desktop-toolbar {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.transfer-history-desktop-tools {
+  justify-content: flex-end;
+  gap: 4px;
+  min-inline-size: 0;
+}
+.transfer-history-desktop-search {
+  inline-size: clamp(12rem, 24vw, 24rem);
+  flex: 0 1 auto;
+  margin-inline-end: 8px;
+}
+// 与导航栏全局搜索使用相同的胶囊圆角和轻背景，不呈现描边输入框。
+.transfer-history-desktop-search .v-field,
+.transfer-history-desktop-pagination .transfer-history-pagination__size .v-field {
+  border: 0 !important;
+  border-radius: var(--app-vuetify-rounded-pill);
+  background: rgba(var(--v-theme-surface-variant), 0.04) !important;
+  box-shadow: none !important;
+  min-block-size: 42px;
+}
+.transfer-history-desktop-search .v-field__outline,
+.transfer-history-desktop-search .v-field__overlay,
+.transfer-history-desktop-pagination .transfer-history-pagination__size .v-field__outline,
+.transfer-history-desktop-pagination .transfer-history-pagination__size .v-field__overlay {
+  display: none;
+}
+.transfer-history-desktop-search .v-field__prepend-inner {
+  color: rgba(var(--v-theme-on-surface), 0.45);
+}
+// 自定义桌面卡片复用全局表面与阴影 token；主题只替换材质，不改变布局。
+.transfer-history-desktop-page {
+  --history-desktop-surface: var(--app-grouped-list-background);
+  --history-desktop-border: var(--app-surface-border);
+  --history-desktop-backdrop-filter: var(--app-grouped-list-backdrop-filter);
+}
+.transfer-history-desktop-selection,
+.transfer-history-desktop-record,
+.transfer-history-desktop-group-summary,
+.transfer-history-desktop-page .transfer-history-album-summary {
+  border: var(--history-desktop-border);
+  border-radius: var(--app-surface-radius);
+  background: var(--history-desktop-surface);
+  box-shadow: var(--app-card-rest-shadow);
+  backdrop-filter: var(--history-desktop-backdrop-filter);
+  -webkit-backdrop-filter: var(--history-desktop-backdrop-filter);
+}
+.transfer-history-desktop-record:hover,
+.transfer-history-desktop-group-summary:hover,
+.transfer-history-desktop-page .transfer-history-album-summary:hover {
+  box-shadow: var(--app-card-hover-shadow);
+}
+.transfer-history-desktop-selection {
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  min-block-size: 58px;
+}
+.transfer-history-desktop-selection > .v-input {
+  flex: 0 0 auto;
+}
+// 桌面队列入口离屏幕右侧保留更舒适的边距；移动端沿用框架位置。
+.compact-fab-stack.compact-fab-stack--history-desktop {
+  inset-inline-end: max(2rem, calc(env(safe-area-inset-right) + 2rem));
+}
+.transfer-history-desktop-summary {
+  flex-shrink: 0;
+  padding-inline: 16px;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  font-size: 0.85rem;
+}
+.transfer-history-desktop-selection__count {
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  font-size: 0.85rem;
+}
+
+/* 虚拟表格仅提供排序、分组和测高；一行一个跨列卡片，取消表头与表格边框。 */
+.transfer-history-desktop-virtual.v-table {
+  flex: 1 1 0;
+  min-block-size: 0;
+  background: transparent;
+}
+.transfer-history-desktop-virtual > .v-table__wrapper {
+  padding-inline: 1px;
+}
+.transfer-history-desktop-virtual table {
+  table-layout: fixed;
+}
+.transfer-history-desktop-virtual .transfer-history-desktop-record-row > td,
+.transfer-history-desktop-virtual .transfer-history-desktop-group-row > td {
+  padding: 0 0 8px !important;
+  border: 0 !important;
+  block-size: auto !important;
+}
+.transfer-history-desktop-record {
+  display: grid;
+  grid-template-columns: 36px minmax(12rem, 17rem) minmax(0, 1fr) minmax(16rem, 20rem);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+// 子项卡片缩进一级，保留右侧对齐和虚拟列表原有的测高方式。
+.transfer-history-desktop-record--child {
+  margin-inline-start: 24px;
+}
+.transfer-history-desktop-record:hover {
+  border-color: rgba(var(--v-theme-primary), 0.35);
+}
+.transfer-history-desktop-record--selected {
+  border: 1px solid rgba(var(--v-theme-primary), 0.55);
+  background:
+    linear-gradient(var(--app-grouped-list-active-background), var(--app-grouped-list-active-background)),
+    var(--history-desktop-surface);
+}
+// 虚拟表格只承载滚动；玻璃材质由可见卡片采样，避免外层与深色底叠加。
+html[data-theme='glass'] .transfer-history-desktop-page {
+  --history-desktop-surface: var(--glass-v3-card-background);
+  --history-desktop-border: 1px solid var(--glass-border);
+  --history-desktop-backdrop-filter: var(--glass-native-surface-backdrop-filter);
+  .transfer-history-desktop-virtual.v-table {
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .transfer-history-desktop-record:hover {
+    border-color: var(--glass-border-hover);
+  }
+
+  // 保留选择状态的主色提示，同时透出同一套玻璃材料。
+  .transfer-history-desktop-record--selected,
+  .transfer-history-desktop-record--selected:hover {
+    border-color: rgba(var(--v-theme-primary), 0.55);
+    background:
+      linear-gradient(var(--app-grouped-list-active-background), var(--app-grouped-list-active-background)),
+      var(--history-desktop-surface);
+  }
+
+  .transfer-history-desktop-virtual > .v-table__wrapper > table > tbody > tr:hover > td {
+    background: transparent;
+  }
+}
+.transfer-history-desktop-record .v-selection-control {
+  min-block-size: 36px;
+}
+.transfer-history-desktop-record__identity,
+.transfer-history-desktop-media-cell,
+.transfer-history-desktop-record__paths,
+.transfer-history-desktop-record__facts {
+  min-inline-size: 0;
+}
+.transfer-history-desktop-record__identity {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.transfer-history-desktop-record__identity strong,
+.transfer-history-desktop-record__identity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transfer-history-desktop-record__identity strong {
+  font-size: 1.05rem;
+}
+.transfer-history-desktop-record__identity small {
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+}
+.transfer-history-desktop-record__paths {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.transfer-history-desktop-record__path {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  min-inline-size: 0;
+  font-size: 0.9rem;
+}
+.transfer-history-desktop-record__path .v-chip {
+  max-inline-size: 100%;
+  justify-self: start;
+}
+// 完整路径按容器宽度换行；虚拟列表测量实际行高，不截断内容。
+.transfer-history-desktop-record__path-text {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  line-height: 1.5;
+}
+.transfer-history-desktop-record__path-arrow {
+  display: flex;
+  justify-content: center;
+  inline-size: 5rem;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+}
+.transfer-history-desktop-record__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.transfer-history-desktop-record__metadata {
+  display: grid;
+  grid-template-columns: max-content max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+  font-size: 0.8rem;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+}
+.transfer-history-desktop-record__metadata time {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-align: end;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.v-table__wrapper {
-  border-radius: 0;
+.transfer-history-desktop-group-row > td {
+  cursor: pointer;
 }
-
-.transfer-history-desktop-filter-group {
-  display: flex;
-  overflow: hidden;
-  align-items: stretch;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.16);
-  border-radius: var(--app-field-radius);
-  background: rgba(var(--v-theme-surface), 0.04);
-  inline-size: min(100%, 36rem);
-  min-block-size: 40px;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.transfer-history-desktop-filter-group:focus-within {
-  border-color: rgb(var(--v-theme-primary));
-  box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.12);
-}
-
-// 当前样式未 scoped，直接限定组合框后代，保留 outlined 控件的居中和图标留白。
-.transfer-history-desktop-filter-group .v-input {
-  margin: 0;
-  grid-template-rows: 1fr;
-  min-inline-size: 0;
-}
-
-.transfer-history-desktop-filter-group .v-input .v-field {
-  border-radius: 0;
-  backdrop-filter: none;
-  backdrop-filter: none;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.transfer-history-desktop-filter-group .v-field__outline,
-.transfer-history-desktop-filter-group .v-field__overlay {
-  display: none;
-}
-
-// 组合框随工具栏拉高时，文字行与两侧图标仍共用同一条中心线。
-.transfer-history-desktop-filter-group .v-field__field {
+.transfer-history-desktop-group-summary {
+  display: grid;
+  grid-template-columns: 80px 46px minmax(0, 1fr) auto;
   align-items: center;
+  gap: 8px;
+  padding: 12px;
 }
-
-.transfer-history-desktop-search {
-  flex: 1 1 auto;
-  min-inline-size: 12rem;
+.transfer-history-desktop-group-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-inline-start: auto;
 }
-
-.transfer-history-desktop-status {
-  flex: 0 0 10rem;
-  border-inline-start: 1px solid rgba(var(--v-theme-on-surface), 0.14);
+.transfer-history-desktop-group-identity {
   min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.transfer-history-desktop-group-identity strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transfer-history-desktop-group-identity small {
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+}
+.transfer-history-desktop-pagination {
+  flex-wrap: wrap;
+  padding-block: 0;
+}
+// 仅移除桌面分页按钮的垂直外边距，保留横向间距和原有点击面积。
+.transfer-history-desktop-pagination .v-pagination__item,
+.transfer-history-desktop-pagination .v-pagination__first,
+.transfer-history-desktop-pagination .v-pagination__prev,
+.transfer-history-desktop-pagination .v-pagination__next,
+.transfer-history-desktop-pagination .v-pagination__last {
+  margin-block: 0;
+}
+.transfer-history-desktop-pagination .transfer-history-pagination__size {
+  flex: 0 0 100px;
+}
+.transfer-history-desktop-pagination .v-pagination {
+  margin-inline-start: auto;
+}
+.transfer-history-pagination__info {
+  font-size: 0.8rem;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+}
+.transfer-history-desktop-empty {
+  flex: 1;
+  min-block-size: 0;
+  overflow: auto;
+  padding-block-start: 0;
 }
 
-.transfer-history-album-group-row > td {
-  padding: 0 !important;
-  background: rgba(var(--v-theme-primary), 0.025);
-  border-block-end: 1px solid rgba(var(--v-theme-on-surface), 0.09) !important;
-}
-
-.transfer-history-album-group-row--open > td {
-  background: rgba(var(--v-theme-primary), 0.065);
-  border-block-end-color: rgba(var(--v-theme-primary), 0.18) !important;
+@media (max-width: 1100px) {
+  .transfer-history-desktop-record {
+    grid-template-columns: 36px minmax(10rem, 14rem) minmax(0, 1fr) minmax(16rem, 18rem);
+    gap: 10px;
+  }
 }
 
 .transfer-history-album-summary {
   display: grid;
-  grid-template-columns: auto 46px minmax(13rem, 0.85fr) minmax(18rem, 1.25fr) auto;
+  grid-template-columns: 80px 46px minmax(10rem, 1fr) minmax(10rem, 1fr) auto;
   align-items: center;
-  gap: 0.75rem;
+  gap: 8px;
   min-block-size: 68px;
-  padding-block: 0.55rem;
-  padding-inline: 0.4rem 1rem;
+  padding: 12px;
   transition: background-color 160ms ease;
 }
 
-.transfer-history-album-summary:hover {
-  background: rgba(var(--v-theme-primary), 0.045);
-}
-
-.transfer-history-album-summary__controls {
-  display: flex;
+// 所有桌面分组共享固定控制列，避免专辑与影视分组的左侧位置不同。
+.transfer-history-desktop-group-controls {
+  display: grid;
+  grid-template-columns: 32px 40px;
   align-items: center;
-  gap: 0.1rem;
+  gap: 8px;
+  min-inline-size: 0;
 }
 
-.transfer-history-album-summary__controls :deep(.v-selection-control) {
+.transfer-history-desktop-group-controls .v-selection-control {
   min-block-size: auto;
 }
 
@@ -2794,13 +3164,12 @@ onUnmounted(() => {
   block-size: 46px;
   overflow: hidden;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  border-radius: 8px;
+  border-radius: var(--app-control-radius);
   background: rgba(var(--v-theme-on-surface), 0.07);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
 }
 
-.transfer-history-album-summary__cover :deep(.v-img),
-.transfer-history-album-summary__cover :deep(.v-img__img) {
+.transfer-history-album-summary__cover .v-img,
+.transfer-history-album-summary__cover .v-img__img {
   inline-size: 100%;
   block-size: 100%;
 }
@@ -2858,9 +3227,9 @@ onUnmounted(() => {
 }
 
 .transfer-history-album-summary__path > span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .transfer-history-album-summary__facts {
@@ -2877,7 +3246,7 @@ onUnmounted(() => {
 
 @media (max-width: 1280px) {
   .transfer-history-album-summary {
-    grid-template-columns: auto 46px minmax(12rem, 1fr) auto;
+    grid-template-columns: 80px 46px minmax(12rem, 1fr) auto;
   }
 
   .transfer-history-album-summary__path {
@@ -2894,16 +3263,15 @@ onUnmounted(() => {
 
 .transfer-history-desktop-poster-frame {
   overflow: hidden;
-  flex: 0 0 36px;
-  border-radius: 4px;
+  flex: 0 0 42px;
   aspect-ratio: 2 / 3;
   background: rgba(var(--v-theme-on-surface), 0.08);
-  block-size: 54px;
-  inline-size: 36px;
-  max-block-size: 54px;
-  max-inline-size: 36px;
-  min-block-size: 54px;
-  min-inline-size: 36px;
+  block-size: 63px;
+  inline-size: 42px;
+  max-block-size: 63px;
+  max-inline-size: 42px;
+  min-block-size: 63px;
+  min-inline-size: 42px;
 }
 
 .transfer-history-desktop-poster,
@@ -2990,8 +3358,7 @@ onUnmounted(() => {
   padding-block: 0.75rem;
 }
 
-.transfer-history-mobile-state,
-.transfer-history-mobile-empty {
+.transfer-history-mobile-state {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3003,11 +3370,8 @@ onUnmounted(() => {
 }
 
 .transfer-history-mobile-empty {
-  flex-direction: column;
-  gap: 0.75rem;
-  /* 空状态与列表共用空间，随移动端动态视口缩放，避免固定高度叠加。 */
-  min-block-size: clamp(6rem, 30vh, 18rem);
-  min-block-size: clamp(6rem, 30dvh, 18rem);
+  min-block-size: 18rem;
+  padding-block-start: 1.5rem;
 }
 
 .transfer-history-mobile-record {
@@ -3040,7 +3404,6 @@ onUnmounted(() => {
 .transfer-history-mobile-record__poster-wrapper {
   position: relative;
   overflow: hidden;
-  border-radius: var(--app-control-radius);
   background: var(--transfer-history-mobile-muted-bg);
   block-size: 5.25rem;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 18%);
@@ -3049,7 +3412,6 @@ onUnmounted(() => {
 }
 
 .transfer-history-mobile-record__poster {
-  border-radius: var(--app-control-radius);
   block-size: 100%;
   inline-size: 100%;
 }

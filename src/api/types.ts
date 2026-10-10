@@ -208,7 +208,7 @@ export interface Subscribe {
   // 洗版时已下载剧集的优先级状态
   episode_priority?: Record<string, number>
   // 保存目录
-  save_path?: string
+  save_path?: string | null
   // 时间
   date: string
   // 编辑框设置项
@@ -1530,6 +1530,19 @@ export interface DashboardItem {
   source_plugin_id?: string
 }
 
+/** 单页搜索的来源结果；前端持有页号，续页原样回传 source 和上一成功页摘要。 */
+export interface SearchSourcePage {
+  // 不透明的来源标识，前端不解析
+  source: string
+  site_name?: string | null
+  // 本次请求的页号（从 0 开始）
+  page: number
+  // 是否允许继续请求（成功后翻页、失败后重试），不保证下一页有资源
+  can_continue: boolean
+  // 本页请求失败的原因
+  error?: string | null
+}
+
 // 种子信息
 export interface TorrentInfo {
   // 站点ID
@@ -2459,6 +2472,8 @@ export interface TransferForm {
   music_release_regions?: string[] | null
   // MusicBrainz 文字字形优先级；未传时继承系统设置
   music_release_scripts?: string[] | null
+  // 本次是否识别 CUE；未传时继承系统设置
+  music_cue_enable?: boolean | null
   // 季号
   season?: number
   // 类型
@@ -2683,18 +2698,35 @@ export interface ManualTransferSubmissionData {
 // 整理队列
 export interface TransferQueue {
   // 媒体信息
-  media: MediaInfo
+  media: Pick<
+    MediaInfo,
+    | 'media_source'
+    | 'media_id'
+    | 'title'
+    | 'title_year'
+    | 'year'
+    | 'poster_path'
+    | 'episode_run_time'
+    | 'origin_country'
+  >
   // 季
   season?: number
   // 任务列表
   tasks: {
     // 文件项
-    fileitem: FileItem
-    // 元数据
-    meta: MetaInfo
+    fileitem: Pick<FileItem, 'path' | 'storage' | 'type' | 'name' | 'size'>
+    // 兼容旧的完整队列响应；轻量快照不返回识别元数据。
+    meta?: MetaInfo
     // 状态
     state: string
   }[]
+}
+
+export interface TransferQueuePage {
+  items: TransferQueue[]
+  total: number
+  page: number
+  count: number
 }
 
 // 人工复核允许管理员判定 durable 整理步骤的外部执行结果。

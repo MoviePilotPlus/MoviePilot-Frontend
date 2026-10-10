@@ -16,6 +16,8 @@ import { getDisplayImageUrl } from '@/utils/imageUtils'
 import { loadPosterTone, type PosterTone } from '@/utils/posterTone'
 import { buildMusicDetailRoute, formatMusicAudioSpecs, formatMusicBitrate } from '@/utils/music'
 import SubscribeExecutionDialog from '@/components/dialog/SubscribeExecutionDialog.vue'
+import SubscribeSourceMark from '@/components/misc/SubscribeSourceMark.vue'
+import type { SubscribeSource } from '@/utils/subscribeSource'
 
 const TERMINAL_EXECUTION_VISIBLE_MS: Record<string, number> = {
   completed: 5_000,
@@ -49,6 +51,11 @@ const props = defineProps({
   sortable: {
     type: Boolean,
     default: false,
+  },
+  // 订阅来源；列表里只有一个来源时由列表页传 null，卡片不展示
+  source: {
+    type: Object as PropType<SubscribeSource | null>,
+    default: null,
   },
 })
 
@@ -607,14 +614,13 @@ watch(
 onBeforeUnmount(() => clearExecutionStatusTimer())
 
 // 切换订阅记录时重新尝试加载图片，避免复用卡片组件后沿用旧的失败状态。
-watch(
-  () => [props.media?.id, props.media?.backdrop, props.media?.poster],
-  () => {
-    imageLoaded.value = false
-    backdropLoadError.value = false
-    posterLoadError.value = false
-  },
-)
+// 必须逐项比较：列表刷新会传入内容相同的新对象，此时图片地址不变、不会再触发 load，
+// 若误重置 imageLoaded，竖版海报会一直隐藏。
+watch([() => props.media?.id, () => props.media?.backdrop, () => props.media?.poster], () => {
+  imageLoaded.value = false
+  backdropLoadError.value = false
+  posterLoadError.value = false
+})
 
 // 媒体占位图标：电影/电视剧/音乐各自使用对应图标，缺失封面时统一渲染图标 + 底色占位
 const placeholderIcon = computed(() => {
@@ -644,6 +650,9 @@ const posterUrl = computed(() => {
   if (!url) return ''
   return getDisplayImageUrl(url, globalSettings.GLOBAL_IMAGE_CACHE)
 })
+
+// 桌面卡左侧竖版海报：背景图加载完成且海报地址可用时才显示
+const showDesktopPoster = computed(() => imageLoaded.value && !!posterUrl.value)
 
 // 缺失封面时展示媒体占位背景（图标 + 底色），对齐音乐媒体卡片
 const showPlaceholder = computed(() => !backdropUrl.value)
@@ -813,8 +822,17 @@ function handleCardClick() {
                   </VImg>
                   <div class="subscribe-card-mobile-image-scrim subscribe-card-background"></div>
 
-                  <div v-if="lastUpdateText" class="subscribe-card-mobile-image-meta">
-                    <div class="subscribe-card-mobile-image-meta__item subscribe-card-mobile-image-meta__updated">
+                  <div v-if="props.source || lastUpdateText" class="subscribe-card-mobile-image-meta">
+                    <!-- 来源只放头像徽标在左上角，与右上角更新时间对称 -->
+                    <SubscribeSourceMark
+                      v-if="props.source"
+                      :source="props.source"
+                      class="subscribe-card-mobile-image-meta__item subscribe-card-mobile-image-meta__source"
+                    />
+                    <div
+                      v-if="lastUpdateText"
+                      class="subscribe-card-mobile-image-meta__item subscribe-card-mobile-image-meta__updated"
+                    >
                       <VIcon icon="mdi-download" size="14" />
                       <span>{{ lastUpdateText }}</span>
                     </div>
@@ -894,18 +912,26 @@ function handleCardClick() {
 
               <div v-else>
                 <VCardText class="subscribe-card-desktop-text flex flex-1 items-center pt-3 pb-9">
-                  <div
-                    class="subscribe-card-poster h-auto w-12 flex-shrink-0 overflow-hidden rounded-md relative"
-                    v-if="imageLoaded && posterUrl"
-                    :class="{ 'cursor-move': props.sortable && display.mdAndUp.value }"
-                  >
-                    <VImg :src="posterUrl" aspect-ratio="2/3" cover @error="posterErrorHandler">
-                      <template #placeholder>
-                        <div class="w-full h-full">
-                          <VSkeletonLoader class="object-cover aspect-w-2 aspect-h-3" />
-                        </div>
-                      </template>
-                    </VImg>
+                  <!-- 海报外包一层定位容器：海报本身裁切圆角，来源徽标需要越出海报右下角 -->
+                  <div v-if="showDesktopPoster" class="subscribe-card-poster-frame relative w-12 flex-shrink-0">
+                    <div
+                      class="subscribe-card-poster h-auto w-12 overflow-hidden rounded-md relative"
+                      :class="{ 'cursor-move': props.sortable && display.mdAndUp.value }"
+                    >
+                      <VImg :src="posterUrl" aspect-ratio="2/3" cover @error="posterErrorHandler">
+                        <template #placeholder>
+                          <div class="w-full h-full">
+                            <VSkeletonLoader class="object-cover aspect-w-2 aspect-h-3" />
+                          </div>
+                        </template>
+                      </VImg>
+                    </div>
+                    <!-- 来源徽标挂在海报右下角，与左上角的洗版徽标错开 -->
+                    <SubscribeSourceMark
+                      v-if="props.source"
+                      :source="props.source"
+                      class="subscribe-card-poster-source"
+                    />
                   </div>
                   <div class="subscribe-card-meta flex flex-1 flex-col justify-center min-w-0 pl-2 xl:pl-4">
                     <div class="text-sm font-medium text-white sm:pt-1">{{ props.media?.year }}</div>
@@ -1073,6 +1099,12 @@ function handleCardClick() {
   color: rgba(255, 255, 255, 0.9);
   line-height: 1.2;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+
+/* 手机没有悬停，徽标常驻，同样降饱和压暗而不做透明 */
+.subscribe-card-mobile-image-meta__source {
+  flex: 0 1 auto;
+  filter: saturate(0.5) brightness(0.85);
 }
 
 .subscribe-card-mobile-image-meta__updated {
@@ -1253,6 +1285,22 @@ function handleCardClick() {
     linear-gradient(0deg, rgba(0, 0, 0, 60%) 0%, rgba(0, 0, 0, 35%) 40%, transparent 70%);
   inset: 0;
   pointer-events: none;
+}
+
+/* 来源徽标越出海报右下角约 5px，层级高于海报但低于卡片菜单。
+   平时降饱和、压暗来降低存在感，但保持不透明，避免透出海报像渲染残缺；
+   悬停卡片时只提亮到中间档，跳变幅度与卡片上浮反馈相当，不像被“点亮”成可点击状态。 */
+.subscribe-card-poster-source {
+  position: absolute;
+  z-index: 2;
+  filter: saturate(0.5) brightness(0.8);
+  inset-block-end: -5px;
+  inset-inline-end: -5px;
+  transition: filter 0.2s ease;
+}
+
+.subscribe-card-hover-area:hover .subscribe-card-poster-source {
+  filter: saturate(0.85) brightness(0.95);
 }
 
 /* 竖版海报是识别订阅的主体，用投影和细描边把它从底色中托出来。 */

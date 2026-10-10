@@ -29,7 +29,7 @@ describe('glass overlay material styles', () => {
   it('protects clear reading controls without blurring or changing the floating material', () => {
     const styles = readFileSync(resolve(cwd(), 'src/styles/themes/_glass-v3.scss'), 'utf8')
     const readingStart = styles.indexOf('// 固定导航的输入区需要隔开底下滚过的文字')
-    const readingEnd = styles.indexOf('    .v-card {', readingStart)
+    const readingEnd = styles.indexOf('\n    }', readingStart)
     const reading = styles.slice(readingStart, readingEnd)
 
     expect(reading).toContain('.layout-horizontal-nav-active')
@@ -70,6 +70,7 @@ describe('glass overlay material styles', () => {
       '.agent-assistant-panel',
       '.compact-fab .v-btn',
       '.v-snackbar__wrapper',
+      '.pwa-install-banner',
     ]) {
       expect(styles).toContain(`'${host}'`)
     }
@@ -485,11 +486,18 @@ describe('glass overlay material styles', () => {
     const styles = readFileSync(resolve(cwd(), 'src/styles/themes/glass.scss'), 'utf8')
 
     expect(styles).toMatch(
-      /:where\(\.Vue-Toastification__toast, \.agent-assistant-fab__bubble, \.system-update-prompt\)\s*\{[\s\S]*?backdrop-filter:\s*var\(--glass-overlay-backdrop-filter\)\s*!important;[\s\S]*?background-color:\s*var\(--glass-overlay-surface\)\s*!important;/,
+      /:where\(\.Vue-Toastification__toast, \.agent-assistant-fab__bubble, \.pwa-install-banner, \.system-update-prompt\)\s*\{[\s\S]*?backdrop-filter:\s*var\(--glass-overlay-backdrop-filter\)\s*!important;[\s\S]*?background-color:\s*var\(--glass-overlay-surface\)\s*!important;/,
     )
     expect(styles).toMatch(
       /\.agent-assistant-fab__bubbles::before\s*\{[\s\S]*?background-color:\s*var\(--glass-overlay-surface\)\s*!important;/,
     )
+  })
+
+  it('keeps the PWA install description on the theme emphasis color', () => {
+    const component = readFileSync(resolve(cwd(), 'src/components/pwa/PWAInstallPrompt.vue'), 'utf8')
+
+    expect(component).toContain('class="text-sm text-medium-emphasis"')
+    expect(component).not.toContain('class="text-sm opacity-70"')
   })
 
   it('reuses the popup menu material for compact FAB buttons', () => {
@@ -509,18 +517,16 @@ describe('glass overlay material styles', () => {
     )
   })
 
-  it('keeps the file browser lower outer corners inside the glass surface', () => {
+  it('lets the file workspace own glass sampling and clipping for its inner regions', () => {
     const styles = readFileSync(resolve(cwd(), 'src/styles/themes/_glass-v3.scss'), 'utf8')
-
-    expect(styles).toMatch(
-      /\.file-browser-view \.file-list\.v-card,\s*\.file-browser-view \.file-list\.v-card\.rounded-lg\s*\{[\s\S]*?border-end-end-radius:\s*var\(--app-surface-radius\) !important;/u,
+    const start = styles.indexOf(
+      '.file-browser-view :is(.file-browser-toolbar, .file-list, .file-navigator, .file-details, .file-row)',
     )
-    expect(styles).toMatch(
-      /\.file-browser-view:not\(:has\(\.file-navigator\)\) \.file-list\.v-card,\s*\.file-browser-view:not\(:has\(\.file-navigator\)\) \.file-list\.v-card\.rounded-lg\s*\{[\s\S]*?border-end-start-radius:\s*var\(--app-surface-radius\) !important;/u,
-    )
-    expect(styles).toMatch(
-      /\.file-browser-view \.file-navigator\.v-card,\s*\.file-browser-view \.file-navigator\.v-card\.rounded-lg\s*\{[\s\S]*?border-end-start-radius:\s*var\(--app-surface-radius\) !important;/u,
-    )
+    const rule = styles.slice(start, styles.indexOf('}', start))
+    expect(rule).toContain('--glass-native-surface-backdrop-filter: none')
+    expect(rule).toContain('backdrop-filter: none !important')
+    const browser = readFileSync(resolve(cwd(), 'src/components/filebrowser/FileBrowser.vue'), 'utf8')
+    expect(browser).toContain('overflow: hidden')
   })
 
   it('uses the shared hover-card contract instead of a Dashboard-specific shadow rule', () => {

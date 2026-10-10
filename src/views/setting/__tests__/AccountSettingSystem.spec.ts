@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('colorthief', () => ({
+  /** 提供不依赖真实图片的测试颜色。 */
   default: class ColorThief {
     /** 返回稳定测试色，避免设置页子组件加载原生图像依赖。 */
     getColor() {
@@ -204,6 +205,7 @@ const BASIC_SETTING_KEYS = [
   'AI_AGENT_GLOBAL',
   'AI_AGENT_HIDE_ENTRY',
   'AI_AGENT_JOB_INTERVAL',
+  'AI_AGENT_OUTPUT_LANGUAGE',
   'AI_AGENT_RETRY_TRANSFER',
   'AI_AGENT_VERBOSE',
   'AI_RECOMMEND_ENABLED',
@@ -446,6 +448,7 @@ const SelectFieldStub = defineComponent({
 const CronFieldStub = createModelFieldStub('VCronFieldStub')
 const PathFieldStub = createModelFieldStub('VPathFieldStub')
 
+/** 用实际系统设置组件验证加载、编辑和保存。 */
 async function renderSettings(props: { active?: boolean } = {}) {
   return renderWithProviders(AccountSettingSystem, {
     props,
@@ -457,24 +460,28 @@ async function renderSettings(props: { active?: boolean } = {}) {
   })
 }
 
+/** 限定基础设置卡片，避免与高级设置中的控件重名。 */
 function getBasicCard() {
   const card = screen.getByText('基础设置').closest('.v-card')
   expect(card).not.toBeNull()
   return within(card as HTMLElement)
 }
 
+/** 按标题限定当前要操作的设置卡片。 */
 function getSettingsCard(title: string) {
   const card = screen.getByText(title, { selector: '.v-card-title' }).closest('.v-card')
   expect(card).not.toBeNull()
   return within(card as HTMLElement)
 }
 
+/** 从正式入口打开高级设置页签。 */
 async function openAdvancedTab(tab: string) {
   await fireEvent.click(screen.getByRole('button', { name: /高级设置/ }))
   await fireEvent.click(await screen.findByRole('tab', { name: tab }))
   return within(screen.getByRole('dialog'))
 }
 
+/** 兼容原生下拉替身与 Vuetify 菜单的选项操作。 */
 async function selectOption(label: string, option: string) {
   const user = userEvent.setup()
   const control = screen.getByLabelText(label)
@@ -632,7 +639,7 @@ describe('AccountSettingSystem', () => {
         API_TOKEN: '1234567890abcdef',
         AUDIO_OUTPUT_MODEL: 'gpt-4o-mini-tts',
         DB_TYPE: 'sqlite',
-        LLM_TEMPERATURE: 0.3,
+        LLM_TEMPERATURE: null,
         WALLPAPER: '',
         WALLPAPER_IMAGE_URL: null,
         WALLPAPER_ROTATION_INTERVAL: 15,
@@ -702,6 +709,40 @@ describe('AccountSettingSystem', () => {
 
     await fireEvent.click(testLlm)
     await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith('LLM 调用测试成功'))
+  })
+
+  it.each([
+    ['', null],
+    ['0', 0],
+    ['1', 1],
+  ])('preserves temperature %j through testing, saving, and reloading', async (input, expected) => {
+    enableLlmSettings()
+    const view = await renderSettings()
+    const testLlm = await expandLlmSettings()
+    await fireEvent.update(screen.getByLabelText('温度参数'), input)
+    mocks.apiPost.mockClear()
+
+    await fireEvent.click(testLlm)
+    await waitFor(() =>
+      expect(mocks.apiPost).toHaveBeenCalledWith(
+        'llm/manage',
+        expect.objectContaining({ params: expect.objectContaining({ temperature: expected }) }),
+        expect.any(Object),
+      ),
+    )
+
+    await fireEvent.click(getBasicCard().getByRole('button', { name: '保存' }))
+    await waitFor(() =>
+      expect(findPost('system/env')?.[1]).toEqual(expect.objectContaining({ LLM_TEMPERATURE: expected })),
+    )
+
+    view.unmount()
+    systemEnv = { ...systemEnv, LLM_TEMPERATURE: expected }
+    await renderSettings()
+    await expandLlmSettings()
+    expect((screen.getByLabelText('温度参数') as HTMLInputElement).value).toBe(
+      expected === null ? '' : String(expected),
+    )
   })
 
   it('aborts stale LLM tests and ignores both late success and late failure', async () => {
@@ -985,6 +1026,7 @@ describe('AccountSettingSystem', () => {
     for (const label of ['全局智能助手', '啰嗦模式', '隐藏全局入口']) {
       await fireEvent.click(screen.getByLabelText(label))
     }
+    await selectOption('助手输出语言', 'English')
     await selectOption('定时唤醒', '6小时')
     for (const label of ['支持音频输入', '支持音频输出', '文件整理失败智能接管', '搜索结果智能推荐']) {
       await fireEvent.click(screen.getByLabelText(label))
@@ -1010,6 +1052,7 @@ describe('AccountSettingSystem', () => {
         AI_AGENT_GLOBAL: true,
         AI_AGENT_HIDE_ENTRY: true,
         AI_AGENT_JOB_INTERVAL: 6,
+        AI_AGENT_OUTPUT_LANGUAGE: 'en-US',
         AI_AGENT_RETRY_TRANSFER: true,
         AI_AGENT_VERBOSE: true,
         AI_RECOMMEND_ENABLED: true,
@@ -1235,11 +1278,26 @@ describe('AccountSettingSystem', () => {
     )
   })
 
+  it('loads a disabled CUE setting and allows enabling it without online music modules', async () => {
+    systemEnv.MUSIC_CUE_ENABLE = false
+    systemEnv.MODULE_ENABLE = { MusicBrainzModule: false, TheAudioDbModule: false }
+    await renderSettings()
+    const dialog = await openAdvancedTab('媒体')
+    const cueSwitch = dialog.getByLabelText('音乐 CUE 识别')
+    expect(cueSwitch).not.toBeChecked()
+    await fireEvent.click(cueSwitch)
+    await fireEvent.click(dialog.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(findPost('system/env')?.[1]).toEqual(expect.objectContaining({ MUSIC_CUE_ENABLE: true }))
+  })
+
   it('round-trips advanced media metadata, recognition, and Fanart settings', async () => {
     const user = userEvent.setup()
     await renderSettings()
     const dialog = await openAdvancedTab('媒体')
     expect(dialog.getByLabelText('音乐媒体信息转简体中文')).toBeChecked()
+    expect(dialog.getByLabelText('音乐 CUE 识别')).toBeChecked()
+    expect(dialog.getByLabelText('歌词正文转简体中文')).not.toBeChecked()
     expect(dialog.getByLabelText('音乐发行地区优先级')).toHaveValue(['CN', 'TW', 'HK'])
     expect(dialog.getByLabelText('音乐文字字形优先级')).toHaveValue(['Hans', 'Hant', 'Latn'])
     expect(dialog.getByLabelText('AMLL TTML 服务地址')).toHaveValue('https://api.amll.dev')
@@ -1262,6 +1320,8 @@ describe('AccountSettingSystem', () => {
       '跟随TMDB识别整理',
       'TMDB 刮削原语种图片',
       '音乐媒体信息转简体中文',
+      '歌词正文转简体中文',
+      '音乐 CUE 识别',
       '优先使用插件识别',
       '共享使用媒体识别数据',
       'Fanart图片数据源',
@@ -1293,6 +1353,8 @@ describe('AccountSettingSystem', () => {
         LYRICS_PROVIDER_RETRY_MAX_WAIT: 3,
         MUSIC_COVER_PROXY: 'https://music.example',
         MUSIC_METADATA_TO_SIMPLIFIED: false,
+        MUSIC_LYRICS_TO_SIMPLIFIED: true,
+        MUSIC_CUE_ENABLE: false,
         MUSIC_RELEASE_REGION_PRIORITY: 'CN,TW,HK',
         MUSIC_RELEASE_SCRIPT_PRIORITY: 'Hans,Hant,Latn',
         RECOGNIZE_PLUGIN_FIRST: true,
@@ -1306,6 +1368,25 @@ describe('AccountSettingSystem', () => {
       }),
     )
   })
+
+  it.each([false, true])(
+    'loads lyrics simplification %s and saves it independently of music modules',
+    async enabled => {
+      systemEnv.MUSIC_LYRICS_TO_SIMPLIFIED = enabled
+      systemEnv.MUSIC_METADATA_TO_SIMPLIFIED = true
+      systemEnv.MODULE_ENABLE = { MusicBrainzModule: false, LrclibModule: false, AmllModule: false }
+      await renderSettings()
+      const dialog = await openAdvancedTab('媒体')
+      const lyricsSwitch = dialog.getByLabelText('歌词正文转简体中文')
+      expect((lyricsSwitch as HTMLInputElement).checked).toBe(enabled)
+      await fireEvent.click(lyricsSwitch)
+      await fireEvent.click(dialog.getByRole('button', { name: '保存' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(findPost('system/env')?.[1]).toEqual(
+        expect.objectContaining({ MUSIC_LYRICS_TO_SIMPLIFIED: !enabled, MUSIC_METADATA_TO_SIMPLIFIED: true }),
+      )
+    },
+  )
 
   it('round-trips advanced network fields and extends both image access lists', async () => {
     const user = userEvent.setup()
