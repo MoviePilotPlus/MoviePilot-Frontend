@@ -947,3 +947,13 @@ architecture 基线四刷新。
 - 上游内容：agent 思考态四连修（timeline 行渲染 091582a5、耗时展示 37c49954、打点动画 91f6ab53、取消停表 42063d1b、工具期状态 2967544ba/842ba547e）；订阅卡海报色调染色+背景窗化（6a095e3e）；订阅卡隐藏订阅者名（1a07060e）；系统通知显式 severity（690dacd6）。
 - 冲突：零冲突自动合并（9 文件 +642/−105）。
 - 验证：yarn install --immutable ✓；eslint ✓；vitest 3551 过 / 10 败——失败族与 84 轮完全一致（format-changed×4、UserProfile×2、TransferHistoryView×2、glassOverlay×1、app-glass-optical-preload×1），已知 Windows 环境族。
+
+## 第 86 次合并（2026-10-02）
+
+- 范围：e1012f02..f4e722f0（44 提交，v3.1.0 → v3.1.3）
+- 上游内容：桌面整理历史虚拟卡重设计（3b32817b 系 5 提交）；文件浏览器与通知组件增强（74cc5036）；下载卡/整理历史尺寸调整；手动搜索续搜入口（518d2d15 前端侧）；手动整理 CUE 开关（bb50de35/a5bec894）；agent 输出语言设置（55238a13）；订阅卡来源角标（8c73bce6）；歌词简化选项（7296ce44）；版本提示全阶段可忽略（43e79088）；PWA 玻璃安装提示材质（4c133ad2）；插件面板启动器（5f8c0413）；eslint prune（89d7ca19）。
+- 冲突 2 处：
+  - `src/styles/common.scss` ours（fork 下拉指示器+采集追加块整段保留，上游同位置无内容）
+  - `eslint-suppressions.json` 三方并集（merge-base 判据：fork 独有键保留 / 上游删且 fork 未改→跟删 / fork 改过→保留；第一版并集误删 fork 独有键 25 文件致 lint 红，键数 180→157 假并集暴露后修正为 181）+ prune 清残留
+- 验证：yarn install ✓；eslint ✓（prune 后）；vitest 3670 过 / 9 败——失败族与 85 轮一致减一（TransferHistoryView 从 2F 变 1F=上游重设计该视图，属已知族内部数量漂移）。
+- 版本：package.json 3.1.0 → 3.1.3。
