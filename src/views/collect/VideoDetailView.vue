@@ -1808,7 +1808,7 @@ function handleIgnore() {
         {{ t('collectVideo.episodesAllShort', { count: addForm.episodes_all }) }}
       </VChip>
     </div>
-    <VBtn variant="tonal" color="info" @click="addCollect">
+    <VBtn class="collect-submit-btn" variant="flat" color="primary" size="large" @click="addCollect">
       <template #prepend>
         <VIcon icon="mdi-download-multiple" />
       </template>
@@ -2148,7 +2148,9 @@ a.crew-name {
   display: none;
 }
 
-/* 吸底提交条：滚动全程可提交；毛玻璃底避免文字透出 */
+/* 吸底提交条：滚动全程可提交；毛玻璃底避免文字透出。
+ * 移动端底部有悬浮导航（footer-nav，fixed 底部 + 按钮组高约 56px + 6px 边距），
+ * 吸底位置必须让出它的高度，否则提交条被压在导航下面。 */
 .collect-submit-bar {
   position: sticky;
   inset-block-end: 0.75rem;
@@ -2163,6 +2165,20 @@ a.crew-name {
   background: rgba(var(--v-theme-surface), 0.92);
   backdrop-filter: blur(8px);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+}
+
+/* 移动端（app 模式底部导航显示）：抬升到导航上方 */
+@media (width <=960px) {
+  .collect-submit-bar {
+    inset-block-end: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* 采集提交按钮：页面主行动作，实底高对比 + 柔光晕，从条内一眼可辨 */
+.collect-submit-btn {
+  min-inline-size: 8.5rem;
+  font-weight: 700;
+  box-shadow: 0 2px 14px rgba(var(--v-theme-primary), 0.45);
 }
 
 .bluray-tech-info {
