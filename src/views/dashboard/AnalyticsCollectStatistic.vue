@@ -174,7 +174,7 @@ onActivated(() => {
         </div>
       </div>
 
-      <div v-if="sourceRows.length || siteRows.length" class="dashboard-dimension-grid">
+      <div v-if="sourceRows.length || siteRows.length" class="dashboard-dimension-grid" data-layout-size-source>
         <!-- 按采集源分布 -->
         <div v-if="sourceRows.length" class="dimension-block">
           <div class="dimension-title">{{ t('dashboard.collectSources') }}</div>

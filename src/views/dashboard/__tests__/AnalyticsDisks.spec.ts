@@ -59,4 +59,17 @@ describe('AnalyticsDisks', () => {
     await waitFor(() => expect(apiGet).toHaveBeenCalledOnce())
     expect(screen.getByText('未发现已挂载的磁盘')).toBeInTheDocument()
   })
+
+  it('declares the disk list as a layout size source for async remeasure', async () => {
+    // 内容行数不固定且晚于仪表盘首测到达；不声明 data-layout-size-source 时
+    // has-fill-content 把外层钉在格子高度，ResizeObserver 失明 → 首屏遮挡。
+    apiGet.mockResolvedValue([
+      { mount_point: 'C:\\', fs_type: 'NTFS', total: 1024 ** 3, used: 0, free: 1024 ** 3, percent: 0 },
+    ])
+
+    const { container } = await renderWithProviders(AnalyticsDisks)
+
+    await screen.findByText('C:')
+    expect(container.querySelector('[data-layout-size-source]')).not.toBeNull()
+  })
 })

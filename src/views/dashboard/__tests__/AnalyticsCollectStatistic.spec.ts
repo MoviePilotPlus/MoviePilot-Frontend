@@ -206,4 +206,27 @@ describe('AnalyticsCollectStatistic', () => {
     expect(screen.queryByText('采集源分布')).not.toBeInTheDocument()
     expect(screen.queryByText('做种站点')).not.toBeInTheDocument()
   })
+
+  it('declares the dimension grid as a layout size source for async remeasure', async () => {
+    // 分布区块行数不固定且晚于仪表盘首测到达；不声明 data-layout-size-source 时
+    // has-fill-content 把外层钉在格子高度，ResizeObserver 失明 → 首屏遮挡。
+    apiGet.mockResolvedValue({
+      collect_count: 1,
+      collect_finished_count: 1,
+      seed_count: 0,
+      torrent_size: 0,
+      collect_count_month: 0,
+      collect_finished_month: 0,
+      seed_count_month: 0,
+      source_counts: [{ site: 'Tencent', count: 1 }],
+      seeding_site_counts: [],
+    })
+
+    const { container } = await renderWithProviders(AnalyticsCollectStatistic, {
+      initialState: { user: { userID: 7 } },
+    })
+
+    await screen.findByText('采集源分布')
+    expect(container.querySelector('[data-layout-size-source]')).not.toBeNull()
+  })
 })

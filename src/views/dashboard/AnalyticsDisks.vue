@@ -48,7 +48,9 @@ onMounted(refreshDisks)
       <VCardTitle>{{ t('dashboard.disks') }}</VCardTitle>
     </VCardItem>
     <VCardText class="dashboard-summary-content">
-      <template v-if="disks.length">
+      <!-- 内容行数随磁盘数变化且晚于首测到达；声明尺寸源让数据到达后重新测高，
+           否则 has-fill-content 把外层钉在格子高度，ResizeObserver 失明致首屏遮挡 -->
+      <div v-if="disks.length" data-layout-size-source>
         <div v-for="disk in disks" :key="disk.mount_point" class="disk-item">
           <div class="disk-meta">
             <span class="disk-mount" :title="disk.mount_point">
@@ -68,7 +70,7 @@ onMounted(refreshDisks)
             <span v-if="disk.fs_type" class="disk-fstype">{{ disk.fs_type }}</span>
           </div>
         </div>
-      </template>
+      </div>
       <div v-else class="disk-empty">
         {{ t('dashboard.noDisks') }}
       </div>
