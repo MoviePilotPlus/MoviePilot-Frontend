@@ -1201,7 +1201,7 @@ function handleIgnore() {
           </div>
         </div>
         <div class="media-actions">
-          <VBtn variant="tonal" color="info" class="mb-2" @click="addCollect">
+          <VBtn variant="flat" color="primary" class="collect-submit-btn mb-2" @click="addCollect">
             <template #prepend>
               <VIcon icon="mdi-download-multiple" />
             </template>
