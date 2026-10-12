@@ -48,6 +48,28 @@ function commitMbInput(target: 'compress' | 'min') {
   basic[key] = bytes
 }
 
+// 高码率阈值以 Mbps 展示/编辑（后端存 bps）。
+// 与上面 MB 字段同范式：草稿态 + blur 写回，双向 computed 会被失焦清空坑顶回。
+const MBPS = 1_000_000
+function bpsToMbpsStr(value: unknown) {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? String(Math.round((n / MBPS) * 100) / 100) : ''
+}
+const highBitrateMbps = ref('')
+watch(() => basic.HIGH_BITRATE_THRESHOLD, (v) => { highBitrateMbps.value = bpsToMbpsStr(v) }, { immediate: true })
+function commitHighBitrateInput() {
+  const raw = highBitrateMbps.value.trim()
+  const n = Number(raw)
+  if (raw === '' || !Number.isFinite(n) || n < 0) {
+    // 放弃编辑：回显当前源值
+    highBitrateMbps.value = bpsToMbpsStr(basic.HIGH_BITRATE_THRESHOLD)
+    return
+  }
+  const bps = Math.round(n * MBPS)
+  highBitrateMbps.value = bpsToMbpsStr(bps)
+  basic.HIGH_BITRATE_THRESHOLD = bps
+}
+
 // 保存基础设置（整组含截图参数键；模板 JSON 键由截图卡保存后回写，值保持最新）
 async function saveBasicSettings() {
   try {
@@ -163,15 +185,16 @@ async function saveBasicSettings() {
         <VRow>
           <VCol cols="12" md="6">
             <VTextField
-              v-model="basic.HIGH_BITRATE_THRESHOLD"
+              v-model="highBitrateMbps"
               type="number"
               :label="t('setting.collect.highBitrateThreshold')"
               :hint="t('setting.collect.highBitrateThresholdHint')"
-              placeholder="10000000"
-              suffix="bps"
+              placeholder="10"
+              suffix="Mbps"
               min="0"
               persistent-hint
               prepend-inner-icon="mdi-speedometer"
+              @blur="commitHighBitrateInput"
             />
           </VCol>
           <VCol cols="12" md="6">
