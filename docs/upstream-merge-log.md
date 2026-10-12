@@ -957,3 +957,17 @@ architecture 基线四刷新。
   - `eslint-suppressions.json` 三方并集（merge-base 判据：fork 独有键保留 / 上游删且 fork 未改→跟删 / fork 改过→保留；第一版并集误删 fork 独有键 25 文件致 lint 红，键数 180→157 假并集暴露后修正为 181）+ prune 清残留
 - 验证：yarn install ✓；eslint ✓（prune 后）；vitest 3670 过 / 9 败——失败族与 85 轮一致减一（TransferHistoryView 从 2F 变 1F=上游重设计该视图，属已知族内部数量漂移）。
 - 版本：package.json 3.1.0 → 3.1.3。
+
+## 2026-10-12 前端合并 upstream tag v3.1.5（tag 门禁版首轮）
+
+- **合并目标**：tag `v3.1.5`（7de709c1，非 upstream/v3 tip）——tag 门禁策略生效后首轮
+- **范围**：36 提交 / 77 文件 +6716−555（工作流表单/LoggingView/设置页/发布工具链）
+- **冲突**：0（全 auto-merge）
+- **eslint-suppressions.json**：fork 179 键全保留（fork 新增 57 键零丢失、上游无删键）——程序化三方核验通过
+- **验证**：lint 全绿；vitest 3785 过 / 9 败 / 5 文件——失败族与 86 轮已知族完全一致
+  （UserProfile×2、glassOverlay×1、app-glass-optical-preload×1、TransferHistoryView×1、
+  format-changed(Prettier 选择器)×4），IDENTICAL 放行
+- **注意**：上游 v3.1.0 tag 曾 clobber 本地（fetch 报 rejected），本地保留版未受影响；
+  `--merged upstream/v3` 对这些 tag 返回空是旧 git（2.x 无 annotated tag 深度）所致的
+  误导向，tag 实际链在 v3 线上（rev-list 验证），下轮判定直接用
+  `git merge-base --is-ancestor <tag>^{commit} v3_plus` 而不要依赖 --merged 过滤
