@@ -178,11 +178,12 @@ const virtualScrollStub = defineComponent({
   },
 })
 
-function mountPanel() {
+function mountPanel(props: Record<string, unknown> = {}) {
   return shallowMount(AgentAssistantPanel, {
-    props: { modelValue: true },
+    props: { modelValue: true, ...props },
     global: {
       stubs: {
+        AgentPetAvatar: false,
         AgentMarkdownContent: agentMarkdownContentStub,
         IconBtn: { template: '<button><slot /></button>' },
         PerfectScrollbar: { template: '<div><slot /></div>' },
@@ -224,7 +225,10 @@ describe('AgentAssistantPanel stream recovery', () => {
   })
 
   it('renders thinking as an ordered standalone row after existing assistant content', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => createAgentResponse([])))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => createAgentResponse([])),
+    )
     localStorage.setItem(
       'moviepilot-agent-assistant-state',
       JSON.stringify({
@@ -2545,6 +2549,234 @@ describe('AgentAssistantPanel stream recovery', () => {
     expect(wrapper.find('.agent-assistant-message--assistant .agent-assistant-message__bubble').text()).toBe(
       Array.from({ length: 100 }, (_item, index) => String(index % 10)).join(''),
     )
+
+    wrapper.unmount()
+  })
+})
+
+describe('AgentAssistantPanel agent host bridge', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    localStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('fills the draft into the input without sending a message', async () => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () =>
+      createAgentResponse([]),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const wrapper = mountPanel()
+    await flushPromises()
+    fetchMock.mockClear()
+
+    ;(wrapper.vm as unknown as { setDraft: (draft: string) => void }).setDraft('帮我看看下载任务')
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('帮我看看下载任务')
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/message/agent/stream'))).toBe(false)
+    expect(wrapper.findAll('.agent-assistant-message--user')).toHaveLength(0)
+
+    wrapper.unmount()
+  })
+
+  it('shows the active pet avatar and name in the header, empty state and assistant messages', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => createAgentResponse([])),
+    )
+    localStorage.setItem(
+      'moviepilot-agent-assistant-state',
+      JSON.stringify({
+        sessionId: 'web-agent:pet-avatar',
+        messages: [
+          {
+            id: 'assistant-pet',
+            role: 'assistant',
+            content: '你好',
+            createdAt: Date.now(),
+            status: 'done',
+            tools: [],
+            segments: [{ type: 'text', content: '你好' }],
+            attachments: [],
+            choices: [],
+          },
+        ],
+      }),
+    )
+    const pet = {
+      plugin_id: 'PetPlugin',
+      source_plugin_id: 'PetPlugin',
+      plugin_name: '桌宠',
+      key: 'girl',
+      name: '小映',
+      mode: 'stage',
+      component: 'AgentPet',
+      api_version: 1,
+      preview_url: '/preview.png',
+      avatar_url: '/avatar.png',
+    }
+    const wrapper = mountPanel({ pet })
+    await flushPromises()
+
+    expect(wrapper.get('.agent-assistant-panel').attributes('aria-label')).toBe('小映')
+    expect(wrapper.get('.agent-assistant-title').text()).toContain('小映')
+    expect(wrapper.find('.agent-assistant-title__mark img').attributes('src')).toBe('/avatar.png')
+    expect(wrapper.find('.agent-assistant-title__mark .agent-assistant-mini-bot').exists()).toBe(false)
+    const meta = wrapper.get('.agent-assistant-message--assistant .agent-assistant-message__meta')
+    expect(meta.text()).toContain('小映')
+    expect(meta.find('img').attributes('src')).toBe('/avatar.png')
+
+    // 头像图全部加载失败时退回内置机器人图标。
+    await wrapper.get('.agent-assistant-title__mark img').trigger('error')
+    await wrapper.get('.agent-assistant-title__mark img').trigger('error')
+    expect(wrapper.find('.agent-assistant-title__mark .agent-assistant-mini-bot').exists()).toBe(true)
+
+    // 切回内置机器人时保持原名称与图标。
+    await wrapper.setProps({ pet: null })
+    expect(wrapper.get('.agent-assistant-title').text()).toContain('agentAssistant.title')
+    expect(wrapper.get('.agent-assistant-message--assistant .agent-assistant-message__meta').text()).toContain(
+      'agentAssistant.assistant',
+    )
+    wrapper.unmount()
+  })
+
+  it('shows the pet avatar in the empty state instead of the sparkles mark', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => createAgentResponse([])),
+    )
+    const wrapper = mountPanel({
+      pet: {
+        plugin_id: 'PetPlugin',
+        source_plugin_id: 'PetPlugin',
+        plugin_name: '桌宠',
+        key: 'girl',
+        name: '小映',
+        mode: 'renderer',
+        component: 'AgentPet',
+        api_version: 1,
+        preview_url: '/preview.png',
+        avatar_url: null,
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('.agent-assistant-empty__mark img').attributes('src')).toBe('/preview.png')
+    wrapper.unmount()
+  })
+
+  it('opens the avatar picker inside the panel and returns to the conversation', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => createAgentResponse([])),
+    )
+    const wrapper = mountPanel()
+    await flushPromises()
+    const toggle = wrapper.get('.agent-assistant-pet-toggle')
+
+    expect(toggle.attributes('aria-label')).toBe('agentAssistant.pet.change')
+    expect(toggle.attributes('title')).toBe('agentAssistant.pet.change')
+    expect(wrapper.find('.agent-assistant-pet-picker').exists()).toBe(false)
+
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-pressed')).toBe('true')
+    expect(wrapper.find('.agent-assistant-pet-picker').exists()).toBe(true)
+    expect((wrapper.get('.agent-assistant-messages').element as HTMLElement).style.display).toBe('none')
+    expect((wrapper.get('.agent-assistant-composer').element as HTMLElement).style.display).toBe('none')
+
+    // Esc 先回到对话，不直接关闭面板。
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(wrapper.find('.agent-assistant-pet-picker').exists()).toBe(false)
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+
+    await toggle.trigger('click')
+    ;(wrapper.vm as unknown as { setDraft: (draft: string) => void }).setDraft('草稿')
+    await flushPromises()
+    expect(wrapper.find('.agent-assistant-pet-picker').exists()).toBe(false)
+    expect((wrapper.get('.agent-assistant-messages').element as HTMLElement).style.display).toBe('')
+
+    wrapper.unmount()
+  })
+
+  it('appends a draft after existing input instead of overwriting it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => createAgentResponse([])),
+    )
+    const wrapper = mountPanel()
+    await flushPromises()
+    await wrapper.get('textarea').setValue('我正在写的问题  ')
+
+    ;(wrapper.vm as unknown as { setDraft: (draft: string) => void }).setDraft('插件草稿')
+    await flushPromises()
+
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('我正在写的问题\n\n插件草稿')
+    wrapper.unmount()
+  })
+
+  it('does not stack the same draft again when the input already ends with it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => createAgentResponse([])),
+    )
+    const wrapper = mountPanel()
+    await flushPromises()
+    const setDraft = (wrapper.vm as unknown as { setDraft: (draft: string) => void }).setDraft
+
+    setDraft('插件草稿')
+    setDraft('插件草稿')
+    await flushPromises()
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('插件草稿')
+
+    await wrapper.get('textarea').setValue('我的问题')
+    setDraft('插件草稿')
+    setDraft('插件草稿')
+    await flushPromises()
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('我的问题\n\n插件草稿')
+    wrapper.unmount()
+  })
+
+  it('reports tool, choice and terminal stream phases for the host', async () => {
+    const primaryStream = createControllableAgentStream()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith('/message/agent/stream') && init?.method === 'POST') return primaryStream.response
+        return createAgentResponse([])
+      }),
+    )
+    const wrapper = mountPanel()
+    await wrapper.find('textarea').setValue('检查媒体状态')
+    await wrapper.find('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    primaryStream.emit(
+      legacySseFrame({
+        type: 'tool',
+        status: 'running',
+        tool_id: 'tool-1',
+        tool_name: 'search_media',
+        message: '搜索',
+      }),
+    )
+    primaryStream.emit(legacySseFrame({ type: 'tool', status: 'done', tool_id: 'tool-1' }))
+    primaryStream.emit(legacySseFrame({ type: 'choice', choice: { id: 'choice-1', prompt: '选择', buttons: [] } }))
+    primaryStream.emit(legacySseFrame({ type: 'done' }))
+    primaryStream.close()
+    await flushPromises()
+
+    expect(wrapper.emitted('stream-phase')?.map(([event]) => event)).toEqual([
+      { type: 'tool', id: 'tool-1', name: 'search_media', status: 'running' },
+      { type: 'tool', id: 'tool-1', name: null, status: 'done' },
+      { type: 'choice' },
+      { type: 'done' },
+    ])
 
     wrapper.unmount()
   })

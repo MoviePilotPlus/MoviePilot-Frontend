@@ -7,6 +7,12 @@ import { useAuthStore, useUserStore } from '@/stores'
 import { getCurrentLocale } from '@/plugins/i18n'
 import { AGENT_ASSISTANT_LAYER_Z_INDEX } from '@/constants/agentAssistant'
 import AgentMarkdownContent from './AgentMarkdownContent.vue'
+import type { AgentStreamPhaseEvent } from '@/utils/agentHostPhase'
+import type { AgentPetDeclaration } from '@/types/agentHost'
+import AgentPetAvatar from './pet/AgentPetAvatar.vue'
+
+// 形象选择视图按需加载，只在用户点开“更换形象”时才读取形象声明。
+const AgentPetPicker = defineAsyncComponent(() => import('./AgentPetPicker.vue'))
 
 type AgentMessageRole = 'user' | 'assistant'
 type AgentMessageStatus = 'idle' | 'streaming' | 'done' | 'error'
@@ -245,15 +251,24 @@ const props = withDefaults(
     modelValue?: boolean
     /** 是否允许面板的装饰性动效，不影响消息流、thinking 或输入反馈。 */
     motionActive?: boolean
+    /** 当前生效的插件形象；为空时面板保持内置机器人头像和“智能助手”名称。 */
+    pet?: AgentPetDeclaration | null
   }>(),
   {
     modelValue: false,
     motionActive: true,
+    pet: null,
   },
 )
 
+/** 面板标题、无障碍名称和消息署名：插件形象用其名称，内置机器人保持原文案。 */
+const assistantTitle = computed(() => props.pet?.name || t('agentAssistant.title'))
+const assistantSpeakerName = computed(() => props.pet?.name || t('agentAssistant.assistant'))
+
 const emit = defineEmits<{
   'assistant-preview': [value: string]
+  /** 面板流事件中与会话阶段相关的部分，供宿主归纳 phase 并广播 `agent.*` 事件。 */
+  'stream-phase': [event: AgentStreamPhaseEvent]
   'thinking-change': [value: boolean]
   'update:modelValue': [value: boolean]
 }>()
@@ -280,6 +295,8 @@ const runnerActive = ref(false)
 const isComposing = ref(false)
 const streamError = ref('')
 const historyMenuOpen = ref(false)
+/** 面板内的“更换形象”视图是否打开；打开时替换消息区和输入区，关闭后回到原对话。 */
+const petPickerOpen = ref(false)
 const messageListRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
@@ -837,7 +854,7 @@ function dedupeHistorySessions(sessions: AgentSessionHistoryItem[]) {
 function restoreHistorySessions() {
   try {
     historySessions.value = normalizeHistorySessions(JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY) || '[]'))
-  } catch (error) {
+  } catch {
     historySessions.value = []
   }
 }
@@ -879,7 +896,7 @@ async function loadServerHistorySessions() {
     historySessions.value = dedupeHistorySessions(sessions)
     historyHasMore.value = sessions.length >= HISTORY_PAGE_SIZE
     persistHistorySessions()
-  } catch (error) {
+  } catch {
     restoreHistorySessions()
     historyHasMore.value = false
   } finally {
@@ -914,7 +931,7 @@ async function loadMoreServerHistorySessions(options?: { done?: (status: Infinit
     historyHasMore.value = sessions.length >= HISTORY_PAGE_SIZE
     persistHistorySessions()
     options?.done?.(sessions.length ? 'ok' : 'empty')
-  } catch (error) {
+  } catch {
     options?.done?.('error')
   } finally {
     historyLoadingMore.value = false
@@ -1130,7 +1147,7 @@ function scheduleStreamRecovery(delay = 1200) {
         scheduleStreamRecovery(Math.min(8000, 1200 + recovery.attempts * 900))
         return
       }
-    } catch (error) {
+    } catch {
       // 会话快照可能还未写入，继续按退避间隔等待。
     }
 
@@ -1195,7 +1212,7 @@ function restoreState() {
     restorePendingSteeringMessages()
     restorePendingStreamRecovery(state.streamRecovery)
     upsertCurrentSessionHistory()
-  } catch (error) {
+  } catch {
     sessionId.value = createSessionId()
     messages.value = []
     restorePendingSteeringMessages()
@@ -1210,13 +1227,13 @@ function persistHistorySessions() {
 
   try {
     localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(sessions))
-  } catch (error) {
+  } catch {
     const retainedCount = Math.max(1, Math.ceil(sessions.length / 2))
     historySessions.value = sessions.slice(0, retainedCount)
 
     try {
       localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(historySessions.value))
-    } catch (retryError) {
+    } catch {
       // 浏览器本地空间不足时放弃本次历史写入，不影响当前对话继续使用。
     }
   }
@@ -1314,7 +1331,7 @@ function persistState(options: { syncHistory?: boolean } = {}) {
         streamRecovery: pendingStreamRecovery.value,
       }),
     )
-  } catch (error) {
+  } catch {
     // 浏览器本地空间不足时保留内存态，避免发送过程被持久化异常打断。
   }
 
@@ -2000,6 +2017,12 @@ function applyStreamEvent(event: AgentStreamEvent, assistantMessage: AgentChatMe
       break
     case 'tool':
       applyToolLifecycleEvent(event, routedAssistantMessage)
+      emit('stream-phase', {
+        type: 'tool',
+        id: String(event.tool_id || event.tool_call_id || ''),
+        name: event.tool_name || null,
+        status: event.status === 'error' ? 'error' : event.status === 'done' ? 'done' : 'running',
+      })
       break
     case 'thinking':
       applyThinkingLifecycleEvent(event, routedAssistantMessage)
@@ -2015,6 +2038,7 @@ function applyStreamEvent(event: AgentStreamEvent, assistantMessage: AgentChatMe
           ...event.choice,
           status: 'pending',
         })
+        emit('stream-phase', { type: 'choice' })
       }
       break
     case 'message_update':
@@ -2026,6 +2050,7 @@ function applyStreamEvent(event: AgentStreamEvent, assistantMessage: AgentChatMe
         routedAssistantMessage.status = 'done'
       }
       markToolsDone(routedAssistantMessage)
+      emit('stream-phase', { type: 'done' })
       break
     case 'error':
       routedAssistantMessage.status = 'error'
@@ -2039,6 +2064,7 @@ function applyStreamEvent(event: AgentStreamEvent, assistantMessage: AgentChatMe
       }
       emit('assistant-preview', routedAssistantMessage.content)
       markToolsDone(routedAssistantMessage)
+      emit('stream-phase', { type: 'error', message: event.message_i18n || event.message || undefined })
       break
     case 'start':
       if (event.session_id) {
@@ -2601,7 +2627,7 @@ async function streamAgentMessage(
       try {
         await saveCurrentSessionToServer()
         await loadServerHistorySessions()
-      } catch (error) {
+      } catch {
         // 服务端历史保存失败时保留本地兜底历史，不影响当前会话继续交互。
       }
     }
@@ -2873,6 +2899,7 @@ function stopGeneration() {
 
 // 开始新的空白会话。
 function startNewSession() {
+  petPickerOpen.value = false
   invalidateProtectedDeliveries()
   stopGeneration()
   sessionId.value = createSessionId()
@@ -2892,6 +2919,7 @@ function startNewSession() {
 // 从历史列表恢复指定会话，同时把它设为当前本地会话。
 async function loadHistorySession(targetSessionId: string) {
   if (isBusy.value) return
+  petPickerOpen.value = false
 
   let historySession = historySessions.value.find(item => item.sessionId === targetSessionId)
   if (!historySession) return
@@ -2923,7 +2951,7 @@ async function deleteHistorySession(targetSessionId: string) {
     await api.delete<null>(`message/agent/sessions/${encodeURIComponent(targetSessionId)}`, {
       feedback: 'silent',
     })
-  } catch (error) {
+  } catch {
     // 删除接口失败时仍允许清理本地兜底历史，避免坏记录一直挡在列表里。
   } finally {
     historySessions.value = historySessions.value.filter(item => item.sessionId !== targetSessionId)
@@ -2989,7 +3017,19 @@ function clearAgentAssistantOpenState() {
 
 // 处理全局快捷键。
 function handleGlobalKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && isOpen.value) closeDrawer()
+  if (event.key !== 'Escape' || !isOpen.value) return
+  // 形象选择视图打开时 Esc 先回到对话，再按一次才关闭面板。
+  if (petPickerOpen.value) {
+    petPickerOpen.value = false
+    return
+  }
+  closeDrawer()
+}
+
+/** 切换面板内的形象选择视图。 */
+function togglePetPicker() {
+  historyMenuOpen.value = false
+  petPickerOpen.value = !petPickerOpen.value
 }
 
 // 页面进入后台时保存流式占位，恢复可见时尝试拉取 WebAgent 后台完成后的会话快照。
@@ -3010,6 +3050,20 @@ function handleVisibilityChange() {
 // PWA 从页面缓存或系统挂起状态返回时补触发恢复，兼容未派发 visibilitychange 的浏览器。
 function handlePageShow() {
   if (document.visibilityState === 'visible') scheduleStreamRecovery(0)
+}
+
+/**
+ * 把草稿填入输入框并聚焦，绝不自动发送；供宿主 `agent.open({ draft })` 使用。
+ * 输入框已有内容时不覆盖用户正在写的文字，草稿以空行分隔追加在后面。
+ */
+function setDraft(draft: string) {
+  petPickerOpen.value = false
+  const current = inputText.value.trimEnd()
+  // 同一插件重复调用时输入框末尾已经是这段草稿，不再叠加。
+  if (current && current.endsWith(draft.trimEnd())) inputText.value = current
+  else inputText.value = current ? `${current}\n\n${draft}` : draft
+  syncInputHeight()
+  nextTick(() => inputRef.value?.focus())
 }
 
 // 处理输入框回车发送。
@@ -3040,6 +3094,7 @@ watch(isOpen, open => {
     return
   }
 
+  petPickerOpen.value = false
   invalidateProtectedDeliveries()
 })
 
@@ -3058,6 +3113,8 @@ onMounted(() => {
   window.addEventListener('pageshow', handlePageShow)
   document.addEventListener('visibilitychange', handleVisibilityChange)
 })
+
+defineExpose({ setDraft })
 
 onScopeDispose(clearAgentAssistantOpenState)
 onScopeDispose(() => {
@@ -3090,26 +3147,28 @@ onScopeDispose(() => {
     }"
     :style="drawerStyle"
     role="dialog"
-    :aria-label="t('agentAssistant.title')"
+    :aria-label="assistantTitle"
     @focusin.stop
   >
     <div class="agent-assistant-shell">
       <header class="agent-assistant-header">
         <div class="agent-assistant-title">
           <div class="agent-assistant-title__mark">
-            <span class="agent-assistant-mini-bot" aria-hidden="true">
-              <span class="agent-assistant-mini-bot__antenna" />
-              <span class="agent-assistant-mini-bot__head">
-                <span class="agent-assistant-mini-bot__face">
-                  <span class="agent-assistant-mini-bot__eye agent-assistant-mini-bot__eye--left" />
-                  <span class="agent-assistant-mini-bot__eye agent-assistant-mini-bot__eye--right" />
+            <AgentPetAvatar :pet="props.pet" size="1.85rem">
+              <span class="agent-assistant-mini-bot" aria-hidden="true">
+                <span class="agent-assistant-mini-bot__antenna" />
+                <span class="agent-assistant-mini-bot__head">
+                  <span class="agent-assistant-mini-bot__face">
+                    <span class="agent-assistant-mini-bot__eye agent-assistant-mini-bot__eye--left" />
+                    <span class="agent-assistant-mini-bot__eye agent-assistant-mini-bot__eye--right" />
+                  </span>
                 </span>
+                <span class="agent-assistant-mini-bot__body" />
               </span>
-              <span class="agent-assistant-mini-bot__body" />
-            </span>
+            </AgentPetAvatar>
           </div>
-          <div>
-            <div class="text-subtitle-1 font-weight-semibold">{{ t('agentAssistant.title') }}</div>
+          <div class="agent-assistant-title__text">
+            <div class="text-subtitle-1 font-weight-semibold text-truncate">{{ assistantTitle }}</div>
             <div class="agent-assistant-status">
               {{
                 activeThinkingMessage
@@ -3202,6 +3261,16 @@ onScopeDispose(() => {
             </VCard>
           </VMenu>
           <IconBtn
+            class="agent-assistant-pet-toggle"
+            :title="t('agentAssistant.pet.change')"
+            :aria-label="t('agentAssistant.pet.change')"
+            :aria-pressed="petPickerOpen"
+            :color="petPickerOpen ? 'primary' : undefined"
+            @click="togglePetPicker"
+          >
+            <VIcon icon="mdi-account-convert-outline" />
+          </IconBtn>
+          <IconBtn
             :disabled="isBusy"
             :title="t('agentAssistant.newChat')"
             :aria-label="t('agentAssistant.newChat')"
@@ -3225,7 +3294,10 @@ onScopeDispose(() => {
         </div>
       </header>
 
+      <AgentPetPicker v-if="petPickerOpen" class="agent-assistant-pet-picker" @back="petPickerOpen = false" />
+
       <main
+        v-show="!petPickerOpen"
         ref="messageListRef"
         class="agent-assistant-messages"
         :class="{ 'agent-assistant-messages--has-content': hasConversationContent }"
@@ -3234,7 +3306,9 @@ onScopeDispose(() => {
         <div class="agent-assistant-messages__content">
           <div v-if="!hasConversationContent" class="agent-assistant-empty">
             <div class="agent-assistant-empty__mark">
-              <VIcon icon="lucide:sparkles" size="28" />
+              <AgentPetAvatar :pet="props.pet" size="3.5rem">
+                <VIcon icon="lucide:sparkles" size="28" />
+              </AgentPetAvatar>
             </div>
             <div class="agent-assistant-empty__title">{{ t('agentAssistant.emptyTitle') }}</div>
             <div class="agent-assistant-empty__subtitle">{{ t('agentAssistant.emptySubtitle') }}</div>
@@ -3247,8 +3321,11 @@ onScopeDispose(() => {
             :class="`agent-assistant-message--${message.role}`"
           >
             <div class="agent-assistant-message__meta">
-              <VIcon :icon="message.role === 'user' ? 'mdi-account-circle-outline' : 'lucide:bot'" size="16" />
-              <span>{{ message.role === 'user' ? currentUserName : t('agentAssistant.assistant') }}</span>
+              <VIcon v-if="message.role === 'user'" icon="mdi-account-circle-outline" size="16" />
+              <AgentPetAvatar v-else :pet="props.pet" size="1rem">
+                <VIcon icon="lucide:bot" size="16" />
+              </AgentPetAvatar>
+              <span>{{ message.role === 'user' ? currentUserName : assistantSpeakerName }}</span>
               <span
                 v-if="message.steeringStatus"
                 class="agent-assistant-message__steering-status"
@@ -3423,7 +3500,7 @@ onScopeDispose(() => {
         </div>
       </main>
 
-      <footer class="agent-assistant-composer">
+      <footer v-show="!petPickerOpen" class="agent-assistant-composer">
         <VAlert v-if="streamError" type="error" variant="tonal" density="compact" class="mb-3">
           {{ streamError }}
         </VAlert>
@@ -3635,6 +3712,11 @@ onScopeDispose(() => {
   display: flex;
   align-items: center;
   column-gap: 0.75rem;
+  min-inline-size: 0;
+}
+
+// 插件形象名称可能较长，头部按钮增多后标题截断而不是把按钮挤出面板。
+.agent-assistant-title__text {
   min-inline-size: 0;
 }
 

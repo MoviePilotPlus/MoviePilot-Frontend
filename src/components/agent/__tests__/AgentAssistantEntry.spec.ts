@@ -2,6 +2,7 @@ import { shallowMount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AgentAssistantEntry from '@/components/agent/AgentAssistantEntry.vue'
+import { canUseAgentAssistantBubble } from '@/utils/agentAssistantBubble'
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -66,6 +67,97 @@ describe('AgentAssistantEntry lifecycle motion', () => {
     expect(animationFrameCallbacks.has(pointerFrameId)).toBe(false)
     expect(vi.getTimerCount()).toBe(0)
 
+    wrapper.unmount()
+  })
+
+  it('only draws host bubbles beside the reported anchor in anchored stage mode', async () => {
+    const wrapper = shallowMount(AgentAssistantEntry, {
+      global: { stubs: { AgentPetStage: true, VIcon: true } },
+      props: { active: true, motionActive: true, anchored: true, anchorRect: null },
+    })
+    await nextTick()
+
+    expect(wrapper.find('.agent-assistant-fab__trigger').exists()).toBe(false)
+    expect(wrapper.classes()).toContain('is-anchored')
+    // 未上报锚点时不接管 toast，避免提示被吞掉。
+    expect(canUseAgentAssistantBubble()).toBe(false)
+
+    ;(wrapper.vm as unknown as { showBubble: (input: { text: string }) => void }).showBubble({ text: '下载完成' })
+    await nextTick()
+    expect(wrapper.find('.agent-assistant-fab__bubbles').exists()).toBe(false)
+
+    await wrapper.setProps({ anchorRect: { x: 300, y: 400, width: 80, height: 120 } })
+    await nextTick()
+    expect(wrapper.find('.agent-assistant-fab__bubbles').text()).toContain('下载完成')
+    expect(canUseAgentAssistantBubble()).toBe(true)
+    // 锚定模式不安排自动贴边或随机动作。
+    expect(wrapper.classes()).not.toContain('is-docked')
+
+    wrapper.unmount()
+  })
+
+  it('keeps anchored bubbles positioned while the character moves and only re-enters when the anchor reappears', async () => {
+    const wrapper = shallowMount(AgentAssistantEntry, {
+      global: { stubs: { AgentPetStage: true, VIcon: true } },
+      props: {
+        active: true,
+        motionActive: true,
+        anchored: true,
+        anchorRect: { x: 300, y: 400, width: 80, height: 120 },
+      },
+    })
+    await nextTick()
+    ;(wrapper.vm as unknown as { showBubble: (input: { text: string }) => void }).showBubble({ text: '下载完成' })
+    await nextTick()
+    animationFrameCallbacks.forEach(callback => callback(0))
+    animationFrameCallbacks.clear()
+    await nextTick()
+    expect(wrapper.classes()).toContain('is-bubble-positioned')
+
+    // 角色移动：锚点持续变化，气泡保持已定位状态，不会每帧淡出重来。
+    for (const x of [310, 320, 330]) {
+      await wrapper.setProps({ anchorRect: { x, y: 400, width: 80, height: 120 } })
+      expect(wrapper.classes()).toContain('is-bubble-positioned')
+    }
+    expect(animationFrameCallbacks.size).toBeGreaterThan(0)
+
+    // 锚点消失后再出现时重新入场。
+    await wrapper.setProps({ anchorRect: null })
+    await wrapper.setProps({ anchorRect: { x: 100, y: 200, width: 80, height: 120 } })
+    expect(wrapper.classes()).not.toContain('is-bubble-positioned')
+
+    wrapper.unmount()
+  })
+
+  it('stops renderer pet motion while the entry is docked', async () => {
+    const wrapper = shallowMount(AgentAssistantEntry, {
+      global: { stubs: { VIcon: true } },
+      props: {
+        active: true,
+        motionActive: true,
+        pet: {
+          plugin_id: 'PetPlugin',
+          source_plugin_id: 'PetPlugin',
+          plugin_name: '桌宠',
+          key: 'sprite',
+          name: '小猫',
+          mode: 'renderer',
+          component: 'AgentPet',
+          api_version: 1,
+        },
+      },
+    })
+    await nextTick()
+    const stage = () => wrapper.findComponent({ name: 'AgentPetStage' })
+    expect(stage().props('motionActive')).toBe(true)
+
+    ;(wrapper.vm as unknown as { setDocked: (docked: boolean) => void }).setDocked(true)
+    await nextTick()
+    expect(stage().props('motionActive')).toBe(false)
+
+    ;(wrapper.vm as unknown as { setDocked: (docked: boolean) => void }).setDocked(false)
+    await nextTick()
+    expect(stage().props('motionActive')).toBe(true)
     wrapper.unmount()
   })
 
@@ -157,6 +249,8 @@ describe('AgentAssistantEntry pet interactions', () => {
 
   beforeEach(() => {
     vi.useFakeTimers()
+    // 拖动会持久化入口位置，每个用例从默认位置开始。
+    localStorage.removeItem('agentAssistant.fabAnchor')
   })
   afterEach(() => {
     entries.splice(0).forEach(wrapper => wrapper.unmount())
@@ -292,5 +386,80 @@ describe('AgentAssistantEntry pet interactions', () => {
     expect(action(wrapper)).toBeNull()
     await wrapper.setProps({ active: true })
     expect(action(wrapper)).toBe('wake')
+  })
+})
+
+describe('AgentAssistantEntry position memory', () => {
+  const STORAGE_KEY = 'agentAssistant.fabAnchor'
+
+  /** 只隔离渲染器和图标，位置计算走真实入口逻辑。 */
+  async function mountEntry() {
+    const wrapper = shallowMount(AgentAssistantEntry, {
+      global: { stubs: { AgentPetStage: true, VIcon: true } },
+      props: { active: true, motionActive: true },
+    })
+    await nextTick()
+    await nextTick()
+    return wrapper
+  }
+
+  /** 读取入口当前渲染坐标。 */
+  function position(wrapper: Awaited<ReturnType<typeof mountEntry>>) {
+    const style = (wrapper.element as HTMLElement).style
+    return [style.getPropertyValue('--agent-assistant-fab-x'), style.getPropertyValue('--agent-assistant-fab-y')]
+  }
+
+  /** 按住入口拖动一段距离后松开。 */
+  async function drag(wrapper: Awaited<ReturnType<typeof mountEntry>>, deltaX: number, deltaY: number) {
+    const trigger = wrapper.find('.agent-assistant-fab__trigger')
+    const event = (clientX: number, clientY: number, buttons: number) => ({
+      button: 0,
+      buttons,
+      clientX,
+      clientY,
+      isPrimary: true,
+      pointerId: 1,
+      pointerType: 'mouse',
+    })
+    await trigger.trigger('pointerdown', event(600, 400, 1))
+    await trigger.trigger('pointermove', event(600 + deltaX, 400 + deltaY, 1))
+    await trigger.trigger('pointerup', event(600 + deltaX, 400 + deltaY, 0))
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    localStorage.removeItem(STORAGE_KEY)
+  })
+  afterEach(() => {
+    localStorage.removeItem(STORAGE_KEY)
+    vi.useRealTimers()
+  })
+
+  it('restores the dragged position after the entry is mounted again', async () => {
+    const first = await mountEntry()
+    const defaultPosition = position(first)
+    await drag(first, -400, -200)
+    const draggedPosition = position(first)
+    first.unmount()
+
+    expect(draggedPosition).not.toEqual(defaultPosition)
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')).toMatchObject({ mode: 'free' })
+
+    const second = await mountEntry()
+    expect(position(second)).toEqual(draggedPosition)
+    second.unmount()
+  })
+
+  it('falls back to the default position when the stored anchor is invalid', async () => {
+    const reference = await mountEntry()
+    const defaultPosition = position(reference)
+    reference.unmount()
+
+    for (const stored of ['not-json', JSON.stringify({ mode: 'free', xRatio: 3, yRatio: 0.5 })]) {
+      localStorage.setItem(STORAGE_KEY, stored)
+      const wrapper = await mountEntry()
+      expect(position(wrapper)).toEqual(defaultPosition)
+      wrapper.unmount()
+    }
   })
 })

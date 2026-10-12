@@ -13,6 +13,7 @@ import type { AgentPetActionName, AgentPetIntent } from './pet/types'
 import { useAgentPetMachine } from './pet/useAgentPetMachine'
 import { useAgentPetInteractions } from './pet/useAgentPetInteractions'
 import { AGENT_ASSISTANT_LAYER_Z_INDEX } from '@/constants/agentAssistant'
+import type { AgentHostRect, AgentPetDeclaration } from '@/types/agentHost'
 
 interface AgentAssistantEntryBubble {
   id: string
@@ -40,11 +41,26 @@ const props = withDefaults(
     /** 是否允许入口的随机动作、指针跟随和自动贴边，不影响 thinking 等业务状态。 */
     motionActive?: boolean
     thinking?: boolean
+    /** renderer 模式的插件形象，替换内置机器人画面，入口其余行为不变。 */
+    pet?: AgentPetDeclaration | null
+    /**
+     * 锚定模式：stage 形象且 bubbles=host 时入口只在插件上报的锚点旁画原生气泡，
+     * 不显示触发器、不响应拖拽、不自动贴边。
+     */
+    anchored?: boolean
+    /** 锚定模式下插件上报的角色视口矩形，null 时隐藏宿主气泡。 */
+    anchorRect?: AgentHostRect | null
+    /** stage 形象加载期间不画内置机器人，触发器仍可点击和拖拽。 */
+    concealed?: boolean
   }>(),
   {
     active: true,
     motionActive: true,
     thinking: false,
+    pet: null,
+    anchored: false,
+    anchorRect: null,
+    concealed: false,
   },
 )
 
@@ -71,6 +87,8 @@ const FAB_BUBBLE_ARROW_MARGIN = 28
 const FAB_BUBBLE_EDGE_ARROW_OFFSET = 38
 const FAB_BUBBLE_UNDOCK_POSITION_SYNC_DELAY = 260
 const FAB_RIGHT_EDGE_RESIZE_FOLLOW_DISTANCE = 128
+// 用户拖动后的入口锚点（右侧贴边或自由比例坐标），刷新后按它恢复位置。
+const FAB_ANCHOR_STORAGE_KEY = 'agentAssistant.fabAnchor'
 
 type FabBubblePlacement = 'bottom' | 'left' | 'right' | 'top'
 
@@ -160,7 +178,8 @@ const fabPointerStyle = ref({
   '--agent-assistant-robot-tilt': '0deg',
 })
 const fabPositionStyle = computed(() => {
-  const position = fabPosition.value || getDefaultFabPosition()
+  // 锚定模式下根节点固定在视口原点，气泡坐标直接按插件锚点换算。
+  const position = props.anchored ? { x: 0, y: 0 } : fabPosition.value || getDefaultFabPosition()
 
   return {
     ...fabPointerStyle.value,
@@ -200,6 +219,14 @@ let stopFabTouchMoveGuard: (() => void) | null = null
 const fabBubbleTimers = new Map<string, number>()
 
 const hasFabBubbles = computed(() => fabBubbles.value.length > 0)
+// 锚定模式在插件未上报锚点时不展示气泡，也不接管全局 toast，让 toast 回到常规提示。
+const fabBubblesVisible = computed(() => hasFabBubbles.value && (!props.anchored || Boolean(props.anchorRect)))
+const bubbleEntryActive = computed(() => props.active && (!props.anchored || Boolean(props.anchorRect)))
+// 内置机器人的随机动作、指针跟随和贴边只在非锚定模式运行。
+const petMotionActive = computed(() => props.active && props.motionActive && !props.anchored)
+// 传给 renderer 形象的 motionActive 额外计入贴边收起：收起时只露出半张脸，形象应保持静止。
+// 内置机器人收起时仍保留眼神跟随，因此不改动 petMotionActive 本身。
+const rendererMotionActive = computed(() => petMotionActive.value && !fabDocked.value)
 const hasKeepOpenFabBubbles = computed(() => fabBubbles.value.some(item => item.keepOpen))
 const fabBubbleClassList = computed(() => [
   `agent-assistant-fab__bubbles--${fabBubblePlacement.value}`,
@@ -220,17 +247,18 @@ const {
   playAction: playAgentPetAction,
   scheduleRandomAction: scheduleFabRandomAction,
 } = useAgentPetMachine({
-  active: () => props.active && props.motionActive,
+  active: () => petMotionActive.value,
   docked: fabDocked,
   dragging: fabDragging,
   pressed: fabPressed,
   scheduleAutoDock: scheduleFabAutoDock,
   shouldAutoDock: shouldFabAutoDock,
   thinking: () => props.thinking,
+  randomActions: () => (props.pet?.mode === 'renderer' ? props.pet.random_actions : undefined),
 })
 
 const petInteractions = useAgentPetInteractions({
-  enabled: () => props.active && props.motionActive && !props.thinking && !fabDocked.value,
+  enabled: () => petMotionActive.value && !props.thinking && !fabDocked.value,
   currentAction: () => fabRandomAction.value,
   play: playAgentPetAction,
 })
@@ -401,6 +429,43 @@ function updateFabAnchorFromPosition(position = getCurrentFabPosition(), options
   }
 }
 
+// 判断比例值是否落在 0 到 1 之间。
+function isUnitRatio(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1
+}
+
+// 读取持久化的入口锚点；本地存储不可用或数据损坏时返回 null，按默认位置处理。
+function readPersistedFabAnchor(): FabPositionAnchor | null {
+  try {
+    const anchor = JSON.parse(
+      localStorage.getItem(FAB_ANCHOR_STORAGE_KEY) || 'null',
+    ) as Partial<FabPositionAnchor> | null
+    if (anchor?.mode === 'right' && isUnitRatio(anchor.yRatio)) {
+      const { rightOffset } = anchor as { rightOffset?: unknown }
+      if (typeof rightOffset === 'number' && Number.isFinite(rightOffset) && rightOffset >= 0) {
+        return { mode: 'right', rightOffset, yRatio: anchor.yRatio }
+      }
+    }
+    if (anchor?.mode === 'free') {
+      const { xRatio } = anchor as { xRatio?: unknown }
+      if (isUnitRatio(xRatio) && isUnitRatio(anchor.yRatio)) return { mode: 'free', xRatio, yRatio: anchor.yRatio }
+    }
+  } catch {
+    // 本地存储被禁用或内容不是 JSON 时回退到默认位置。
+  }
+  return null
+}
+
+// 拖动结束后保存当前锚点，只记录用户主动选择的位置。
+function persistFabAnchor() {
+  if (!fabPositionAnchor) return
+  try {
+    localStorage.setItem(FAB_ANCHOR_STORAGE_KEY, JSON.stringify(fabPositionAnchor))
+  } catch {
+    // 本地存储不可用时只影响刷新后的位置恢复。
+  }
+}
+
 // 判断当前锚点是否满足自动贴边收起条件。
 function shouldFabAutoDock() {
   return fabPositionAnchor?.mode === 'right' && fabPositionAnchor.rightOffset <= FAB_RIGHT_EDGE_DOCK_DISTANCE
@@ -499,6 +564,11 @@ function getFabRootElement() {
 
 // 获取气泡定位使用的机器人锚点区域。
 function getFabAnchorRect() {
+  if (props.anchored) {
+    const rect = props.anchorRect
+    return rect ? new DOMRect(rect.x, rect.y, rect.width, rect.height) : null
+  }
+
   const root = getFabRootElement()
   const bot = root?.querySelector('.agent-assistant-fab__bot') as HTMLElement | null
   const trigger = root?.querySelector('.agent-assistant-fab__trigger') as HTMLElement | null
@@ -701,7 +771,7 @@ function syncFabBubbleArrowSource(layout: FabBubbleLayout, rootRect: DOMRect) {
 
 // 把计算出的气泡位置和箭头位置写入 CSS 变量。
 function syncFabBubblePosition() {
-  if (!hasFabBubbles.value || !props.active) return
+  if (!fabBubblesVisible.value || !props.active) return
 
   const rootRect = getFabRootElement()?.getBoundingClientRect()
   const layout = calculateFabBubbleLayout()
@@ -770,10 +840,16 @@ function teardownFabBubblePositioning() {
   clearFabBubbleUndockPositionTimer()
 }
 
-// 重置入口到默认位置并同步锚点和气泡位置。
+// 恢复入口位置：优先使用用户拖动后保存的锚点，否则回到默认位置，并同步气泡和自动贴边。
 function resetFabPosition() {
-  fabPosition.value = getDefaultFabPosition()
-  updateFabAnchorFromPosition(fabPosition.value)
+  const persistedAnchor = readPersistedFabAnchor()
+  if (persistedAnchor) {
+    fabPositionAnchor = persistedAnchor
+    fabPosition.value = getFabPositionFromAnchor(persistedAnchor)
+  } else {
+    fabPosition.value = getDefaultFabPosition()
+    updateFabAnchorFromPosition(fabPosition.value)
+  }
   scheduleFabBubblePositionUpdate()
   if (shouldFabAutoDock()) scheduleFabAutoDock()
 }
@@ -803,7 +879,7 @@ function stripMarkdownPreview(value: string) {
     .replace(/`([^`]+)`/g, '$1')
     .replace(/!\[[^\]]*]\([^)]*\)/g, ' ')
     .replace(/\[([^\]]+)]\([^)]*\)/g, '$1')
-    .replace(/[#>*_~\-]+/g, ' ')
+    .replace(/[#>*_~-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -845,7 +921,7 @@ function updateFabPointerFromPoint(point: FabPointerPoint) {
 
 // 使用 requestAnimationFrame 合并高频指针事件，降低全局跟随的渲染开销。
 function queueFabPointerUpdate(clientX: number, clientY: number) {
-  if (!props.active || !props.motionActive) return
+  if (!petMotionActive.value) return
 
   fabPendingPointerPoint = { clientX, clientY }
   if (fabPointerFrame) return
@@ -854,7 +930,7 @@ function queueFabPointerUpdate(clientX: number, clientY: number) {
     fabPointerFrame = 0
     const point = fabPendingPointerPoint
     fabPendingPointerPoint = null
-    if (!point || !props.active || !props.motionActive) return
+    if (!point || !petMotionActive.value) return
 
     updateFabPointerFromPoint(point)
   })
@@ -892,6 +968,7 @@ function handleFabTriggerKeyDown(event: KeyboardEvent) {
 function scheduleFabAutoDock() {
   clearFabIdleTimer()
   if (
+    props.anchored ||
     !props.active ||
     !props.motionActive ||
     props.thinking ||
@@ -1187,6 +1264,13 @@ function resetFabBubbles() {
 
 // 切换入口贴边收起状态并恢复对应位置。
 function setFabDocked(docked: boolean) {
+  if (props.anchored) {
+    fabDocked.value = false
+    fabPressed.value = false
+    scheduleFabBubblePositionUpdate()
+    return
+  }
+
   const currentPosition = getCurrentFabPosition()
 
   fabDocked.value = docked
@@ -1402,6 +1486,7 @@ function handleFabTriggerPointerUp(event: PointerEvent) {
   }
 
   suppressNextFabClick()
+  persistFabAnchor()
   if (shouldFabAutoDock()) {
     scheduleFabAutoDock()
   } else {
@@ -1482,7 +1567,7 @@ watch(
 
 onMounted(() => {
   nextTick(resetFabPosition)
-  setAgentAssistantBubbleEntryActive(props.active)
+  setAgentAssistantBubbleEntryActive(bubbleEntryActive.value)
   window.addEventListener('resize', handleWindowResize)
   window.visualViewport?.addEventListener('resize', handleWindowResize)
   window.addEventListener('pointerup', handleWindowFabPointerEnd, { passive: true })
@@ -1496,8 +1581,6 @@ onMounted(() => {
 watch(
   () => props.active,
   active => {
-    setAgentAssistantBubbleEntryActive(active)
-
     if (active) {
       setFabDocked(false)
       if (props.thinking) playAgentPetAction('scan', { allowWhileThinking: true })
@@ -1515,6 +1598,43 @@ watch(
     clearFabIdleTimer()
     clearFabRandomAction()
     resetFabPointer()
+  },
+)
+
+watch(bubbleEntryActive, active => setAgentAssistantBubbleEntryActive(active))
+
+// 锚点从无到有时气泡重新入场；角色移动带来的后续变化只合并到下一帧重新定位，避免气泡每帧淡出重来。
+watch(
+  () => props.anchorRect,
+  (rect, previous) => {
+    if (rect && !previous) {
+      fabBubblePositioned.value = false
+      nextTick(() => {
+        syncFabBubbleResizeObserver()
+        scheduleFabBubblePositionUpdate()
+      })
+      return
+    }
+    scheduleFabBubblePositionUpdate()
+  },
+)
+
+watch(
+  () => props.anchored,
+  anchored => {
+    if (anchored) {
+      cancelFabDrag()
+      clearFabIdleTimer()
+      clearFabRandomAction()
+      resetFabPointer()
+      fabDocked.value = false
+    } else {
+      nextTick(resetFabPosition)
+    }
+    nextTick(() => {
+      syncFabBubbleResizeObserver()
+      syncFabBubblePosition()
+    })
   },
 )
 
@@ -1571,7 +1691,8 @@ defineExpose({
       'is-pressed': fabPressed,
       'is-thinking': props.thinking,
       'is-motion-paused': !props.motionActive,
-      'is-bubble-visible': hasFabBubbles,
+      'is-anchored': props.anchored,
+      'is-bubble-visible': fabBubblesVisible,
       'is-bubble-positioned': fabBubblePositioned,
       [`is-action-${fabRandomAction}`]: fabRandomAction,
     }"
@@ -1581,7 +1702,7 @@ defineExpose({
     @pointerleave="handleFabPointerLeave"
   >
     <div
-      v-if="hasFabBubbles"
+      v-if="fabBubblesVisible"
       ref="fabBubbleRef"
       class="agent-assistant-fab__bubbles"
       :class="fabBubbleClassList"
@@ -1616,9 +1737,10 @@ defineExpose({
     </div>
 
     <button
+      v-if="!props.anchored"
       class="agent-assistant-fab__trigger"
       type="button"
-      :aria-label="t('agentAssistant.title')"
+      :aria-label="props.pet?.name || t('agentAssistant.title')"
       @pointerdown="handleFabTriggerPointerDown"
       @pointermove="handleFabTriggerPointerMove"
       @pointerup="handleFabTriggerPointerUp"
@@ -1628,7 +1750,14 @@ defineExpose({
       @contextmenu.prevent
       @click="handleFabTriggerClick"
     >
-      <AgentPetStage :action="fabRandomAction" :intent="agentPetIntent" :thinking="props.thinking" />
+      <AgentPetStage
+        :action="fabRandomAction"
+        :intent="agentPetIntent"
+        :thinking="props.thinking"
+        :pet="props.pet"
+        :motion-active="rendererMotionActive"
+        :concealed="props.concealed"
+      />
     </button>
   </div>
 </template>
@@ -1674,6 +1803,13 @@ defineExpose({
   inline-size: 3.85rem;
 }
 
+// 锚定模式只承载气泡，根节点不占位也不参与过渡，避免切换模式时气泡随旧位置滑动。
+.agent-assistant-fab.is-anchored {
+  block-size: 0;
+  inline-size: 0;
+  transition: none;
+}
+
 .agent-assistant-fab.is-dragging {
   transition: none;
 }
@@ -1694,6 +1830,7 @@ defineExpose({
   pointer-events: auto;
   text-align: start;
   touch-action: none;
+  transition: transform 0.24s ease;
   -webkit-touch-callout: none;
 }
 
@@ -1717,6 +1854,26 @@ defineExpose({
 
 .agent-assistant-fab.is-docked .agent-assistant-fab__trigger::after {
   opacity: 1;
+}
+
+// 贴边收起时机器人继续向右滑出，只露出半张脸（一只眼睛），避免压住列表最右侧的操作按钮；
+// 桌面与触屏机器人尺寸不同，位移量各自调整到相同的露出效果。悬停或键盘聚焦时滑回原来的探头位置。
+.agent-assistant-fab.is-docked:not(.is-dragging) .agent-assistant-fab__trigger {
+  transform: translateX(0.5rem);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .agent-assistant-fab.is-docked:not(.is-dragging) .agent-assistant-fab__trigger {
+    transform: translateX(1rem);
+  }
+
+  .agent-assistant-fab.is-docked:not(.is-dragging) .agent-assistant-fab__trigger:hover {
+    transform: none;
+  }
+}
+
+.agent-assistant-fab.is-docked .agent-assistant-fab__trigger:focus-visible {
+  transform: none;
 }
 
 .agent-assistant-fab__bubbles {
@@ -1947,6 +2104,11 @@ defineExpose({
   opacity: 1;
   pointer-events: auto;
   transform: translate3d(var(--agent-assistant-bubbles-x), var(--agent-assistant-bubbles-y), 0) scale(1);
+}
+
+.agent-assistant-fab.is-anchored .agent-assistant-fab__bubbles {
+  // 锚定模式下气泡紧跟正在移动的角色，只保留淡入淡出，不对位移做过渡。
+  transition: opacity 0.2s ease;
 }
 
 .agent-assistant-fab.is-docked .agent-assistant-fab__bubbles {

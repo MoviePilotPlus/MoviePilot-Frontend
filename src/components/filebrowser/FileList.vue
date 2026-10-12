@@ -13,7 +13,8 @@ import { useResizeObserver } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { useBackground } from '@/composables/useBackground'
 import FileDetails from './FileDetails.vue'
-import type { FileAction } from './types'
+import type { FileAction, FileSortKey, FileSortOrder } from './types'
+import { vTailEllipsis } from './tailEllipsis'
 import { useKeepAliveRefresh, type KeepAliveRefreshContext } from '@/composables/useKeepAliveRefresh'
 import { openSharedDialog } from '@/composables/useSharedDialog'
 
@@ -56,6 +57,15 @@ const inProps = defineProps({
     required: true,
   },
   sort: String,
+  // 列表展示排序，由父组件持久化；排序只作用于已加载的当前目录，不重新请求。
+  sortKey: {
+    type: String as PropType<FileSortKey>,
+    default: 'name',
+  },
+  sortOrder: {
+    type: String as PropType<FileSortOrder>,
+    default: 'asc',
+  },
   showTree: Boolean,
   active: {
     type: Boolean,
@@ -72,6 +82,7 @@ const emit = defineEmits([
   'renamed',
   'items-updated',
   'switch-tree',
+  'sort-change',
 ])
 
 // 确认框
@@ -224,11 +235,49 @@ const filteredItems = computed(() => {
   }
 })
 
-// 目录过滤
-const dirs = computed(() => filteredItems.value.filter(item => item.type === 'dir'))
+// 名称按自然顺序比较，`S01E2` 排在 `S01E10` 之前。
+const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
+/** 按当前列与方向比较；主键相同时始终按名称升序，保证顺序稳定。 */
+function compareItems(a: FileItem, b: FileItem) {
+  let primary: number
+  if (inProps.sortKey === 'size') primary = (a.size ?? -1) - (b.size ?? -1)
+  else if (inProps.sortKey === 'time') primary = (a.modify_time ?? 0) - (b.modify_time ?? 0)
+  else primary = nameCollator.compare(a.name ?? '', b.name ?? '')
+  if (inProps.sortOrder === 'desc') primary = -primary
+  return primary || nameCollator.compare(a.name ?? '', b.name ?? '')
+}
+
+// 目录过滤，目录始终排在文件之前
+const dirs = computed(() => filteredItems.value.filter(item => item.type === 'dir').sort(compareItems))
 
 // 文件过滤
-const files = computed(() => filteredItems.value.filter(item => item.type === 'file'))
+const files = computed(() => filteredItems.value.filter(item => item.type === 'file').sort(compareItems))
+
+// 可排序的列及其首次点击时的默认方向：名称升序，大小与时间降序。
+const sortColumns = computed<{ key: FileSortKey; title: string; defaultOrder: FileSortOrder }[]>(() => [
+  { key: 'name', title: t('file.fileName'), defaultOrder: 'asc' },
+  { key: 'size', title: t('file.size'), defaultOrder: 'desc' },
+  { key: 'time', title: t('file.modifyTime'), defaultOrder: 'desc' },
+])
+
+/** 点击当前排序列切换方向，点击其他列按该列默认方向排序。 */
+function changeSort(key: FileSortKey) {
+  const column = sortColumns.value.find(item => item.key === key)
+  const order: FileSortOrder =
+    inProps.sortKey === key ? (inProps.sortOrder === 'asc' ? 'desc' : 'asc') : (column?.defaultOrder ?? 'asc')
+  emit('sort-change', { key, order })
+}
+
+/** 列头的无障碍排序状态。 */
+function getAriaSort(key: FileSortKey) {
+  if (inProps.sortKey !== key) return 'none'
+  return inProps.sortOrder === 'asc' ? 'ascending' : 'descending'
+}
+
+const activeSortTitle = computed(
+  () => sortColumns.value.find(item => item.key === inProps.sortKey)?.title ?? t('file.fileName'),
+)
 
 // 虚拟列表数据，保持引用稳定，避免模板内联展开数组导致虚拟列表重算。
 const displayItems = computed(() => [...dirs.value, ...files.value])
@@ -974,17 +1023,64 @@ onUnmounted(() => {
         class="file-list__table"
         :style="{ '--file-scrollbar-width': `${scrollbarWidth}px` }"
       >
-        <div class="file-list__columns">
-          <span>{{ t('file.fileName') }}</span
-          ><span>{{ t('file.size') }}</span
-          ><span>{{ t('file.modifyTime') }}</span
-          ><span />
+        <!-- 列头即排序入口；窄屏只有一列，改为排序菜单。 -->
+        <div class="file-list__columns" role="row">
+          <template v-if="display.smAndDown.value">
+            <span role="columnheader" :aria-sort="getAriaSort(inProps.sortKey)">
+              <VMenu location="bottom start">
+                <template #activator="{ props: menuProps }">
+                  <button v-bind="menuProps" type="button" class="file-list__sort file-list__sort--active">
+                    {{ activeSortTitle }}
+                    <VIcon :icon="inProps.sortOrder === 'asc' ? 'mdi-arrow-up' : 'mdi-arrow-down'" size="14" />
+                  </button>
+                </template>
+                <VList density="compact">
+                  <VListItem
+                    v-for="column in sortColumns"
+                    :key="column.key"
+                    :title="column.title"
+                    :active="inProps.sortKey === column.key"
+                    @click="changeSort(column.key)"
+                  >
+                    <template v-if="inProps.sortKey === column.key" #append>
+                      <VIcon :icon="inProps.sortOrder === 'asc' ? 'mdi-arrow-up' : 'mdi-arrow-down'" size="16" />
+                    </template>
+                  </VListItem>
+                </VList>
+              </VMenu>
+            </span>
+          </template>
+          <template v-else>
+            <span
+              v-for="column in sortColumns"
+              :key="column.key"
+              role="columnheader"
+              :aria-sort="getAriaSort(column.key)"
+            >
+              <button
+                type="button"
+                class="file-list__sort"
+                :class="{ 'file-list__sort--active': inProps.sortKey === column.key }"
+                @click="changeSort(column.key)"
+              >
+                {{ column.title }}
+                <VIcon
+                  class="file-list__sort-icon"
+                  :icon="
+                    inProps.sortKey === column.key && inProps.sortOrder === 'asc' ? 'mdi-arrow-up' : 'mdi-arrow-down'
+                  "
+                  size="14"
+                />
+              </button>
+            </span>
+          </template>
+          <span />
         </div>
         <LoadingBanner v-if="loading" />
         <VVirtualScroll
           v-else-if="displayItems.length"
           :items="displayItems"
-          :item-height="display.mdAndUp.value ? 58 : 52"
+          :item-height="display.mdAndUp.value ? 58 : 64"
           class="file-list-container"
           role="list"
           :aria-label="t('navItems.fileManager')"
@@ -1021,7 +1117,23 @@ onUnmounted(() => {
                   :color="item.type === 'dir' ? 'primary' : undefined"
                   size="24"
                 />
-                <span :title="item.name">{{ item.name }}</span>
+                <!-- 移动端把大小与时间收进文件名下方，文件名可占满整行宽度。 -->
+                <div class="file-row__label">
+                  <span v-tail-ellipsis="item.name" class="file-row__filename" :title="item.name" />
+                  <small v-if="display.smAndDown.value" class="file-row__meta">{{
+                    [
+                      typeof item.size === 'number' &&
+                      Number.isFinite(item.size) &&
+                      item.size >= 0 &&
+                      item.type !== 'dir'
+                        ? formatBytes(item.size)
+                        : '',
+                      formatDate(item.modify_time),
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')
+                  }}</small>
+                </div>
               </div>
               <span class="file-row__size">{{
                 typeof item.size === 'number' && Number.isFinite(item.size) && item.size >= 0
@@ -1215,14 +1327,47 @@ onUnmounted(() => {
   margin-inline-end: var(--file-scrollbar-width, 0px);
   padding-inline: 1rem 0.25rem;
   gap: 1rem;
-  font-size: 0.875rem;
-  background: rgba(var(--v-theme-on-surface), var(--v-hover-opacity));
+  font-size: 0.75rem;
+  // 表头不铺底色，只用分隔线与弱化文字区分；玻璃主题下整条底色会显得过曝。
   border-block-end: 1px solid var(--app-grouped-list-separator-color);
+}
+.file-list__sort {
+  display: inline-flex;
+  max-inline-size: 100%;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+  gap: 0.2rem;
+  letter-spacing: 0.02em;
+}
+.file-list__sort:hover,
+.file-list__sort:focus-visible,
+.file-list__sort--active {
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
+}
+// 非当前列的箭头只在悬停时提示可排序。
+.file-list__sort-icon {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.file-list__sort:hover .file-list__sort-icon,
+.file-list__sort:focus-visible .file-list__sort-icon,
+.file-list__sort--active .file-list__sort-icon {
+  opacity: 1;
+}
+.file-list__sort:not(.file-list__sort--active):hover .file-list__sort-icon {
+  opacity: 0.45;
 }
 .file-list-container {
   flex: 1;
   min-block-size: 0;
   overflow: auto;
+  padding-block-end: var(--file-list-fab-clearance, 0px);
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   border-radius: 0;
@@ -1261,11 +1406,31 @@ onUnmounted(() => {
   gap: 0.75rem;
   min-inline-size: 0;
 }
-.file-row__name > span {
+.file-row__label {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.file-row__filename {
   font-size: 0.875rem;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+// 溢出时由 vTailEllipsis 拆成主体与尾部：主体省略，尾部（扩展名）固定可见。
+.file-row__filename.is-split {
+  display: flex;
+  min-inline-size: 0;
+}
+.file-row__filename.is-split :deep(.tail-ellipsis__head) {
+  overflow: hidden;
+  min-inline-size: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-row__filename.is-split :deep(.tail-ellipsis__tail) {
+  flex: 0 0 auto;
+  white-space: pre;
 }
 .file-row__name :deep(.v-input) {
   flex: 0 0 auto;
@@ -1324,18 +1489,25 @@ onUnmounted(() => {
   .file-list__select-label {
     display: none;
   }
+  // 窄屏只保留文件名列，大小与时间由 .file-row__meta 在文件名下方展示。
   .file-list__columns {
-    grid-template-columns: minmax(0, 1fr) 3.75rem 5rem 2rem;
+    grid-template-columns: minmax(0, 1fr) 2rem;
     padding-inline: 0.5rem 0;
     gap: 0.375rem;
     font-size: 0.75rem;
   }
+  .file-list__columns > span:nth-child(2),
+  .file-list__columns > span:nth-child(3),
+  .file-row__size,
+  .file-row__time {
+    display: none;
+  }
   .file-row {
-    min-block-size: 3.25rem;
+    min-block-size: 4rem;
     padding-inline: 0.5rem 0;
   }
   .file-row :deep(.v-list-item__content) {
-    grid-template-columns: minmax(0, 1fr) 3.75rem 5rem;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.375rem;
   }
   .file-row :deep(.v-list-item__append) {
@@ -1343,9 +1515,9 @@ onUnmounted(() => {
     margin-inline-start: 0.375rem;
   }
   .file-row__name {
-    gap: 0.375rem;
+    gap: 0.625rem;
   }
-  .file-row__name > span {
+  .file-row__filename {
     white-space: normal;
     overflow-wrap: anywhere;
     display: -webkit-box;
@@ -1354,27 +1526,29 @@ onUnmounted(() => {
     font-size: 0.8125rem;
     line-height: 1.4;
   }
+  // 窄屏两行：主体两行省略，尾部贴在第二行末尾。
+  .file-row__filename.is-split {
+    align-items: flex-end;
+  }
+  .file-row__filename.is-split :deep(.tail-ellipsis__head) {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
   .file-row__name :deep(.v-icon) {
     font-size: 1.25rem;
   }
-  .file-row__size,
-  .file-row__time {
+  .file-row__meta {
+    margin-block-start: 0.125rem;
+    color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
     font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.3;
   }
   .file-row :deep(.v-list-item__append .v-btn) {
     inline-size: 2rem;
-  }
-}
-@media (width < 360px) {
-  .file-list__columns {
-    grid-template-columns: minmax(0, 1fr) 3.75rem 2rem;
-  }
-  .file-row :deep(.v-list-item__content) {
-    grid-template-columns: minmax(0, 1fr) 3.75rem;
-  }
-  .file-row__time,
-  .file-list__columns > span:nth-child(3) {
-    display: none;
   }
 }
 </style>
