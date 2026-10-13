@@ -971,3 +971,14 @@ architecture 基线四刷新。
   `--merged upstream/v3` 对这些 tag 返回空是旧 git（2.x 无 annotated tag 深度）所致的
   误导向，tag 实际链在 v3 线上（rev-list 验证），下轮判定直接用
   `git merge-base --is-ancestor <tag>^{commit} v3_plus` 而不要依赖 --merged 过滤
+
+## 2026-10-14 第 89 轮：合并 upstream tag v3.1.6（tag 门禁）
+
+- **合并目标**：tag `v3.1.6` = `3f77f6ef971704f83ac3cb9ffc45e629c692a353`（tag 门禁版，只合 tag 指向提交，tag 后 upstream/v3 新提交不合）
+- **范围**：merge-base `7de709c12` → 9 提交 / 20 文件（+2446 −49）
+- **上游改动主题**：订阅结构化业务活动（SubscribeActivityDialog + 游标分页 types）、系统更新合并下载/安装动作（SystemUpdatePrompt/ConfirmDialog 布局加固）、转移成功通知聚合开关（AccountSettingSystem）、glass 主题微调、update prompt 防遮挡
+- **冲突清单**（1 文件）：
+  - `src/api/types.ts`：上游在文件尾新增订阅活动类型块与 fork 采集类型块同区冲突——解法=双块保留（fork 采集块在前 + 上游 v3.1.6 订阅活动块追加在后，带分隔注释）
+- **自动合并确认**：package.json（版本 3.1.6 + fork hls.js 依赖共存 ✓）、三 locale（fork 采集词条保留，行数=上游+17 ✓）
+- **验证**：yarn install --immutable ✓ / npm run lint ✓ / vitest 全量 3817 例 9F——失败 5 文件（format-changed×4、app-glass-optical-preload、glassOverlayMaterial、TransferHistoryView、UserProfile×2）与合并前旧树（HEAD^1）同命令同文件**逐例 IDENTICAL（9F=9F）**，均为已知 Windows 环境族（git 路径缓冲/玻璃样式 jsdom/CRLF 族），放行
+- **上游新增 spec**（SubscribeActivityDialog/SystemUpdatePrompt/useConfirm/SubscribeCard/AccountSettingSystem/glassOverlay/systemUpdatePromptMaterial）合并树全绿 ✓
