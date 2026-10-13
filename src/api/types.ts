@@ -2981,6 +2981,7 @@ export type SystemUpdateState = 'idle' | 'available' | 'downloading' | 'ready' |
 
 /** 后台更新支持的两类升级目标。 */
 export type SystemUpdateType = 'application' | 'resources'
+export type SystemUpdateTarget = SystemUpdateType | 'all'
 
 /** 单类升级的后台状态。 */
 export interface SystemUpdateItemStatus {
@@ -3007,6 +3008,8 @@ export interface SystemUpdateItemStatus {
 
 /** 后端主程序与站点资源后台更新状态机快照。 */
 export interface SystemUpdateStatus {
+  /** 新后端支持合并下载与一次重启安装，旧后端继续使用单类入口。 */
+  supports_batch_update?: boolean
   /** 当前自动检查开关；由后端实时返回，避免旧缓存继续触发提醒。 */
   auto_update?: boolean
   /** 站点资源单独控制自动检查和提醒。 */
@@ -3305,3 +3308,48 @@ export interface SiteSchema {
   template: string
 }
 // ==================== 视频采集功能类型结束 ====================
+
+// ==================== 上游 v3.1.6 订阅活动类型（merge 追加） ====================
+/** 单个订阅轮次的安全资源摘要，不包含下载链接或站点凭据。 */
+export interface SubscriptionActivityResource {
+  title: string
+  site: string
+  decision: string
+  reason?: string | null
+}
+
+/** 单个订阅业务活动及该轮执行时冻结的结构化详情。 */
+export interface SubscriptionActivityEvent {
+  event_id: string
+  kind: string
+  source: string
+  status: string
+  started_at: string
+  finished_at?: string | null
+  counts: Record<string, number>
+  details_loaded?: boolean
+  details: {
+    rules?: Record<string, unknown>
+    changes?: { field: string; before: unknown; after: unknown }[]
+    resources?: SubscriptionActivityResource[]
+    resources_omitted?: number
+    sites?: { id: number; name: string; candidates: number; status: string }[]
+    reason?: string
+    retry_at?: string
+    candidate_scope?: string
+    phase?: string
+    attempts?: {
+      started_at: string
+      finished_at: string
+      status: string
+      counts: Record<string, number>
+      rules: Record<string, unknown>
+    }[]
+  }
+}
+
+/** 采用固定行游标分页的订阅活动响应。 */
+export interface SubscriptionActivityPage {
+  items: SubscriptionActivityEvent[]
+  next_cursor: string | null
+}
