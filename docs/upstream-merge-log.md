@@ -982,3 +982,11 @@ architecture 基线四刷新。
 - **自动合并确认**：package.json（版本 3.1.6 + fork hls.js 依赖共存 ✓）、三 locale（fork 采集词条保留，行数=上游+17 ✓）
 - **验证**：yarn install --immutable ✓ / npm run lint ✓ / vitest 全量 3817 例 9F——失败 5 文件（format-changed×4、app-glass-optical-preload、glassOverlayMaterial、TransferHistoryView、UserProfile×2）与合并前旧树（HEAD^1）同命令同文件**逐例 IDENTICAL（9F=9F）**，均为已知 Windows 环境族（git 路径缓冲/玻璃样式 jsdom/CRLF 族），放行
 - **上游新增 spec**（SubscribeActivityDialog/SystemUpdatePrompt/useConfirm/SubscribeCard/AccountSettingSystem/glassOverlay/systemUpdatePromptMaterial）合并树全绿 ✓
+
+## 2026-10-15 第 90 轮：合并 upstream tag v3.1.6 重指增量（tag 门禁）
+
+- **合并目标**：tag `v3.1.6` 重指后 SHA `b15b7e4c9a373be56efa3c60cf7fccbd8a244709`（上轮已合旧指向 `3f77f6ef9`，upstream 在其上追加 2 提交后重打 tag；`merge-base --is-ancestor` 判定未含新 SHA → 按门禁合并增量）
+- **范围**：2 提交 / 5 文件（+154 −125）：SystemUpdatePrompt 合并更新动作后续两修（小屏紧凑按钮、单动作处理所有待更新）+ 配套 spec 与三 locale 文案
+- **冲突**：零（5 文件全为上轮合并后的 upstream 侧续改，fork 无本地改动）
+- **验证**：npm run lint 绿；受影响 spec（SystemUpdatePrompt/systemUpdatePromptMaterial/useConfirm/AccountSettingSystem）91 例全绿
+- **后端**：本轮无新 tag（最新仍 v3.1.5 已含）跳过
