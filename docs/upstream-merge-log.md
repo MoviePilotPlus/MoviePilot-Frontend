@@ -990,3 +990,11 @@ architecture 基线四刷新。
 - **冲突**：零（5 文件全为上轮合并后的 upstream 侧续改，fork 无本地改动）
 - **验证**：npm run lint 绿；受影响 spec（SystemUpdatePrompt/systemUpdatePromptMaterial/useConfirm/AccountSettingSystem）91 例全绿
 - **后端**：本轮无新 tag（最新仍 v3.1.5 已含）跳过
+
+## 2026-10-16 第 91 轮：合并 upstream tag v3.1.6 二次重指增量（tag 门禁）
+
+- **合并目标**：tag `v3.1.6` 二次重指后 SHA `1190bb880ad49734c97364db4bdd381d98f7bfd7`（上轮已合 `b15b7e4c9`，upstream 再追加 7 提交后重打；is-ancestor 按新 SHA 判未含 → 合并增量）
+- **范围**：7 提交 / 122 文件（+6217 −40）：社区贡献勋章展示体系（medal art/render/share 全家 + 头像菜单荣誉卡 + 贡献卡替换）、全局本地音乐封面开关、识别失败态保留与应用词展示、全局搜索容错无标题条目、SystemUpdatePrompt 相关 account 设置配套
+- **冲突**：零（三 locale 双侧改动同区但自动并集成功，fork 采集词条 23 处全保留已核对）
+- **验证**：npm run lint 绿；增量触碰的全部 11 个 spec（communityMedal×3/MedalStage/CommunityMedalDialog/CommunityMedalEntry/AgentAssistantWidget/SearchBarDialog/useAgentPetSuspension/AccountSettingSystem/NameTestView）156 例全绿
+- **后端**：本轮无新 tag（最新仍 v3.1.5 已含）跳过
