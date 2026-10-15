@@ -1,4 +1,128 @@
 export default {
+  community: {
+    'title': 'Community medals',
+    'emptyIntro':
+      'Community medals honor everyone who makes MoviePilot better. There are seven, each awarded for a different way of contributing.',
+    'unconfigured': 'Set up a GitHub token to see the community medals you have earned',
+    'unconfiguredHint': 'Medals are tied to GitHub accounts. The token is used to confirm your identity.',
+    'configureToken': 'Set up GitHub token',
+    'switcher': 'My medals',
+    'unseen': 'New medal',
+    'flip': 'Flip medal',
+    'hint': 'Click to flip · Drag to tilt',
+    'hintTouch': 'Tap to flip · Drag to tilt',
+    'wear': 'Wear',
+    'wearing': 'Wearing',
+    'wornLabel': '{name} medal, open community medals',
+    'save': 'Save image',
+    'saveFailed': 'Could not create the image. Try again later.',
+    'details': 'Details',
+    'refresh': 'Refresh',
+    'updated': 'Updated {time}',
+    'stale': 'Unable to get the latest data. Showing the last result.',
+    'awardedTo': 'Awarded to {login}',
+    'time': {
+      'reached': 'Reached {date}',
+      'recognized': 'Recognized {date}',
+      'awarded': '{date}',
+    },
+    'how': {
+      'auto': 'Recognized automatically',
+      'manual': 'Awarded by the maintainer team',
+    },
+    'tiers': {
+      '1': 'First Light',
+      '2': 'Builder',
+      '3': 'Distinguished',
+      '4': 'Core',
+    },
+    'thresholds': {
+      'code': {
+        '1': '1',
+        '2': '10',
+        '3': '50',
+        '4': '200',
+      },
+      'plugin': {
+        '1': 'First listing',
+        '2': '10K',
+        '3': '100K',
+        '4': '1M',
+      },
+    },
+    'progress': {
+      'contributions': '{amount} more contributions to {tier}',
+      'installs': '{amount} more installs to {tier}',
+      'top': 'Highest tier reached',
+    },
+    'detail': {
+      'rules': 'Rules',
+      'progress': 'Tier progress',
+      'contributions': '{count} accepted contributions',
+      'evidenceHint':
+        'Only repositories with contributions are listed. Within a repository, PRs and commits count by whichever is higher.',
+      'mergedPrs': '{count} merged PRs',
+      'commits': '{count} authored commits',
+      'installs': '{count} installs in total',
+      'showAll': 'Show all {count}',
+      'collapse': 'Show less',
+      'note': 'Contribution · {note}',
+      'source': 'Data comes from the MoviePilot Wiki community honors list.',
+    },
+    'specialties': {
+      'backend': 'Backend builder',
+      'frontend': 'Interface builder',
+      'plugins': 'Official plugin builder',
+      'performance': 'Extension builder',
+      'resources': 'Resource builder',
+      'services': 'Service builder',
+      'website': 'Website builder',
+      'docs': 'Docs builder',
+      'ecosystem': 'Ecosystem builder',
+    },
+    'areas': {
+      'backend': 'Backend',
+      'frontend': 'Frontend',
+      'plugins': 'Official plugins',
+      'performance': 'Rust extension',
+      'resources': 'Build & resources',
+      'services': 'External services',
+      'website': 'Official website',
+      'docs': 'Community docs',
+    },
+    'medals': {
+      'code': {
+        'summary': 'Honors contributors who write code and documentation for MoviePilot.',
+        'rule':
+          'Reach 1, 10, 50 and 200 accepted contributions to official MoviePilot repositories to earn First Light, Builder, Distinguished and Core in turn.',
+      },
+      'plugin': {
+        'summary': 'Honors the authors who build plugins for MoviePilot.',
+        'rule':
+          'Publish your first plugin to earn First Light. Reach 10K, 100K and 1M total installs to earn Builder, Distinguished and Core in turn.',
+      },
+      'maintainer': {
+        'summary': 'Honors the maintainers and core team of MoviePilot.',
+        'rule': 'Awarded by the maintainer team to the project’s maintainers and core members.',
+      },
+      'helper': {
+        'summary': 'Honors the people who answer others’ questions in the community.',
+        'rule': 'Awarded by the maintainer team to people who help others in the community over the long term.',
+      },
+      'security': {
+        'summary': 'Honors the people who keep MoviePilot secure.',
+        'rule': 'Awarded by the maintainer team to people who responsibly report security issues and help fix them.',
+      },
+      'tester': {
+        'summary': 'Honors testers who try new versions early and help polish them.',
+        'rule': 'Awarded by the maintainer team to people who test pre-release versions and file useful issue reports.',
+      },
+      'pioneer': {
+        'summary': 'Honors the people who supported MoviePilot in its early days.',
+        'rule': 'Awarded by the maintainer team to the project’s early sponsors and contributors.',
+      },
+    },
+  },
   subscriptionActivity: {
     queuedRules: 'Subscription rules when the request was submitted',
     runningSummary: 'This run is in progress; the search summary will update with results',
@@ -3225,6 +3349,8 @@ export default {
         'Report anonymous installation ID and current backend/frontend versions to count users by version',
       workflowStatisticShare: 'Share Workflow Data',
       workflowStatisticShareHint: 'Share workflow statistics to popular workflows for other MP users to reference',
+      communityMedalsEnable: 'Community Medals',
+      communityMedalsEnableHint: 'When off, community medals are hidden',
       bigMemoryMode: 'Large Memory Mode',
       bigMemoryModeHint: 'Use more memory to cache data and improve system performance',
       dbWalEnable: 'Sqlite WAL Mode',
@@ -3264,6 +3390,9 @@ export default {
       musicLyricsToSimplifiedHint:
         'Convert LRC/TXT text while preserving timestamps, LRC tags, and source Lyricsfile. Re-scrape existing lyrics with Always Scrape.',
       musicCueEnable: 'Music CUE recognition',
+      musicLocalCoverEnable: 'Local Music Covers',
+      musicLocalCoverEnableHint:
+        'Organize cover images alongside audio and embed them when online covers are unavailable. Online covers remain available when disabled.',
       musicCueEnableHint:
         'Disable for albums already split into tracks with invalid CUE files to organize using audio tags and filenames. Keep enabled for single-file albums.',
       musicMetadataToSimplifiedHint:

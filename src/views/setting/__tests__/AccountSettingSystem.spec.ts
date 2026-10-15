@@ -1242,7 +1242,7 @@ describe('AccountSettingSystem', () => {
   })
 
   it('round-trips all advanced system switches with independent boolean update settings', async () => {
-    await renderSettings()
+    const { pinia } = await renderSettings()
     const dialog = await openAdvancedTab('系统')
     for (const label of [
       '用户辅助认证',
@@ -1251,6 +1251,7 @@ describe('AccountSettingSystem', () => {
       '上报插件安装数据',
       '上报安装版本统计',
       '分享工作流数据',
+      '社区勋章',
       '大内存模式',
       '数据库WAL模式',
       '自动检查版本更新',
@@ -1275,8 +1276,11 @@ describe('AccountSettingSystem', () => {
         SUBSCRIBE_STATISTIC_SHARE: false,
         USAGE_STATISTIC_SHARE: false,
         WORKFLOW_STATISTIC_SHARE: false,
+        COMMUNITY_MEDALS_ENABLE: false,
       }),
     )
+    // 社区勋章开关保存后立即同步到全局设置，头像菜单不必重新登录即可隐藏入口。
+    expect(useGlobalSettingsStore(pinia).globalSettings.COMMUNITY_MEDALS_ENABLED).toBe(false)
   })
 
   it('loads a disabled CUE setting and allows enabling it without online music modules', async () => {
@@ -1290,6 +1294,21 @@ describe('AccountSettingSystem', () => {
     await fireEvent.click(dialog.getByRole('button', { name: '保存' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(findPost('system/env')?.[1]).toEqual(expect.objectContaining({ MUSIC_CUE_ENABLE: true }))
+  })
+
+  it.each([undefined, true, false])('loads and saves local music covers with initial value %s', async initial => {
+    if (initial !== undefined) systemEnv.MUSIC_LOCAL_COVER_ENABLE = initial
+    systemEnv.MODULE_ENABLE = { MusicBrainzModule: false, TheAudioDbModule: false }
+    await renderSettings()
+    const dialog = await openAdvancedTab('媒体')
+    const coverSwitch = dialog.getByLabelText('音乐本地封面')
+    const enabled = initial ?? true
+    expect(coverSwitch).toHaveProperty('checked', enabled)
+    expect(coverSwitch.closest('section')).toHaveAccessibleName('音乐元数据')
+    await fireEvent.click(coverSwitch)
+    await fireEvent.click(dialog.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(findPost('system/env')?.[1]).toEqual(expect.objectContaining({ MUSIC_LOCAL_COVER_ENABLE: !enabled }))
   })
 
   it('round-trips advanced media metadata, recognition, and Fanart settings', async () => {
