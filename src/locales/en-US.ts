@@ -1736,6 +1736,9 @@ export default {
     castAndCrew: 'Cast & Crew',
     recommendations: 'Recommendations',
     similar: 'Similar',
+    comments: 'Comments',
+    reviews: 'Reviews',
+    usefulCount: '{count} useful',
     error: {
       title: 'Error!',
       noMediaInfo: 'No media information recognized.',
