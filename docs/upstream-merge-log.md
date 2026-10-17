@@ -998,3 +998,11 @@ architecture 基线四刷新。
 - **冲突**：零（三 locale 双侧改动同区但自动并集成功，fork 采集词条 23 处全保留已核对）
 - **验证**：npm run lint 绿；增量触碰的全部 11 个 spec（communityMedal×3/MedalStage/CommunityMedalDialog/CommunityMedalEntry/AgentAssistantWidget/SearchBarDialog/useAgentPetSuspension/AccountSettingSystem/NameTestView）156 例全绿
 - **后端**：本轮无新 tag（最新仍 v3.1.5 已含）跳过
+
+## 2026-10-18 第 93 轮：合并 upstream tag v3.1.7（前端新 tag）
+
+- **合并目标**：tag `v3.1.7` = `470dd6a36543f461506fd737632a8e91fc4b4994`（3 提交 / 13 文件 +624 −10）
+- **上游改动主题**：媒体详情页豆瓣短评/影评展示（MediaCommentView 新视图+spec）、社区勋章等级铭牌 v3.1.7 细化、站点历史 tooltip 日期修复
+- **冲突**：零（package.json 版本 3.1.7 自动合并、三 locale 自动并集 fork 采集词条 23 处全保留）
+- **验证**：lint 绿；新增 MediaCommentView 及关联 spec 106 例全绿
+- **后端**：本轮进入 v3.1.6 重指增量合并（见后端 log 第 93 轮）
