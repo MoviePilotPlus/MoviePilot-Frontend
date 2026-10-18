@@ -1006,3 +1006,11 @@ architecture 基线四刷新。
 - **冲突**：零（package.json 版本 3.1.7 自动合并、三 locale 自动并集 fork 采集词条 23 处全保留）
 - **验证**：lint 绿；新增 MediaCommentView 及关联 spec 106 例全绿
 - **后端**：本轮进入 v3.1.6 重指增量合并（见后端 log 第 93 轮）
+
+## 2026-10-19 第 94 轮：合并 upstream tag v3.1.7 重指增量（前端）
+
+- **合并目标**：tag `v3.1.7` 重指后 SHA `809631cd707ef34190df90efa83285d2dac96691`（上轮已合 `470dd6a3`，upstream 追加 4 提交后重打；16 文件 +868 −41）
+- **上游改动主题**：豆瓣短评/影评页修复三连（评论作者澄清+分页翻译、头像代理+摘要展开、快照后台刷新时保留）、最优版本订阅按实际状态过滤
+- **冲突**：零（三 locale 自动并集 fork 词条 23 处全在）
+- **验证**：lint 绿；增量触碰 6 个 spec（MediaCommentView/SubscribeListView/community 三件+cache）129 例全绿
+- **后端**：本轮进入 v3.1.7 大轮（见后端 log 第 94 轮）
