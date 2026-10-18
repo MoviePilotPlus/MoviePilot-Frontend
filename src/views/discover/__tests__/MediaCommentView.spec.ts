@@ -13,27 +13,35 @@ const REVIEWS_URL = '*/api/v1/douban/reviews/20276229/*'
 
 let intersectionCallbacks: IntersectionObserverCallback[] = []
 
+/** 提供由用例控制进入视口时机的观察器。 */
 class IntersectionObserverMock implements IntersectionObserver {
   readonly root = null
   readonly rootMargin = '300px'
   readonly thresholds = [0]
 
+  /** 保存回调以模拟评论区域进入视口。 */
   constructor(callback: IntersectionObserverCallback) {
     intersectionCallbacks.push(callback)
   }
 
+  /** 测试结束后无需释放真实观察器。 */
   disconnect() {}
+  /** 测试使用显式回调触发观察。 */
   observe() {}
+  /** 返回没有待处理观察记录的状态。 */
   takeRecords(): IntersectionObserverEntry[] {
     return []
   }
+  /** 测试没有真实元素订阅需要移除。 */
   unobserve() {}
 }
 
+/** 创建返回指定短评分页的离线处理器。 */
 function interestsResponse(page: MediaCommentPage, status = 200) {
   return http.get(INTERESTS_URL, () => apiJson(page, { status }))
 }
 
+/** 触发评论区域的可见性变化。 */
 function triggerIntersection(isIntersecting = true) {
   const callback = intersectionCallbacks.at(-1)
   expect(callback).toBeTypeOf('function')
@@ -43,6 +51,7 @@ function triggerIntersection(isIntersecting = true) {
   )
 }
 
+/** 使用生产 UI 与翻译插件渲染电影评论。 */
 async function renderComments() {
   return renderWithProviders(MediaCommentView, {
     props: {
@@ -88,6 +97,51 @@ describe('MediaCommentView', () => {
     expect(screen.getByText(/还行\s+可是古巴的007女郎比女主好看啊/)).toBeTruthy()
     expect(screen.getByText('2021-10-29 12:00:00')).toBeTruthy()
     expect(screen.getByText('7652 有用')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '加载更多' })).toBeTruthy()
+  })
+
+  it('proxies douban avatars through the backend image endpoint', async () => {
+    server.use(
+      interestsResponse({
+        start: 0,
+        count: 2,
+        total: 2,
+        items: [
+          {
+            id: '1',
+            comment: '有头像',
+            author: { id: '1', name: '陀螺凡达可', avatar: 'https://img2.doubanio.com/icon/up1-2.jpg' },
+          },
+          {
+            id: '2',
+            comment: '无头像',
+            author: { id: '2', name: '阿北' },
+          },
+        ],
+      }),
+    )
+
+    await renderWithProviders(MediaCommentView, {
+      props: { doubanid: '20276229', type: '电影' },
+      // jsdom 不会触发 VImg 的懒加载观察，用简化桩暴露最终 src
+      global: {
+        stubs: {
+          VImg: { props: ['src'], template: '<img :src="src" />' },
+        },
+      },
+    })
+    triggerIntersection()
+    await waitFor(() => {
+      expect(screen.getByText('有头像')).toBeTruthy()
+    })
+    // 豆瓣头像域名直连会返回 418，必须经后端代理，否则头像区域留空
+    const avatarImg = document.querySelector('.comment-item img') as HTMLImageElement | null
+    expect(avatarImg).not.toBeNull()
+    const src = avatarImg?.getAttribute('src') ?? ''
+    expect(src).toContain('system/img/0?imgurl=')
+    expect(decodeURIComponent(src)).toContain('img2.doubanio.com/icon/up1-2.jpg')
+    // 无头像时回退到昵称首字，避免出现空白占位
+    expect(screen.getByText('阿')).toBeTruthy()
   })
 
   it('switches to reviews and requests the reviews endpoint', async () => {
@@ -132,6 +186,10 @@ describe('MediaCommentView', () => {
     })
     expect(screen.getByText('《无暇赴死》或许很好')).toBeTruthy()
     expect(screen.getByText('以下严重剧透注意。')).toBeTruthy()
+    // 摘要必须是普通块级节点：VListItemSubtitle 的 -webkit-line-clamp 会截断正文
+    const abstractNode = screen.getByText('以下严重剧透注意。')
+    expect(abstractNode.classList.contains('comment-text')).toBe(true)
+    expect(abstractNode.classList.contains('v-list-item-subtitle')).toBe(false)
     expect(screen.getByText('2166 有用')).toBeTruthy()
   })
 
