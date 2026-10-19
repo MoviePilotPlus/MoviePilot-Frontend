@@ -65,6 +65,9 @@ export interface SubscriptionSearchSubmission {
 
 /** 订阅搜索批次的聚合进度与当前工作。 */
 export interface SubscriptionBatchStatus {
+  download_counts?: Record<string, number>
+  downloads?: (SubscriptionActivityResource & { subscription_id: number; task_id: string })[]
+  downloads_omitted?: number
   batch_id: string
   source: string
   state: string
@@ -349,7 +352,7 @@ export interface TransferHistory {
   src?: string
   // 目的目录
   dest?: string
-  // 转移模式link/copy/move/softlink/rclone_copy/rclone_move
+  // 转移模式link/copy/move/softlink/reflink/rclone_copy/rclone_move
   mode?: string
   // 类型：电影、电视剧
   type?: string
@@ -2384,7 +2387,7 @@ export interface TransferDirectoryConf {
   monitor_type?: string
   // 监控模式 fast/compatibility
   monitor_mode?: string
-  // 整理方式 move/copy/link/softlink
+  // 整理方式 move/copy/link/softlink/reflink
   transfer_type: string
   // 文件覆盖模式 always/size/never/latest
   overwrite_mode?: string
@@ -3387,10 +3390,23 @@ export interface SiteSchema {
 
 // ==================== 上游 v3.1.6 订阅活动类型（merge 追加） ====================
 /** 单个订阅轮次的安全资源摘要，不包含下载链接或站点凭据。 */
+
+// ==================== 上游 v3.1.9 订阅下载来源类型（merge 追加） ====================
+/** 订阅提交时冻结的下载目的、洗版模式和实际选集事实。 */
+export interface SubscriptionDownloadSource {
+  subscription_id: number
+  submission_type: 'initial' | 'upgrade'
+  best_version_full: boolean
+  initial_episodes: number[]
+  upgrade_episodes: number[]
+}
+
+/** 单个下载的安全活动摘要，只有成功提交时附带来源事实。 */
 export interface SubscriptionActivityResource {
   title: string
   site: string
   decision: string
+  subscription_download?: SubscriptionDownloadSource | null
   reason?: string | null
 }
 

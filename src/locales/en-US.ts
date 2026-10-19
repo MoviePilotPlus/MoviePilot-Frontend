@@ -124,6 +124,14 @@ export default {
     },
   },
   subscriptionActivity: {
+    submissionType: 'Submission type',
+    downloadSummary: 'Initial downloads: {initial} · Upgrades: {upgrade} (full-season: {full})',
+    downloadType: {
+      initial: 'Initial subscription',
+      upgrade: 'Quality upgrade',
+      fullUpgrade: 'Full-season upgrade',
+      unknown: 'Not recorded',
+    },
     queuedRules: 'Subscription rules when the request was submitted',
     runningSummary: 'This run is in progress; the search summary will update with results',
     failedSites: '{count} site requests failed; per-site results are available in details',
@@ -2169,6 +2177,7 @@ export default {
     move: 'Move',
     link: 'Hard Link',
     softlink: 'Soft Link',
+    reflink: 'Reflink',
   },
   site: {
     noSites: 'No Sites',
@@ -3594,6 +3603,9 @@ export default {
       transferFailureNotificationAggregation: 'Aggregate Transfer Failure Notifications by Media',
       transferFailureNotificationAggregationHint:
         'Combine transfer failures for the same media and season within a short window, including the failure count, reason summary, and a batch-processing link. Disable to send one notification per file.',
+      transferCopyTryReflink: 'Prefer Reflink for Copy',
+      transferCopyTryReflinkHint:
+        'Attempt reflink (clone) first when copying on the same disk, falling back on failure. Disable if your filesystem does not support CoW to skip probing and improve performance.',
       fsProxyEnabled: 'Isolate Local File Operations',
       fsProxyEnabledHint:
         'Run local file reads, copies, moves and deletes in a separate subprocess. When a FUSE mount such as CloudDrive2 stops responding, these calls hang forever and cannot be interrupted, which in turn stalls the transfer queue and directory monitoring. Isolated, they can be force-reclaimed after a timeout and surface as ordinary errors that the existing retry logic handles. Disable to fall back to direct calls, matching the previous behaviour.',
@@ -5726,6 +5738,7 @@ export default {
       move: 'Move',
       link: 'Hard Link',
       softlink: 'Soft Link',
+      reflink: 'Reflink',
       rclone_copy: 'Rclone Copy',
       rclone_move: 'Rclone Move',
     },

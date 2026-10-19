@@ -120,6 +120,9 @@ export default {
     },
   },
   subscriptionActivity: {
+    submissionType: '提交类型',
+    downloadSummary: '首次订阅 {initial} 项 · 洗版 {upgrade} 项（其中全集洗版 {full} 项）',
+    downloadType: { initial: '首次订阅', upgrade: '洗版升级', fullUpgrade: '全集洗版', unknown: '未记录' },
     queuedRules: '提交请求时的订阅条件',
     runningSummary: '本轮正在处理，搜索概要会随结果更新',
     failedSites: '{count} 个站点请求未成功，详情中保留各站点结果',
@@ -2140,6 +2143,7 @@ export default {
     move: '移动',
     link: '硬链接',
     softlink: '软链接',
+    reflink: '引用链接',
   },
   site: {
     noSites: '没有站点',
@@ -3506,6 +3510,9 @@ export default {
       transferFailureNotificationAggregation: '按媒体聚合整理失败通知',
       transferFailureNotificationAggregationHint:
         '开启后，同一媒体同一季在短时间内产生的整理失败会合并发送，并展示失败数量、原因统计和批量处理入口；关闭时逐条发送',
+      transferCopyTryReflink: '复制优先写时复制 (Reflink)',
+      transferCopyTryReflinkHint:
+        '同磁盘复制时优先尝试引用链接（克隆），失败自动回退。若明确文件系统不支持写时复制，关闭可减少探测逻辑提升性能。',
       fsProxyEnabled: '本地文件操作隔离',
       fsProxyEnabledHint:
         '在独立子进程中执行本地文件的读取、复制、移动与删除。CloudDrive2 等 FUSE 挂载失去响应时，这类操作会永久卡住且无法中断，进而拖死整理队列与目录监控；隔离后可在超时后强制回收并转为普通错误，由既有的重试机制接管。关闭后退回直接调用，行为与旧版一致',
@@ -5571,6 +5578,7 @@ export default {
       move: '移动',
       link: '硬链接',
       softlink: '软链接',
+      reflink: '引用链接',
       rclone_copy: 'Rclone复制',
       rclone_move: 'Rclone移动',
     },
