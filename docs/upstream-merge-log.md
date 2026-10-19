@@ -1014,3 +1014,10 @@ architecture 基线四刷新。
 - **冲突**：零（三 locale 自动并集 fork 词条 23 处全在）
 - **验证**：lint 绿；增量触碰 6 个 spec（MediaCommentView/SubscribeListView/community 三件+cache）129 例全绿
 - **后端**：本轮进入 v3.1.7 大轮（见后端 log 第 94 轮）
+
+## 2026-10-20 第 95 轮：合并 upstream tag v3.1.9（前端，含 v3.1.8）
+
+- **合并目标**：tag `v3.1.9` = `6d2db59b671833e4148870b42f377ab7ab6c8984`（4 提交 / 15 文件 +241 −7，含 v3.1.8 提交：订阅初始/升级下载来源展示、本地存储 reflink 整理方式、实验室写时复制选项）
+- **冲突**：仅 `src/api/types.ts`（上游尾块撞 fork 采集尾块，同第 89 轮形态）——双块保留（fork 块 + 上游 v3.1.9 订阅下载来源类型块带分隔注释追加）
+- **验证**：lint 绿；触碰的 3 个 spec（SubscribeActivityDialog/SubscribeExecutionDialog/AccountSettingSystem）80 例全绿；三 locale 自动并集 fork 词条 23 处全在
+- **后端**：本轮进入 v3.1.8 合并（见后端 log 第 95 轮）
