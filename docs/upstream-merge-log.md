@@ -1021,3 +1021,11 @@ architecture 基线四刷新。
 - **冲突**：仅 `src/api/types.ts`（上游尾块撞 fork 采集尾块，同第 89 轮形态）——双块保留（fork 块 + 上游 v3.1.9 订阅下载来源类型块带分隔注释追加）
 - **验证**：lint 绿；触碰的 3 个 spec（SubscribeActivityDialog/SubscribeExecutionDialog/AccountSettingSystem）80 例全绿；三 locale 自动并集 fork 词条 23 处全在
 - **后端**：本轮进入 v3.1.8 合并（见后端 log 第 95 轮）
+
+## 2026-10-21 第 96 轮：合并 upstream tag v3.1.9 重指增量（前端）
+
+- **合并目标**：tag `v3.1.9` 重指后 SHA `3d776901600b082fb827d171c3c7b45ea0560b41`（上轮已合 `6d2db59b`，upstream 追加 2 提交后重打；3 文件 +215 −37）
+- **上游改动主题**：站点用户数据对话框两修（零下载无限比例显示、统计 tooltip 与增量常显）
+- **冲突**：零；locale fork 词条 23 处全在
+- **验证**：SiteUserDataDialog spec 24 例全绿；lint 绿
+- **后端**：v3.1.8 已含，本轮跳过
