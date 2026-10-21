@@ -169,6 +169,7 @@ function createLlmDirectoryState(overrides: Record<string, unknown> = {}) {
   }
 }
 
+/** 提供可手动完成或拒绝的请求，验证并发返回顺序。 */
 function createDeferred<T>() {
   let resolve!: (value: T) => void
   let reject!: (reason?: unknown) => void
@@ -179,6 +180,7 @@ function createDeferred<T>() {
   return { promise, reject, resolve }
 }
 
+/** 提供共享弹窗的控制器替身，隔离弹窗生命周期。 */
 function createDialogController() {
   return { close: vi.fn(), id: 1, updateProps: vi.fn() }
 }
@@ -247,6 +249,7 @@ const BASIC_SETTING_KEYS = [
   'WALLPAPER_ROTATION_INTERVAL',
 ]
 
+/** 用独立配置夹具响应设置页加载请求，阻止访问真实后端。 */
 function mockLoadedSettings() {
   mocks.apiGet.mockImplementation((endpoint: string) => {
     if (endpoint === 'system/env') return { success: true, data: systemEnv }
@@ -337,6 +340,7 @@ function mockLoadedSettings() {
   })
 }
 
+/** 填充完整的智能助手配置，供相关表单与连接测试使用。 */
 function enableLlmSettings() {
   systemEnv = {
     ...systemEnv,
@@ -499,10 +503,12 @@ async function selectOption(label: string, option: string) {
   await user.click(await screen.findByRole('option', { name: option }))
 }
 
+/** 按接口路径读取首个保存请求，验证持久化载荷。 */
 function findPost(path: string) {
   return mocks.apiPost.mock.calls.find(call => call[0] === path)
 }
 
+/** 展开基础设置中的智能助手配置区域。 */
 async function expandLlmSettings() {
   await fireEvent.click(screen.getByRole('button', { name: '智能助手配置' }))
   return screen.findByRole('button', { name: '测试调用' })
@@ -1198,6 +1204,29 @@ describe('AccountSettingSystem', () => {
       }),
     )
     expect(mocks.toastSuccess).toHaveBeenCalledWith('高级设置保存成功')
+  })
+
+  // 通过可见开关验证旧配置默认值、显式状态和独立的环境配置保存边界。
+  it.each([undefined, false, true])('loads season image root setting %s and saves the toggled value', async enabled => {
+    if (enabled !== undefined) systemEnv.SCRAP_SEASON_IMAGE_TO_ROOT = enabled
+    scrapingSetting = { season_poster: 'missingOnly', season_banner: 'skip' }
+    await renderSettings()
+    const dialog = await openAdvancedTab('媒体')
+    await fireEvent.click(dialog.getByRole('button', { name: /刮削开关设置/ }))
+    const rootSwitch = await dialog.findByLabelText('季图片同时写入剧集根目录')
+
+    expect(rootSwitch).toHaveProperty('checked', enabled ?? true)
+    await fireEvent.click(rootSwitch)
+    await fireEvent.click(dialog.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(findPost('system/env')?.[1]).toEqual(
+      expect.objectContaining({ SCRAP_SEASON_IMAGE_TO_ROOT: !(enabled ?? true) }),
+    )
+    expect(findPost('system/setting/ScrapingSwitchs')?.[1]).toEqual(
+      expect.objectContaining({ season_poster: 'missingOnly', season_banner: 'skip' }),
+    )
+    expect(findPost('system/setting/ScrapingSwitchs')?.[1]).not.toHaveProperty('SCRAP_SEASON_IMAGE_TO_ROOT')
   })
 
   it('renders module switches from the backend catalog and saves their states', async () => {
