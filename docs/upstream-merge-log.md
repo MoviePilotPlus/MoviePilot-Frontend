@@ -1029,3 +1029,11 @@ architecture 基线四刷新。
 - **冲突**：零；locale fork 词条 23 处全在
 - **验证**：SiteUserDataDialog spec 24 例全绿；lint 绿
 - **后端**：v3.1.8 已含，本轮跳过
+
+## 2026-10-22 第 97 轮：合并 upstream tag v3.1.9 三次重指增量（前端）
+
+- **合并目标**：tag `v3.1.9` 三次重指后 SHA `51f20f3c13d2c096ec9a6b7c11d7327d8be127f4`（上轮已合 `3d776901`，upstream 追加 5 提交后重打；12 文件 +107 −27）
+- **上游改动主题**：豆瓣评论头像与用户名顶部对齐、插件版本历史保留最新更新动作、季图片根路径开关暴露到系统设置、两处测试文档澄清
+- **冲突**：零；locale fork 词条 23 处全在
+- **验证**：触碰的 4 个 spec（PluginCard/PluginMarketDetailDialog/PluginVersionHistoryDialog/AccountSettingSystem）144 例全绿；lint 绿
+- **后端**：v3.1.8 已含，本轮跳过
