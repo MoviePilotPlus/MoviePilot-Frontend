@@ -3720,7 +3720,13 @@ export default {
       scrapingSwitchSettingsDesc: 'Control various media file scraping function switches',
       seasonImageToRoot: 'Also save season images in the series root folder',
       seasonImageToRootHint:
-        'When disabled, save only in season folders and keep existing images. Missing-only checks each target file independently.',
+        'When disabled, save only in season folders and keep existing images. Missing-only checks image types at each target location.',
+      scrapImageAlias: 'Save compatible image aliases',
+      scrapImageAliasHint:
+        'Also save aliases such as fanart and landscape for backgrounds and thumbnails. Disabling keeps source images and existing files.',
+      scrap4kBackground: 'Fetch Fanart 4K backgrounds',
+      scrap4kBackgroundHint:
+        'Save 4K backgrounds as media-server-compatible background images. Disabling does not affect standard backgrounds.',
       movie: 'Movie',
       tv: 'TV Show',
       season: 'Season',
@@ -4740,6 +4746,12 @@ export default {
         'No target-file evidence is available to confirm completion. Choose retry instead.',
       manualReviewAppliedWarning:
         'Choose this only when the target file is complete and usable; later steps may continue, including deleting the source file.',
+      manualReviewCleanupHint: 'The target has been transferred. Confirm whether the source file has been removed.',
+      manualReviewCleanupWarning:
+        'If the source still exists, choose to recheck and clean up. The completed upload will be reused and the files verified again, without uploading again. Confirm cleanup only after verifying the target is complete and the source has been deleted.',
+      manualReviewCleanupConfirm: 'I verified the target is complete and the source has been deleted',
+      manualReviewCleanupRetry: 'Source present, recheck cleanup',
+      manualReviewCleanupApplied: 'Source deleted, continue',
       manualReviewSubmitted: 'Manual review submitted',
       manualReviewSubmitFailed: 'Manual review failed. Refresh and try again.',
       manualReviewLoadFailed: 'Failed to load manual-review tasks',
