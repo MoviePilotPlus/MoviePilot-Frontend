@@ -1037,3 +1037,11 @@ architecture 基线四刷新。
 - **冲突**：零；locale fork 词条 23 处全在
 - **验证**：触碰的 4 个 spec（PluginCard/PluginMarketDetailDialog/PluginVersionHistoryDialog/AccountSettingSystem）144 例全绿；lint 绿
 - **后端**：v3.1.8 已含，本轮跳过
+
+## 2026-10-23 第 98 轮：合并 upstream tag v3.1.9 四次重指增量（前端）
+
+- **合并目标**：tag `v3.1.9` 四次重指后 SHA `795c975850289ac2e0146b18c05cf63541cb352a`（上轮已合 `51f20f3c`，upstream 追加 5 提交后重打；23 文件 +1682 −955，含 yarn.lock 大重算）
+- **上游改动主题**：运行时/工具链依赖安全升级（vue-i18n 10.0.8、http-proxy-middleware 3.0.7 等）、PWA 图标 sharp 0.35 重生成、源清理手动审阅开关、Fanart 4K 背景与艺术别名控制、setup-node 锁 Node 24 patch
+- **冲突**：仅 `package.json`（fork hls.js 行 vs 上游版本升级行）——合成（保 hls.js + 取上游新版本号）
+- **验证坑（node_modules 陈旧嵌套）**：合并后 `yarn install --immutable` 未清理旧嵌套——`@intlify/core-base/node_modules/@intlify/shared` 残留 10.0.7（无 `sanitizeTranslatedHtml` 导出），而 core-base 10.0.8 需要它，2 个 spec 炸 SyntaxError。**处置=删 `node_modules/@intlify/*/node_modules` 陈旧嵌套后重装（hoisted 10.0.8 恢复）**；纯上游 v3.1.9 树复现同炸确认为本地安装残留而非合并回归。修复后 2 spec 83 例全绿；lint 绿
+- **后端**：本轮进入 v3.1.9 合并（见后端 log 第 98 轮）
