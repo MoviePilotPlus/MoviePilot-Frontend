@@ -1045,3 +1045,11 @@ architecture 基线四刷新。
 - **冲突**：仅 `package.json`（fork hls.js 行 vs 上游版本升级行）——合成（保 hls.js + 取上游新版本号）
 - **验证坑（node_modules 陈旧嵌套）**：合并后 `yarn install --immutable` 未清理旧嵌套——`@intlify/core-base/node_modules/@intlify/shared` 残留 10.0.7（无 `sanitizeTranslatedHtml` 导出），而 core-base 10.0.8 需要它，2 个 spec 炸 SyntaxError。**处置=删 `node_modules/@intlify/*/node_modules` 陈旧嵌套后重装（hoisted 10.0.8 恢复）**；纯上游 v3.1.9 树复现同炸确认为本地安装残留而非合并回归。修复后 2 spec 83 例全绿；lint 绿
 - **后端**：本轮进入 v3.1.9 合并（见后端 log 第 98 轮）
+
+## 2026-10-25 第 99 轮：合并 upstream tag v3.2.0（前端大轮，含 v3.1.10）
+
+- **合并目标**：tag `v3.2.0` = `1fe397540d2f2bf1fec2302773b492fab24023f0`（merge-base 795c9758；32 提交 / 122 文件 +5878 −283，含 v3.1.10 提交）
+- **上游改动主题**：原生 App 集成大轮——Vue 确认框投影为系统弹窗、路由跳转前保留原生预览、通知中心全宽/图片保留、插件历史页脚钉底、订阅批量操作标签与选中态、用户菜单对齐与勋章资格刷新、文件详情头与关闭动作；另通知图片回归覆盖格式化
+- **冲突**：零（package.json 版本 3.2.0 与 hls.js 自动共存、三 locale 自动并集 fork 采集词条 23 处全在、eslint-suppressions 并集 fork collect 键 31 处全在、types.ts 尾块自动合）
+- **验证**：yarn install --immutable + lint 绿；触碰的 28 个 spec 284 例全绿
+- **后端**：v3.1.9 已含，本轮跳过（后端 v3.2.0 tag 未发布）
