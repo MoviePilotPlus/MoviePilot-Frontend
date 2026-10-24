@@ -6,6 +6,7 @@ import { agentHost } from '@/utils/agentHost'
 import { resetAgentPetComponentLoads } from '@/utils/agentPetLoader'
 import AgentPetRemote from '../AgentPetRemote.vue'
 import AgentPetStage from '../AgentPetStage.vue'
+import { AGENT_PET_SAY_INJECTION_KEY } from '@/utils/agentPetSay'
 
 const mocks = vi.hoisted(() => ({
   loadRemoteComponent: vi.fn(),
@@ -259,5 +260,29 @@ describe('AgentPetStage renderer branch', () => {
 
     wrapper.unmount()
     agentHost.resetState()
+  })
+
+  it('routes renderer pet lines to the provided host handler and reports unavailable without one', async () => {
+    const { component, received } = createFakePet()
+    mocks.loadRemoteComponent.mockResolvedValue(component)
+    const say = vi.fn(() => ({ shown: true as const }))
+
+    const hosted = mount(AgentPetRemote, {
+      props: { pet: createPet({ mode: 'renderer', bubbles: null }) },
+      global: { provide: { [AGENT_PET_SAY_INJECTION_KEY as symbol]: say } },
+    })
+    await flushPromises()
+    const pet = received.props?.pet as AgentPetContext
+    expect(pet.say('你好', { duration: 2000 })).toEqual({ shown: true })
+    expect(say).toHaveBeenCalledWith('你好', { duration: 2000 })
+    hosted.unmount()
+    // 卸载后插件仍持有的旧上下文失效，不再转给宿主。
+    expect(pet.say('还在吗')).toEqual({ shown: false, reason: 'unavailable' })
+    expect(say).toHaveBeenCalledTimes(1)
+
+    const standalone = mount(AgentPetRemote, { props: { pet: createPet({ mode: 'renderer', bubbles: null }) } })
+    await flushPromises()
+    expect((received.props?.pet as AgentPetContext).say('你好')).toEqual({ shown: false, reason: 'unavailable' })
+    standalone.unmount()
   })
 })

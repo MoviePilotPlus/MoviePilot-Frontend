@@ -4,8 +4,14 @@ import { defineComponent, h, nextTick, ref, type PropType } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AgentAssistantWidget from '@/components/agent/AgentAssistantWidget.vue'
 import { AGENT_ASSISTANT_LAYER_Z_INDEX } from '@/constants/agentAssistant'
-import { AGENT_PET_RESOLVE_WAIT } from '@/stores/agentPet'
-import type { AgentHostEvent, AgentPetContext, AgentPetDeclaration, MoviePilotAgentHost } from '@/types/agentHost'
+import { AGENT_PET_RESOLVE_WAIT, useAgentPetStore } from '@/stores/agentPet'
+import type {
+  AgentHostEvent,
+  AgentPetContext,
+  AgentPetDeclaration,
+  AgentPetSayResult,
+  MoviePilotAgentHost,
+} from '@/types/agentHost'
 import { agentHost } from '@/utils/agentHost'
 import { suspendAgentPet } from '@/composables/useAgentPetSuspension'
 import { resetAgentPetComponentLoads } from '@/utils/agentPetLoader'
@@ -157,11 +163,18 @@ describe('AgentAssistantWidget layering', () => {
 })
 
 describe('AgentAssistantWidget agent host', () => {
+  const entryShowPetSay = vi.fn((): AgentPetSayResult => ({ shown: true }))
+  const entryClosePetSay = vi.fn()
   const entryStub = defineComponent({
     name: 'AgentAssistantEntry',
     props: { anchored: Boolean, anchorRect: Object, pet: Object, active: Boolean, concealed: Boolean },
     setup(_props, { expose }) {
-      expose({ clearBubbles: vi.fn(), showAssistantReplyPreview: vi.fn() })
+      expose({
+        clearBubbles: vi.fn(),
+        showAssistantReplyPreview: vi.fn(),
+        showPetSay: entryShowPetSay,
+        closePetSay: entryClosePetSay,
+      })
       return () => h('div', { 'data-agent-assistant-entry': '' })
     },
   })
@@ -307,6 +320,152 @@ describe('AgentAssistantWidget agent host', () => {
     listener.dispose()
     wrapper.unmount()
     expect(canUseAgentAssistantBubble()).toBe(false)
+  })
+
+  /** 挂载一个 stage 形象并取回它收到的 pet 上下文。 */
+  async function mountStagePet(overrides: Partial<AgentPetDeclaration> = {}, onSetup?: (pet: AgentPetContext) => void) {
+    let petContext: AgentPetContext | undefined
+    mocks.loadRemoteComponent.mockResolvedValue(
+      defineComponent({
+        props: { pet: { type: Object as PropType<AgentPetContext>, required: true } },
+        setup(props) {
+          petContext = props.pet
+          props.pet.setBubbleAnchor({ x: 100, y: 200, width: 64, height: 96 })
+          onSetup?.(props.pet)
+          return () => h('div', { 'data-stage-pet': '' })
+        },
+      }),
+    )
+    mockPetBackend([createPet(overrides)], { plugin_id: 'PetPlugin', key: 'girl' })
+    const panelStub = createPanelStub()
+    const wrapper = mount(AgentAssistantWidget, {
+      global: { stubs: { AgentAssistantEntry: entryStub, AgentAssistantPanel: panelStub } },
+    })
+    await vi.waitFor(() => expect(document.body.querySelector('[data-stage-pet]')).not.toBeNull())
+    await flushPromises()
+    return { wrapper, panelStub, pet: petContext as AgentPetContext }
+  }
+
+  it('lets the active pet say short plain lines through the entry and enforces the host limits', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(0)
+    entryShowPetSay.mockClear()
+    const { wrapper, pet } = await mountStagePet()
+
+    expect(pet.say('   ')).toEqual({ shown: false, reason: 'empty' })
+    expect(pet.say(`喵~ ${'很'.repeat(80)}`)).toEqual({ shown: true })
+    const [text, duration] = entryShowPetSay.mock.calls[0] as unknown as [string, number]
+    // 不剥离 Markdown 符号，按码点截到 60 个字符并补省略号；缺省时长 3.5 秒。
+    expect(text.startsWith('喵~ ')).toBe(true)
+    expect(Array.from(text)).toHaveLength(60)
+    expect(text.endsWith('…')).toBe(true)
+    expect(duration).toBe(3500)
+
+    expect(pet.say('再来一句')).toEqual({ shown: false, reason: 'rate_limited' })
+    vi.setSystemTime(2000)
+    expect(pet.say('再来一句', { duration: 60_000 })).toEqual({ shown: true })
+    expect(entryShowPetSay).toHaveBeenLastCalledWith('再来一句', 6000)
+    vi.setSystemTime(4000)
+    expect(pet.say('再来一句')).toEqual({ shown: false, reason: 'duplicate' })
+
+    // 入口拒绝（例如有系统气泡）不占配额。
+    entryShowPetSay.mockReturnValueOnce({ shown: false, reason: 'busy' })
+    expect(pet.say('第三句')).toEqual({ shown: false, reason: 'busy' })
+    expect(pet.say('第三句')).toEqual({ shown: true })
+
+    // 60 秒内最多 10 条。
+    for (let index = 0; index < 7; index++) {
+      vi.setSystemTime(6000 + index * 2000)
+      expect(pet.say(`第 ${index + 4} 句`)).toEqual({ shown: true })
+    }
+    vi.setSystemTime(22_000)
+    expect(pet.say('第 11 句')).toEqual({ shown: false, reason: 'rate_limited' })
+    vi.setSystemTime(60_500)
+    expect(pet.say('第 11 句')).toEqual({ shown: true })
+
+    wrapper.unmount()
+  })
+
+  it('keeps pet lines away while the panel is open', async () => {
+    entryShowPetSay.mockClear()
+    const { wrapper, panelStub, pet } = await mountStagePet()
+    wrapper.findComponent(panelStub).vm.$emit('update:modelValue', true)
+    await nextTick()
+    expect(pet.say('你好')).toEqual({ shown: false, reason: 'hidden' })
+    expect(entryShowPetSay).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('reports a stage pet line as hidden until the pet is ready and anchored', async () => {
+    entryShowPetSay.mockClear()
+    let early: AgentPetSayResult | undefined
+    const { wrapper, pet } = await mountStagePet({}, context => {
+      early = context.say('你好')
+    })
+    expect(early).toEqual({ shown: false, reason: 'hidden' })
+    expect(entryShowPetSay).not.toHaveBeenCalled()
+    expect(pet.say('你好')).toEqual({ shown: true })
+    wrapper.unmount()
+  })
+
+  it('invalidates the old pet context and clears its line when the user switches pets', async () => {
+    entryShowPetSay.mockClear()
+    entryClosePetSay.mockClear()
+    const { wrapper, pet } = await mountStagePet()
+    expect(pet.say('你好')).toEqual({ shown: true })
+
+    await useAgentPetStore().setUserSelection('builtin')
+    await flushPromises()
+    expect(entryClosePetSay).toHaveBeenCalled()
+    entryShowPetSay.mockClear()
+    // 插件遗留的计时器仍持有旧上下文，台词不能出现在内置机器人旁边。
+    expect(pet.say('还在吗')).toEqual({ shown: false, reason: 'unavailable' })
+    expect(entryShowPetSay).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('reports no host bubble for stage pets that draw their own bubbles', async () => {
+    entryShowPetSay.mockClear()
+    const { wrapper, pet } = await mountStagePet({ bubbles: 'self' })
+    expect(pet.say('你好')).toEqual({ shown: false, reason: 'unavailable' })
+    expect(entryShowPetSay).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('forwards the Dock area published by the footer into the host state', async () => {
+    const { usePublishFooterDockGeometry } = await import('@/composables/useFooterDockGeometry')
+    const rect = { x: 80, y: 710, width: 240, height: 56 }
+    const domRect = { ...rect, left: 80, top: 710, right: 320, bottom: 766, toJSON: () => ({}) } as DOMRect
+    const footer = mount(
+      defineComponent({
+        setup() {
+          const container = ref<HTMLElement | null>(null)
+          const group = ref<HTMLElement | null>(null)
+          usePublishFooterDockGeometry(container, group)
+          return () =>
+            h('div', { ref: container }, [h('div', { ref: group }, [h('div', { 'data-footer-nav-role': 'primary' })])])
+        },
+      }),
+      { attachTo: document.body },
+    )
+    footer.findAll('div').forEach(item => {
+      item.element.getBoundingClientRect = () => domRect
+      item.element.getClientRects = () => [domRect] as unknown as DOMRectList
+    })
+    const wrapper = mountWidget()
+    const plugin = agentHost.createScoped(() => 'PetPlugin')
+    const states: Array<unknown> = []
+    plugin.subscribe(state => states.push(state.dock))
+
+    window.dispatchEvent(new Event('resize'))
+    await vi.waitFor(() => expect(agentHost.getState().dock).toEqual({ bounds: rect, items: [rect] }))
+    expect(states.at(-1)).toEqual({ bounds: rect, items: [rect] })
+
+    footer.unmount()
+    await nextTick()
+    expect(agentHost.getState().dock).toBeNull()
+    plugin.dispose()
+    wrapper.unmount()
   })
 
   it('passes renderer pets to the builtin entry instead of mounting a stage layer', async () => {

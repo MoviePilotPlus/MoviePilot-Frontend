@@ -12,6 +12,8 @@ import { useKeepAliveRefresh, type KeepAliveRefreshContext } from '@/composables
 import { openSharedDialog } from '@/composables/useSharedDialog'
 import { useUserStore } from '@/stores'
 import { buildUserPermissionContext, hasPermission } from '@/utils/permission'
+import { useNativePageHeader } from '@/native/page'
+import { nativeChromeActive } from '@/native/layout'
 
 // 国际化
 const { t } = useI18n()
@@ -64,6 +66,10 @@ const savingPriority = ref(false)
 // 筛选相关
 const filterMenu = ref(false)
 const filterOption = ref('all') // all, active, inactive, connected, slow, failed, unknown
+// 原生操作从系统顶栏发起，仍打开同一份 HTML 筛选菜单。
+const siteFilterActivator = computed(() =>
+  nativeChromeActive.value ? '[data-native-menu-anchor][data-menu-activator="site-filter-btn"]' : undefined,
+)
 
 // 筛选选项
 const filterOptions = computed(() => [
@@ -393,18 +399,59 @@ useDynamicButton({
   permission: 'manage',
   show: computed(() => appMode.value && shouldShowFloatingActions.value),
 })
+
+useNativePageHeader({
+  actions: computed(() => [
+    {
+      title: t('common.filter'),
+      icon: 'mdi-filter-multiple-outline',
+      dataAttr: 'site-filter-btn',
+      panel: () => ({
+        title: t('common.filter'),
+        sections: [
+          {
+            id: 'site-filter',
+            items: filterOptions.value.map(option => ({
+              id: option.value,
+              title: option.label,
+              icon: option.icon,
+              selected: filterOption.value === option.value,
+              invoke: () => selectFilter(option.value),
+            })),
+          },
+        ],
+      }),
+      action: () => {
+        filterMenu.value = true
+      },
+    },
+    {
+      title: t('file.sort'),
+      icon: 'mdi-sort-variant',
+      permission: 'manage',
+      action: toggleSortMode,
+    },
+  ]),
+})
 </script>
 
 <template>
   <div class="card-list-container">
     <!-- 页面标题和筛选/排序按钮 -->
-    <div class="d-flex justify-space-between align-center mb-3">
+    <div class="d-flex justify-space-between align-center mb-3" data-native-page-heading>
       <VPageContentTitle :title="t('navItems.siteManager')" class="my-0" style="margin-block: 0" />
       <!-- 右侧按钮组：保留筛选和排序，其他页面动作移到 FAB -->
       <div class="d-flex align-center gap-1">
         <!-- 筛选按钮 -->
-        <VMenu v-model="filterMenu" offset-y :close-on-content-click="false" location="bottom end">
-          <template #activator="{ props }">
+        <VMenu
+          v-model="filterMenu"
+          :activator="siteFilterActivator"
+          offset-y
+          :close-on-content-click="false"
+          location="bottom end"
+        >
+          <!-- 原生模式只保留可访问的外部锚点；隐藏按钮的 aria-owns 会使 WebKit 连带隐藏菜单。 -->
+          <template v-if="!nativeChromeActive" #activator="{ props }">
             <IconBtn v-bind="props" :variant="filterOption === 'all' ? 'text' : 'tonal'" :color="currentFilter?.color">
               <VIcon :icon="currentFilter?.icon || 'mdi-filter'" />
             </IconBtn>

@@ -10,6 +10,14 @@ import type { AgentHostOpenOptions, AgentHostRect } from '@/types/agentHost'
 import { agentHost } from '@/utils/agentHost'
 import { createAgentPhaseTracker, type AgentStreamPhaseEvent } from '@/utils/agentHostPhase'
 import { onAgentAssistantBubble, setAgentAssistantBubbleEntryActive } from '@/utils/agentAssistantBubble'
+import {
+  AGENT_PET_SAY_INJECTION_KEY,
+  clampAgentPetSayDuration,
+  createAgentPetSayLimiter,
+  normalizeAgentPetSayText,
+  type AgentPetSayHandler,
+} from '@/utils/agentPetSay'
+import { footerDockGeometry } from '@/composables/useFooterDockGeometry'
 import { useTheme } from 'vuetify'
 
 // stage 形象按需加载，内置机器人用户不引入联邦加载链路。
@@ -63,6 +71,7 @@ const entryAnchored = computed(() => stageActive.value && stageBubbles.value ===
 const entryConcealed = computed(() => petStore.resolving || (Boolean(stagePet.value) && !stageActive.value))
 const bubbleAnchor = shallowRef<AgentHostRect | null>(null)
 const petInteracting = ref(false)
+const petSayLimiter = createAgentPetSayLimiter()
 
 function clearAssistantPreviewTimer() {
   if (assistantPreviewTimer === null) return
@@ -161,6 +170,28 @@ function trackPanelRect() {
   }
 }
 
+/**
+ * 形象台词入口。依次判断文字、模式、可见性、频率，最后交给入口按现有气泡判断能否显示；
+ * 只有真正显示的台词计入频率配额。
+ */
+const sayFromPet: AgentPetSayHandler = (value, options) => {
+  const text = normalizeAgentPetSayText(value)
+  if (!text) return { shown: false, reason: 'empty' }
+  // bubbles=self 时内置入口不挂载，宿主没有气泡可用。
+  if (!showEntry.value || !entryRef.value) return { shown: false, reason: 'unavailable' }
+  // stage 形象就绪前入口还未锚定到角色，此时显示的气泡不在角色旁，按未上报位置处理。
+  if (stagePet.value && !stageActive.value) return { shown: false, reason: 'hidden' }
+  if (panelOpen.value || agentPetSuspended.value || !agentHost.getState().pageVisible)
+    return { shown: false, reason: 'hidden' }
+  const limited = petSayLimiter.check(text)
+  if (limited) return { shown: false, reason: limited }
+
+  const result = entryRef.value.showPetSay(text, clampAgentPetSayDuration(options?.duration))
+  if (result.shown) petSayLimiter.record(text)
+  return result
+}
+provide(AGENT_PET_SAY_INJECTION_KEY, sayFromPet)
+
 function handleStageReady() {
   stageReadyId.value = effectivePetId.value
 }
@@ -184,7 +215,13 @@ watch(effectivePetId, () => {
   stageReadyId.value = ''
   bubbleAnchor.value = null
   petInteracting.value = false
+  petSayLimiter.reset()
+  // 入口不随 renderer 形象切换重建，旧形象最后一句台词要随切换一起收起。
+  entryRef.value?.closePetSay()
 })
+
+// 底部 Dock 几何由 Footer 发布，这里只转进宿主快照，插件经 subscribe 收到变化。
+watch(footerDockGeometry, dock => agentHost.setState({ dock }), { immediate: true })
 
 // bubbles=self 时内置入口不挂载，由宿主保持气泡总线可用，toast 和通知以 agent.bubble 推给形象。
 watch(

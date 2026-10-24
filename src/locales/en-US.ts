@@ -1237,6 +1237,19 @@ export default {
       adminsHint: 'User IDs that can use admin menu and commands, separated by commas',
       adminsPlaceholder: 'User IDs list, separated by commas',
     },
+    apppush: {
+      name: 'Private App Push',
+      server: 'Notification service URL (optional)',
+      serverHint: 'Leave blank to use the configured MoviePilot service. The backend enrolls automatically.',
+      manual: 'Connect with an existing key',
+      key: 'Instance relay key',
+      keyHint:
+        'Usually unnecessary. Only for an existing manual Server key of at least 32 characters. Disables automatic enrollment.',
+      hint: 'Enable to enroll automatically, then bind your device in App → Connection & Display → Notifications. Free signing uses the Home Screen notification web app.',
+      rotate: 'Rotate access credentials',
+      rotated: 'Credentials rotated. Device bindings are preserved.',
+      rotateFailed: 'Could not rotate credentials. Try again later.',
+    },
     webpush: {
       name: 'WebPush',
       username: 'Login Username',
@@ -1885,6 +1898,8 @@ export default {
     },
     selectedCount: 'Selected {count}/{total} items',
     noSelectedItems: 'Please select subscriptions to operate',
+    batchOperation: 'Batch Actions',
+    batchSelectionHint: 'Tap cards to select subscriptions, then use the bottom-right action button.',
     batchSelectAll: 'Select All Subscriptions',
     batchDeselectAll: 'Deselect All Subscriptions',
     exitBatchMode: 'Exit Batch Mode',

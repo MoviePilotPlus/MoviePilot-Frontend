@@ -6,6 +6,7 @@ import { AGENT_HOST_INJECTION_KEY, useScopedAgentHost } from '@/composables/useA
 import { useAgentPetStore } from '@/stores/agentPet'
 import type { AgentHostRect, AgentPetContext, AgentPetDeclaration } from '@/types/agentHost'
 import { AgentPetLoadTimeoutError, loadAgentPetComponent } from '@/utils/agentPetLoader'
+import { AGENT_PET_SAY_INJECTION_KEY } from '@/utils/agentPetSay'
 import type { AgentPetActionName, AgentPetIntent } from './types'
 
 /** 形象私有持久数据的序列化上限（字节）。 */
@@ -54,6 +55,9 @@ scopedAgent.subscribe(state => {
 })
 const rendererMotionActive = computed(() => props.motionActive && !reducedMotion.value)
 
+// 不在 Widget 下（例如单独渲染的预览）时没有宿主气泡，台词一律 unavailable。
+const sayHandler = inject(AGENT_PET_SAY_INJECTION_KEY, null)
+
 const scopedPluginApi = computed(() => createPluginInstanceApi(pluginId.value, sourcePluginId.value))
 
 /** 规整插件上报的矩形，非法值视为隐藏锚点。 */
@@ -69,6 +73,9 @@ function getStateConfigKey() {
   return `user/config/AgentPetState.${props.pet.plugin_id}.${props.pet.key}`
 }
 
+/** 组件已卸载；emit 在卸载后由 Vue 自动丢弃，say 走注入函数，需要自己判断。 */
+let unmounted = false
+
 const petContext: AgentPetContext = {
   get mode() {
     return props.pet.mode
@@ -83,6 +90,12 @@ const petContext: AgentPetContext = {
   setInteracting(value) {
     if (props.pet.mode !== 'stage') return
     emit('interacting', Boolean(value))
+  },
+  say(text, options) {
+    // 卸载或切换后旧上下文可能仍被插件的异步回调或计时器持有，必须失效，台词不能落到新形象旁边。
+    if (unmounted) return { shown: false, reason: 'unavailable' }
+    if (props.pet.mode === 'stage' && props.pet.bubbles === 'self') return { shown: false, reason: 'unavailable' }
+    return sayHandler ? sayHandler(text, options) : { shown: false, reason: 'unavailable' }
   },
   storage: {
     async get<T = unknown>() {
@@ -133,6 +146,7 @@ onErrorCaptured(error => {
 })
 
 onBeforeUnmount(() => {
+  unmounted = true
   loadGeneration++
   if (props.pet.mode === 'stage') emit('bubble-anchor', null)
 })
