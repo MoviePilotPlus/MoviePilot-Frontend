@@ -1053,3 +1053,11 @@ architecture 基线四刷新。
 - **冲突**：零（package.json 版本 3.2.0 与 hls.js 自动共存、三 locale 自动并集 fork 采集词条 23 处全在、eslint-suppressions 并集 fork collect 键 31 处全在、types.ts 尾块自动合）
 - **验证**：yarn install --immutable + lint 绿；触碰的 28 个 spec 284 例全绿
 - **后端**：v3.1.9 已含，本轮跳过（后端 v3.2.0 tag 未发布）
+
+## 2026-10-26 第 100 轮：合并 upstream tag v3.2.0 重指增量（前端）
+
+- **合并目标**：tag `v3.2.0` 重指后 SHA `f00792a13c0dd2a49dd11f2f4780adf2c0934e6e`（上轮已合 `1fe39754`，upstream 追加原生 App 修复系列后重打；124 文件 +4887 −4152）
+- **上游改动主题**：原生 App 修复系列——生产 API base 与原生缓存生命周期、只读列表缓存（opt-in）、壁纸浅色停用/保存即时刷新/玻璃调光可读性、Agent 录制面板关闭释放、后端重启后原生认证恢复、词弹窗宽度约束
+- **冲突**：仅 `eslint-suppressions.json`——上游删除的 MediaInfoDialog/MergeCollectDialog 抑制实为 stale（上游同轮已修源文件），按 linter 指引 `--prune-suppressions` 收敛（保 fork 后 lint 证明不再需要，prune 提交单独落）
+- **验证**：yarn install --immutable + lint 绿（exit 0）；触碰的 39 个 spec 中 36 文件全绿，唯一失败 app-glass-optical-preload=第 57 轮已知 Windows 环境族（纯上游 v3.2.0 树同败）放行
+- **后端**：v3.1.9 已含（后端 v3.2.0 未发布），本轮跳过
