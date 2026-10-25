@@ -19,6 +19,8 @@ export interface NativePanelItem {
   id: string
   title: string
   subtitle?: string
+  /** 可换行的纯文本正文；旧容器忽略此字段并继续显示兼容副标题。 */
+  body?: string
   icon?: string
   /** 通知等现有内容的图片地址，仅用于展示，不能作为导航或业务命令。 */
   image?: string
@@ -44,6 +46,10 @@ export interface NativePanel {
   sections: Array<{ id: string; title?: string; items: NativePanelItem[] }>
   loading?: boolean
   hasMore?: boolean
+  /** 连续列表只发送当前有界分片；会话内的旧行由原生保留。 */
+  feed?: { id: string; offset: number; revision: number; sectionIds: string[] }
+  /** 加载失败时停止自动请求，只保留显式重试。 */
+  loadError?: string
   emptyText?: string
 }
 
@@ -53,9 +59,13 @@ export interface NativeSheet {
   title: string
   fullscreen: boolean
   canDismiss: boolean
+  /** 简短设置使用系统中等高度，未提供时保持原业务弹窗高度。 */
+  prefersMediumDetent?: boolean
   /** 可选的底页准备握手；不提供时容器沿用直接接管流程。 */
   backdropReady?: boolean
-  actions: Array<{ id: string; title: string; enabled: boolean }>
+  /** 支持的宿主用系统进度控件承载短暂处理状态，省略时保留原 HTML 内容。 */
+  progress?: { message: string; value?: number }
+  actions: Array<{ id: string; title: string; enabled: boolean; icon?: string }>
 }
 
 /** 系统确认框只声明当前 Vue 提示文字和按钮；响应返回原始组件结算。 */
@@ -130,12 +140,20 @@ export interface NativeTransport {
   transportVersion: 1
   /** 可选原生快捷面板能力；旧容器仍使用原有 HTML 回调。 */
   panelsVersion?: 1
+  /** 连续列表的分片保留和触底加载；旧容器仍使用已有分页。 */
+  panelFeedsVersion?: 1
   /** 可选原生业务弹窗容器；未协商时完整保留网页弹窗。 */
   sheetsVersion?: 1
+  /** 短暂处理状态可使用原生紧凑进度弹层，旧容器继续显示 HTML 进度。 */
+  progressSheetsVersion?: 1
   /** 可选系统确认框，不支持时仍由原 HTML 弹窗结算。 */
   confirmationsVersion?: 1
   /** 路由提交前可短暂等待原生保存离页预览；旧容器不等待。 */
   navigationPreviewVersion?: 1
+  /** 可选小组件登记桥；凭据只走相关的一次性结果，不进入导航快照。 */
+  widgetsVersion?: 1
+  /** 可选内置榜单内存缓存；完成双向协商与导航接管后才生效。 */
+  readonlyCacheVersion?: 1
   /** 非敏感安装标识，仅用于退出当前账号时撤销对应通知绑定。 */
   notificationInstallation?: string
   /** 只发送 JSON 声明，不暴露任意原生方法。 */

@@ -1,4 +1,5 @@
 import type { NativeSheet } from './protocol'
+import { closeNativeMenus } from './menu'
 
 /** 投影真实 Vue 弹窗及标题栏，持有 DOM 引用而不复制内容、事件或认证状态。 */
 export class NativeSheetAdapter {
@@ -8,6 +9,7 @@ export class NativeSheetAdapter {
   private root?: HTMLElement
   private close?: HTMLButtonElement
   private buttons = new Map<string, HTMLButtonElement>()
+  private backgrounds = new Set<Element>()
   private attached?: string
   private prepared?: string
   private transition = 0
@@ -58,6 +60,7 @@ export class NativeSheetAdapter {
       )
       .sort((a, b) => this.zIndex(a) - this.zIndex(b))
       .at(-1)
+    if (root && root !== this.root) closeNativeMenus()
     this.root = root
     this.buttons.clear()
     this.close = undefined
@@ -69,9 +72,11 @@ export class NativeSheetAdapter {
     if (!id) this.ids.set(root, (id = `sheet-${++this.sequence}`))
     if (this.prepared && this.prepared !== id) this.clearPreparation()
     this.close = root.querySelector<HTMLButtonElement>('[data-native-dialog-close]') ?? undefined
-    const header = root.querySelector<HTMLElement>(
-      '[data-native-dialog-header], .v-card-item, .v-toolbar, .theme-customizer-header, .agent-assistant-header, :scope > .v-overlay__content > .v-card > .v-card-title',
-    )
+    const header = Array.from(
+      root.querySelectorAll<HTMLElement>(
+        '[data-native-dialog-header], .v-card-item, .v-toolbar, .theme-customizer-header, .agent-assistant-header, :scope > .v-overlay__content > .v-card > .v-card-title',
+      ),
+    ).find(element => !element.closest('[data-native-dialog-content]'))
     const heading =
       root.querySelector('[data-native-dialog-title]') ??
       (header?.matches('.v-card-title') ? header : undefined) ??
@@ -81,8 +86,11 @@ export class NativeSheetAdapter {
     const title = this.label(root.getAttribute('aria-label') || heading?.textContent || fallbackTitle)
     const actions: NativeSheet['actions'] = []
     if (header) {
+      const explicitActions = header.hasAttribute('data-native-sheet-actions')
       header.setAttribute('data-native-sheet-header', '')
-      for (const button of header.querySelectorAll<HTMLButtonElement>('button')) {
+      for (const button of header.querySelectorAll<HTMLButtonElement>(
+        explicitActions ? 'button[data-native-sheet-action]' : 'button',
+      )) {
         if (button === this.close || button.closest('[aria-hidden="true"]')) continue
         const title = this.label(
           button.getAttribute('aria-label') || button.getAttribute('title') || button.textContent,
@@ -90,25 +98,43 @@ export class NativeSheetAdapter {
         if (!title || actions.length >= 8) continue
         let actionId = this.buttonIds.get(button)
         if (!actionId) this.buttonIds.set(button, (actionId = `sheet-button-${++this.sequence}`))
-        actions.push({ id: actionId, title, enabled: !button.disabled })
+        const icon = this.label(button.dataset.nativeSheetAction)
+        actions.push({ id: actionId, title, enabled: !button.disabled, ...(icon ? { icon } : {}) })
         this.buttons.set(actionId, button)
       }
       // 无法表达的标题栏控件继续留在内容中，避免删除插件自己的业务入口。
-      if (header.querySelector('input, select, textarea, [role="tablist"], [aria-haspopup="menu"], [aria-owns]')) {
+      if (
+        header.querySelector('input, select, textarea, [role="tablist"]') ||
+        Array.from(header.querySelectorAll('[aria-haspopup="menu"], [aria-owns]')).some(
+          control => !explicitActions || !control.matches('button[data-native-sheet-action]'),
+        ) ||
+        (explicitActions &&
+          Array.from(header.querySelectorAll('button')).some(
+            button => button !== this.close && !button.hasAttribute('data-native-sheet-action'),
+          ))
+      ) {
         header.removeAttribute('data-native-sheet-header')
         actions.length = 0
         this.buttons.clear()
       }
     }
     if (this.attached) this.mark(root)
+    const progress =
+      root.hasAttribute('data-native-progress') &&
+      this.document.defaultView?.MoviePilotNative?.progressSheetsVersion === 1
+        ? this.progress(root, title)
+        : undefined
+    root.toggleAttribute('data-native-sheet-progress', Boolean(progress))
     return {
       id,
       title: title || 'MoviePilot',
       fullscreen:
         root.classList.contains('v-dialog--fullscreen') ||
-        root.matches('.theme-customizer-panel-host, .agent-assistant-panel'),
+        root.matches('.theme-customizer-panel-host:not([data-native-sheet-size="medium"]), .agent-assistant-panel'),
       canDismiss: Boolean(this.close && !this.close.disabled),
+      ...(root.dataset.nativeSheetSize === 'medium' ? { prefersMediumDetent: true } : {}),
       backdropReady: this.prepared === id,
+      ...(progress ? { progress } : {}),
       actions,
     }
   }
@@ -149,6 +175,8 @@ export class NativeSheetAdapter {
       header.removeAttribute('data-native-sheet-header')
     for (const heading of this.document.querySelectorAll('[data-native-sheet-heading]'))
       heading.removeAttribute('data-native-sheet-heading')
+    for (const progress of this.document.querySelectorAll('[data-native-sheet-progress]'))
+      progress.removeAttribute('data-native-sheet-progress')
   }
 
   /** 标记只影响当前活动弹窗，菜单仍在同一文档中保留原有交互。 */
@@ -158,6 +186,40 @@ export class NativeSheetAdapter {
       if (old !== root) old.removeAttribute('data-native-sheet-current')
     root.setAttribute('data-native-sheet-current', '')
     this.document.documentElement.setAttribute('data-native-sheet', '')
+    this.isolate(root)
+  }
+
+  /** 隔离整条背景绘制分支，避免 WebKit 合成层穿透；保留 DOM、滚动和当前内容所属菜单。 */
+  private isolate(root: HTMLElement) {
+    const visible = new Set<Element>([root])
+    const menus = Array.from(this.document.querySelectorAll<HTMLElement>('.v-menu.v-overlay--active[id]'))
+    for (const owner of visible) {
+      const owned = new Set(
+        Array.from(owner.querySelectorAll('[aria-owns], [aria-controls]')).flatMap(element =>
+          `${element.getAttribute('aria-owns') || ''} ${element.getAttribute('aria-controls') || ''}`.split(/\s+/),
+        ),
+      )
+      for (const menu of menus) if (owned.has(menu.id)) visible.add(menu)
+    }
+    const ancestors = new Set<Element>()
+    for (const content of visible)
+      for (let parent = content.parentElement; parent && parent !== this.document.body; parent = parent.parentElement)
+        ancestors.add(parent)
+    const backgrounds = new Set<Element>()
+    /** 只访问当前弹层路径，整个无关分支一次屏蔽，不逐项改动业务节点。 */
+    const visit = (parent: Element) => {
+      for (const child of parent.children) {
+        if (visible.has(child) || child.matches('script, style, link')) continue
+        if (ancestors.has(child)) visit(child)
+        else backgrounds.add(child)
+      }
+    }
+    visit(this.document.body)
+    for (const previous of this.backgrounds)
+      if (!backgrounds.has(previous)) previous.removeAttribute('data-native-sheet-background')
+    for (const background of backgrounds)
+      if (!this.backgrounds.has(background)) background.setAttribute('data-native-sheet-background', '')
+    this.backgrounds = backgrounds
   }
 
   /** 清除容器标记不关闭 Vue 弹窗，也不触发业务回调。 */
@@ -166,12 +228,24 @@ export class NativeSheetAdapter {
     this.document.documentElement.removeAttribute('data-native-sheet')
     for (const root of this.document.querySelectorAll('[data-native-sheet-current]'))
       root.removeAttribute('data-native-sheet-current')
+    for (const background of this.backgrounds) background.removeAttribute('data-native-sheet-background')
+    this.backgrounds.clear()
   }
 
   /** 原生已保留底页或准备取消时恢复弹窗展示，不改变任何业务输入与回调。 */
   private clearPreparation() {
     this.prepared = undefined
     this.document.documentElement.removeAttribute('data-native-sheet-preparing')
+  }
+
+  /** 进度只读取当前真实控件的展示值；非法或未知百分比保留系统不确定加载状态。 */
+  private progress(root: HTMLElement, title: string) {
+    const raw = root.querySelector('[data-native-progress-value]')?.getAttribute('aria-valuenow')
+    const value = raw !== null && raw !== undefined ? Number(raw) : undefined
+    return {
+      message: this.label(root.querySelector('[data-native-progress-text]')?.textContent) || title,
+      ...(value !== undefined && Number.isFinite(value) && value >= 0 && value <= 100 ? { value } : {}),
+    }
   }
 
   /** Vuetify 层级优先，未声明层级时保持文档中的后开弹窗在上。 */

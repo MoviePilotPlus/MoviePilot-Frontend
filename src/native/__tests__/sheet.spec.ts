@@ -158,6 +158,53 @@ describe('原生 Sheet 与原 Vue 内容交接', () => {
     expect(parent.hasAttribute('data-native-sheet-current')).toBe(true)
   })
 
+  it('隔离整个背景绘制分支，嵌套关闭时也隔离仍挂载的退出层，归还后不重建正文', () => {
+    const page = document.createElement('main')
+    page.innerHTML =
+      '<input value="原页面输入" /><div class="subscribe-card"><div class="v-progress-linear v-progress-linear--active"></div></div>'
+    document.body.append(page)
+    const parent = dialog('浏览')
+    const adapter = new NativeSheetAdapter(document)
+    const first = adapter.read('页面')!
+    expect(page.hasAttribute('data-native-sheet-background')).toBe(false)
+    adapter.execute('presentation.attach', { id: first.id })
+    expect(page.hasAttribute('data-native-sheet-background')).toBe(true)
+    expect(parent.closest('[data-native-sheet-background]')).toBeNull()
+    const child = dialog('确认下载', 2100)
+    const second = adapter.read('页面')!
+    adapter.execute('presentation.attach', { id: second.id })
+    expect(parent.hasAttribute('data-native-sheet-background')).toBe(true)
+    expect(child.closest('[data-native-sheet-background]')).toBeNull()
+    // Vue 关闭状态先更新，退出动画/异步卸载的 DOM 仍可能在文档中。
+    child.classList.remove('v-overlay--active')
+    expect(adapter.read('页面')!.id).toBe(first.id)
+    expect(child.hasAttribute('data-native-sheet-background')).toBe(true)
+    expect(parent.closest('[data-native-sheet-background]')).toBeNull()
+    adapter.execute('presentation.attach', { id: first.id })
+    adapter.execute('presentation.detach', { id: first.id })
+    expect(document.querySelector('[data-native-sheet-background]')).toBeNull()
+    expect(page.querySelector('input')!.value).toBe('原页面输入')
+    expect(page.querySelector('.v-progress-linear--active')).not.toBeNull()
+  })
+
+  it('自定义弹窗留在页面中时只隔离旁支，弹窗内原有 Teleport 菜单继续交互', () => {
+    document.body.innerHTML =
+      '<div id="app"><main><input value="页面状态" /></main><aside class="theme-customizer-panel-host" role="dialog" aria-label="主题"><button data-native-dialog-close>关闭</button><input value="主题状态" aria-owns="theme-options" /></aside></div><div class="v-overlay-container"><div id="theme-options" class="v-menu v-overlay--active"><button>选项</button></div><div class="v-dialog">退出中的旧内容</div></div>'
+    const adapter = new NativeSheetAdapter(document)
+    const first = adapter.read('页面')!
+    adapter.execute('presentation.attach', { id: first.id })
+    const current = document.querySelector('[data-native-sheet-current]')!
+    const menu = document.querySelector('.v-menu')!
+    expect(current.closest('[data-native-sheet-background]')).toBeNull()
+    expect(menu.closest('[data-native-sheet-background]')).toBeNull()
+    expect(document.querySelector('main')!.hasAttribute('data-native-sheet-background')).toBe(true)
+    expect(document.querySelector('.v-dialog')!.hasAttribute('data-native-sheet-background')).toBe(true)
+    adapter.setActive(false)
+    expect(document.querySelector('[data-native-sheet-background]')).toBeNull()
+    expect(current.querySelector('input')!.value).toBe('主题状态')
+    expect(document.querySelector('main input')!.getAttribute('value')).toBe('页面状态')
+  })
+
   it('按钮替换、禁用和不可关闭弹窗不会绕过当前业务状态', () => {
     const root = dialog('持久进度')
     const adapter = new NativeSheetAdapter(document)
@@ -175,7 +222,26 @@ describe('原生 Sheet 与原 Vue 内容交接', () => {
     expect(adapter.execute('presentation.attach', { id: current.id })).toBe(false)
   })
 
-  it('助手只接管打开的面板，保留菜单的实际锚点并移走标题和关闭按钮', () => {
+  it('主题面板声明半屏时保留原生标题和关闭职责，不声明网页全屏', () => {
+    const root = document.createElement('aside')
+    root.className = 'theme-customizer-panel-host'
+    root.setAttribute('role', 'dialog')
+    root.setAttribute('aria-label', '主题定制')
+    root.innerHTML =
+      '<header class="theme-customizer-header"><h2 class="theme-customizer-title">主题定制</h2><button data-native-dialog-close>关闭</button></header><button>Blue</button>'
+    document.body.append(root)
+    const adapter = new NativeSheetAdapter(document)
+    expect(adapter.read('页面')).toMatchObject({ title: '主题定制', fullscreen: true, canDismiss: true })
+    root.dataset.nativeSheetSize = 'medium'
+    expect(adapter.read('页面')).toMatchObject({
+      title: '主题定制',
+      fullscreen: false,
+      canDismiss: true,
+      prefersMediumDetent: true,
+    })
+  })
+
+  it('旧助手没有显式动作声明时仍保留 HTML 菜单的实际锚点', () => {
     const root = document.createElement('aside')
     root.className = 'agent-assistant-panel'
     root.setAttribute('role', 'dialog')
@@ -193,5 +259,39 @@ describe('原生 Sheet 与原 Vue 内容交接', () => {
     adapter.execute('presentation.attach', { id: state.id })
     expect(root.querySelector('[aria-haspopup="menu"]')).not.toBeNull()
     expect(root.querySelector('textarea')!.value).toBe('草稿')
+  })
+
+  it('助手显式登记三个动作后接管整行，嵌套会话关闭后恢复当前按钮且不丢草稿', () => {
+    const root = document.createElement('aside')
+    root.className = 'agent-assistant-panel is-open'
+    root.setAttribute('role', 'dialog')
+    root.innerHTML =
+      '<header class="agent-assistant-header" data-native-sheet-actions><div class="agent-assistant-title">助手</div><button aria-haspopup="dialog" data-native-sheet-action="mdi-history">历史会话</button><button data-native-sheet-action="mdi-account-convert-outline">形象</button><button data-native-sheet-action="mdi-message-plus-outline" disabled>新增会话</button><button data-native-dialog-close>关闭</button></header><textarea>未发送草稿</textarea>'
+    document.body.append(root)
+    const buttons = [...root.querySelectorAll<HTMLButtonElement>('[data-native-sheet-action]')]
+    const history = vi.fn()
+    buttons[0].addEventListener('click', history)
+    const adapter = new NativeSheetAdapter(document)
+    const state = adapter.read('页面')!
+    expect(state.actions.map(({ title, icon, enabled }) => ({ title, icon, enabled }))).toEqual([
+      { title: '历史会话', icon: 'mdi-history', enabled: true },
+      { title: '形象', icon: 'mdi-account-convert-outline', enabled: true },
+      { title: '新增会话', icon: 'mdi-message-plus-outline', enabled: false },
+    ])
+    expect(root.querySelector('[data-native-sheet-header]')).not.toBeNull()
+    adapter.execute('presentation.attach', { id: state.id })
+    expect(adapter.execute('presentation.action', { id: state.id, actionId: state.actions[0].id })).toBe(true)
+    expect(history).toHaveBeenCalledOnce()
+    expect(adapter.execute('presentation.action', { id: state.id, actionId: state.actions[2].id })).toBe(false)
+    const child = dialog('历史会话', 2100)
+    adapter.read('页面')
+    expect(adapter.execute('presentation.action', { id: state.id, actionId: state.actions[0].id })).toBe(false)
+    child.remove()
+    const restored = adapter.read('页面')!
+    expect(restored.id).toBe(state.id)
+    expect(restored.actions).toEqual(state.actions)
+    expect(root.querySelector('textarea')!.value).toBe('未发送草稿')
+    adapter.reset()
+    expect(root.querySelector('[data-native-sheet-header]')).toBeNull()
   })
 })

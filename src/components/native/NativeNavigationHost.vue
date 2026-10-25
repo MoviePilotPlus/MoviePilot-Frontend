@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { glassAppearancePreference } from '@/utils/themePalette'
 import { computed, nextTick, onScopeDispose, ref, toValue, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -23,6 +24,9 @@ import { readNativePresentation } from '@/native/presentation'
 import { NativeSheetAdapter } from '@/native/sheet'
 import { NativeConfirmationAdapter } from '@/native/confirmation'
 import { NativeChromeSession } from '@/native/session'
+import { NativeWidgetAdapter, navigateNativeWidget } from '@/native/widgets'
+import { useNativeReadonlyCache } from '@/composables/useNativeReadonlyCache'
+import api from '@/api'
 import { NativeLayoutAdapter, nativeChromeActive } from '@/native/layout'
 import { NativeRouteHistory } from '@/native/history'
 import { NativeHeaderTabs } from '@/native/header'
@@ -74,6 +78,23 @@ const sheetAdapter = new NativeSheetAdapter(document)
 const confirmationAdapter = new NativeConfirmationAdapter(document)
 const headerProjection = new NativeHeaderTabs()
 let bridge: NativeChromeSession | undefined
+const widgetAdapter =
+  window.MoviePilotNative?.widgetsVersion === 1
+    ? new NativeWidgetAdapter({
+        api,
+        apiBase: new URL(import.meta.env.VITE_API_BASE_URL, document.baseURI),
+        origin: location.origin,
+        isActive: () => nativeChromeActive.value && authenticated.value,
+        readToken: () => auth.token,
+        canNavigate: () => !overlayOpen.value,
+        navigate: path =>
+          navigateNativeWidget(
+            router,
+            path,
+            menus.value.flatMap(menu => (typeof menu.to === 'string' ? [menu.to] : [])),
+          ),
+      })
+    : undefined
 let ownerSequence = 0
 const legacyOwners = new WeakMap<object, string>()
 
@@ -150,7 +171,18 @@ const model = computed(() => {
       const loading = Boolean(toValue(button.loading))
       const panel = button.panel?.()
       const projection = panel
-        ? projectNativePanel(activePanel.value === actionId ? panel : { ...panel, sections: [] })
+        ? projectNativePanel(
+            activePanel.value === actionId
+              ? panel
+              : {
+                  ...panel,
+                  sections: [],
+                  feed: undefined,
+                  retainedItems: undefined,
+                  loadError: undefined,
+                  hasMore: false,
+                },
+          )
         : undefined
       if (projection) panels.set(actionId, projection)
       actions.push({
@@ -186,7 +218,18 @@ const model = computed(() => {
       const actionId = `r${revision}:global:${action.id}`
       const source = action.panel?.()
       const projection = source
-        ? projectNativePanel(activePanel.value === actionId ? source : { ...source, sections: [] })
+        ? projectNativePanel(
+            activePanel.value === actionId
+              ? source
+              : {
+                  ...source,
+                  sections: [],
+                  feed: undefined,
+                  retainedItems: undefined,
+                  loadError: undefined,
+                  hasMore: false,
+                },
+          )
         : undefined
       if (projection) panels.set(actionId, projection)
       actions.push({
@@ -276,7 +319,7 @@ const model = computed(() => {
     chrome: {
       topVisible: Boolean(route.meta.requiresAuth),
       bottomVisible: authenticated.value,
-      theme: theme.global.current.value.dark ? 'dark' : 'light',
+      theme: glassAppearancePreference.value === 'auto' ? 'system' : glassAppearancePreference.value,
       backgroundColor: theme.global.current.value.colors.background,
       surfaceColor: theme.global.current.value.colors.surface,
       ...(/^#[0-9a-f]{6}$/i.test(theme.global.current.value.colors.primary)
@@ -390,6 +433,9 @@ async function execute(message: NativeEnvelope) {
 const canStart = computed(
   () => routerReady.value && authenticated.value && isMediaSourceCatalogLoaded().value && isModuleCatalogLoaded().value,
 )
+const cacheNegotiated = ref(false)
+if (window.MoviePilotNative?.readonlyCacheVersion === 1)
+  useNativeReadonlyCache(cacheNegotiated, canStart, new URL(import.meta.env.VITE_API_BASE_URL, document.baseURI).href)
 watch([routerReady, () => route.path], ([ready, path]) => {
   if (ready && path === '/login') window.MoviePilotNative?.authenticationRequired?.()
 })
@@ -453,6 +499,10 @@ watch(
           layout.syncAnchors(model.value.snapshot.actions.flatMap(action => (action.dataAttr ? [action.dataAttr] : [])))
       },
       lifecycle: state => appActivityLifecycle.setHostLifecycle(state),
+      readonlyCache: active => {
+        cacheNegotiated.value = active
+      },
+      ...(widgetAdapter ? { widgetRequest: (payload, signal) => widgetAdapter.request(payload, signal) } : {}),
     })
     bridge.start()
   },

@@ -9,12 +9,15 @@ export function nativePanelId(prefix: string, value: unknown): string {
 }
 
 /** 限制跨进程展示文案的大小，并移除 UIKit 不需要的控制字符。 */
-function text(value: string | undefined, bytes = 512): string | undefined {
+function text(value: string | undefined, bytes = 512, multiline = false): string | undefined {
   if (!value) return undefined
   const encoder = new TextEncoder()
   let result = ''
   let size = 0
-  for (const character of value.replace(/[\p{Cc}\p{Cf}]/gu, ' ')) {
+  const normalized = value
+    .replace(/\r\n?/gu, '\n')
+    .replace(/[\p{Cc}\p{Cf}]/gu, character => (multiline && character === '\n' ? '\n' : ' '))
+  for (const character of normalized) {
     size += encoder.encode(character).length
     if (size > bytes) break
     result += character
@@ -34,7 +37,7 @@ function imageReference(value: string | undefined): string | undefined {
   }
 }
 
-/** 将本地声明转换为有界 JSON；只给仍在当前投影中的项目保留可执行回调。 */
+/** 转换为有界 JSON；连续列表的旧行回调仍须来自当前业务组件及本次展示会话。 */
 export function projectNativePanel(source: NativePanelSource) {
   const callbacks = new Map<string, NativePanelEntry>()
   let remaining = 96
@@ -53,6 +56,7 @@ export function projectNativePanel(source: NativePanelSource) {
         id: entry.id,
         title,
         ...(text(entry.subtitle, 2048) ? { subtitle: text(entry.subtitle, 2048) } : {}),
+        ...(text(entry.body, 2048, true) ? { body: text(entry.body, 2048, true) } : {}),
         ...(entry.icon ? { icon: text(entry.icon) } : {}),
         ...(imageReference(entry.image) ? { image: imageReference(entry.image) } : {}),
         enabled: entry.enabled !== false,
@@ -98,7 +102,14 @@ export function projectNativePanel(source: NativePanelSource) {
     })),
     loading: source.loading === true,
     hasMore: source.hasMore === true,
+    ...(source.feed ? { feed: source.feed } : {}),
+    ...(text(source.loadError) ? { loadError: text(source.loadError) } : {}),
     ...(text(source.emptyText) ? { emptyText: text(source.emptyText) } : {}),
+  }
+  if (source.feed) {
+    for (const entry of source.retainedItems ?? []) {
+      if (/^[\x21-\x7e]{1,128}$/.test(entry.id) && !callbacks.has(entry.id)) callbacks.set(entry.id, entry)
+    }
   }
   return { panel, callbacks, source }
 }
@@ -114,6 +125,12 @@ export function dispatchNativePanel(
   current: ReturnType<typeof projectNativePanel>,
   payload: Record<string, unknown>,
 ): boolean {
+  if (
+    current.panel.feed &&
+    ['more', 'select'].includes(String(payload.panelEvent)) &&
+    payload.value !== current.panel.feed.id
+  )
+    return false
   switch (payload.panelEvent) {
     case 'open':
       void current.source.onOpen?.()

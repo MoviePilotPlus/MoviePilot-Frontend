@@ -126,6 +126,7 @@ html[data-native-chrome='active'][data-native-sheets='active']:not([data-native-
 // 仅在原生明确请求时短暂显示原底页，供单 WebView 搬入 Sheet 时保留上下文。
 html[data-native-chrome='active'][data-native-sheet-preparing] {
   .v-overlay--active.v-dialog,
+  .v-menu,
   .theme-customizer-panel-host[role='dialog'],
   .agent-assistant-panel.is-open[role='dialog'],
   .agent-assistant-fab,
@@ -145,18 +146,17 @@ html[data-native-chrome='active'][data-native-sheet] {
     background: transparent !important;
   }
 
-  #app {
-    visibility: hidden;
+  // visibility 不能稳定阻止 WebKit 独立合成的进度条与退出层；整支透明且保持原布局。
+  [data-native-sheet-background] {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: none !important;
   }
 
   // 浮动助手入口不属于当前业务弹窗，不能盖在原生 Sheet 的内容或底部操作上。
   .agent-assistant-fab,
   .agent-pet-stage-layer {
     display: none !important;
-  }
-
-  .v-overlay-container {
-    visibility: visible;
   }
 
   .v-dialog:not([data-native-sheet-current]),
@@ -175,6 +175,21 @@ html[data-native-chrome='active'][data-native-sheet] {
     padding: 0 !important;
     background: transparent !important;
     transition: none !important;
+
+    // 助手沿用网页侧栏的外框和模糊层；原生 Sheet 接管后只保留内容，避免底部二次采样形成色带。
+    &.agent-assistant-panel {
+      border: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+
+      // 输入框紧邻 Sheet 底部安全区，保留填充和细边框，移除会在 WebView 边界截断的大幅外投影。
+      .agent-assistant-input {
+        box-shadow: none !important;
+        transition-property: border-radius !important;
+      }
+    }
 
     // WebKit 搬入系统材质层时不保留零高度进度条的合成层；真正加载中的指示器继续显示。
     .v-field__loader > .v-progress-linear:not(.v-progress-linear--active),
@@ -201,6 +216,11 @@ html[data-native-chrome='active'][data-native-sheet] {
       margin: 0 !important;
       transform: none !important;
       transition: none !important;
+    }
+
+    // 仅新宿主明确声明原生进度能力时隐藏其 HTML 副本，旧 App 与普通网页仍显示原进度。
+    &[data-native-sheet-progress] > .v-overlay__content {
+      visibility: hidden !important;
     }
 
     > .v-overlay__content > .v-card,
@@ -235,6 +255,27 @@ html[data-native-chrome='active'][data-native-sheet] {
 
     > .theme-customizer-panel > .v-divider {
       display: none;
+    }
+
+    // Agent 标题操作已由原生左上角接管，消息区独占剩余网格行。
+    > .agent-assistant-shell:has(> [data-native-sheet-header]) {
+      grid-template-rows: minmax(0, 1fr);
+    }
+
+    .agent-assistant-history-dialog {
+      display: flex;
+      flex-direction: column;
+
+      > .v-divider {
+        display: none;
+      }
+
+      > .agent-assistant-history-list {
+        flex: 1 1 0;
+        block-size: auto;
+        min-block-size: 0;
+        max-block-size: none;
+      }
     }
 
     // 加载、短历史与长列表共用满高列布局；页脚不跟随内容高度上移。

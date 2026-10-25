@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useDisplay } from 'vuetify'
+import { VDialog, VMenu } from 'vuetify/components'
 import { useI18n } from 'vue-i18n'
 import { useId } from 'vue'
 import api, { isApiResponse } from '@/api'
@@ -10,6 +11,7 @@ import AgentMarkdownContent from './AgentMarkdownContent.vue'
 import type { AgentStreamPhaseEvent } from '@/utils/agentHostPhase'
 import type { AgentPetDeclaration } from '@/types/agentHost'
 import AgentPetAvatar from './pet/AgentPetAvatar.vue'
+import { nativeChromeActive } from '@/native/layout'
 
 // 形象选择视图按需加载，只在用户点开“更换形象”时才读取形象声明。
 const AgentPetPicker = defineAsyncComponent(() => import('./AgentPetPicker.vue'))
@@ -302,6 +304,7 @@ const inputRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const pendingAttachments = ref<AgentPendingAttachment[]>([])
 const recording = ref(false)
+const recordingPermissionPending = ref(false)
 const recordingStartedAt = ref(0)
 const recordingDuration = ref(0)
 const historyLoading = ref(false)
@@ -319,6 +322,7 @@ let mediaRecorderStream: MediaStream | null = null
 let recordingTimer: number | null = null
 let thinkingTimer: number | null = null
 let recordingChunks: BlobPart[] = []
+let recordingRequest = 0
 let messageScrollFrame: number | null = null
 let pendingMessageScrollToBottom = false
 let streamPersistTimer: number | null = null
@@ -362,7 +366,9 @@ const canSend = computed(
   () =>
     (inputText.value.trim().length > 0 || pendingAttachments.value.length > 0) && !sending.value && !recording.value,
 )
-const canRecord = computed(() => !isBusy.value && !sending.value && !recording.value)
+const canRecord = computed(
+  () => !isBusy.value && !sending.value && !recording.value && !recordingPermissionPending.value,
+)
 // 获取当前输入对应的斜杠命令查询词。
 const slashCommandQuery = computed(() => {
   const text = inputText.value.trimStart()
@@ -406,8 +412,10 @@ const recordingTimeText = computed(() => {
 })
 // 窄屏下直接全屏，桌面端则允许用户按需扩展对话区域。
 const drawerWidth = computed(() => (display.mdAndDown.value || fullscreen.value ? '100vw' : '30rem'))
-// 仅桌面宽屏展示全屏开关，窄屏已默认占满视口。
-const canToggleFullscreen = computed(() => !display.mdAndDown.value)
+/** 只有协商完成的 Sheet 容器隐藏 HTML 标题栏，普通网页继续使用原菜单。 */
+const nativeSheetActions = computed(() => nativeChromeActive.value && window.MoviePilotNative?.sheetsVersion === 1)
+// 仅网页桌面宽屏展示全屏开关，App 高度由系统 Sheet 控制。
+const canToggleFullscreen = computed(() => !nativeSheetActions.value && !display.mdAndDown.value)
 const hasConversationContent = computed(() => messages.value.length > 0 || protectedDeliveries.value.length > 0)
 const hasHistorySessions = computed(() => historySessions.value.length > 0)
 const currentUserName = computed(() => userStore.getUserName || t('common.user'))
@@ -2701,7 +2709,7 @@ function finishRecordingState() {
   stopRecordingStream()
 }
 
-// 开始录制语音消息。
+// 录音授权可能晚于关闭面板；只让仍有效的请求接管媒体流，避免后台残留录音。
 async function startVoiceRecording() {
   if (!canRecord.value) return
   if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -2709,14 +2717,26 @@ async function startVoiceRecording() {
     return
   }
 
+  const request = ++recordingRequest
+  recordingPermissionPending.value = true
   try {
     streamError.value = ''
     recordingChunks = []
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    if (
+      request !== recordingRequest ||
+      !isOpen.value ||
+      document.visibilityState === 'hidden' ||
+      isBusy.value ||
+      sending.value
+    ) {
+      stream.getTracks().forEach(track => track.stop())
+      return
+    }
+    mediaRecorderStream = stream
     const mimeType = getRecorderMimeType()
     const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
 
-    mediaRecorderStream = stream
     mediaRecorder = recorder
     recording.value = true
     recordingStartedAt.value = Date.now()
@@ -2759,9 +2779,12 @@ async function startVoiceRecording() {
     }
     recorder.start()
   } catch (error: any) {
+    if (request !== recordingRequest) return
     finishRecordingState()
     recordingChunks = []
     streamError.value = error?.message || t('agentAssistant.recordPermissionDenied')
+  } finally {
+    if (request === recordingRequest) recordingPermissionPending.value = false
   }
 }
 
@@ -2777,6 +2800,8 @@ function stopVoiceRecording() {
 
 // 取消当前录音并丢弃已录制内容。
 function cancelVoiceRecording() {
+  recordingRequest += 1
+  recordingPermissionPending.value = false
   if (mediaRecorder) {
     mediaRecorder.ondataavailable = null
     mediaRecorder.onstop = null
@@ -3036,6 +3061,7 @@ function togglePetPicker() {
 // 页面进入后台时保存流式占位，恢复可见时尝试拉取 WebAgent 后台完成后的会话快照。
 function handleVisibilityChange() {
   if (document.visibilityState === 'hidden') {
+    cancelVoiceRecording()
     if (runnerActive.value && activeStreamStartedAt && sessionId.value) {
       beginStreamRecovery(sessionId.value, activeStreamStartedAt)
     } else if (pendingStreamRecovery.value) {
@@ -3096,6 +3122,7 @@ watch(isOpen, open => {
   }
 
   petPickerOpen.value = false
+  cancelVoiceRecording()
   invalidateProtectedDeliveries()
 })
 
@@ -3152,7 +3179,7 @@ onScopeDispose(() => {
     @focusin.stop
   >
     <div class="agent-assistant-shell">
-      <header class="agent-assistant-header">
+      <header class="agent-assistant-header" data-native-sheet-actions>
         <div class="agent-assistant-title">
           <div class="agent-assistant-title__mark">
             <AgentPetAvatar :pet="props.pet" size="1.85rem">
@@ -3182,23 +3209,44 @@ onScopeDispose(() => {
           </div>
         </div>
         <div class="d-flex align-center gap-1">
-          <VMenu
+          <component
+            :is="nativeSheetActions ? VDialog : VMenu"
             v-model="historyMenuOpen"
+            v-bind="
+              nativeSheetActions
+                ? { width: 640, 'data-native-sheet-size': 'medium' }
+                : { location: 'bottom end', offset: 8, maxWidth: 360 }
+            "
             :close-on-content-click="false"
-            location="bottom end"
-            offset="8"
-            max-width="360"
             :style="{ zIndex: AGENT_ASSISTANT_LAYER_Z_INDEX.overlay }"
             :z-index="AGENT_ASSISTANT_LAYER_Z_INDEX.overlay"
           >
             <template #activator="{ props }">
-              <IconBtn v-bind="props" :title="t('agentAssistant.history')" :aria-label="t('agentAssistant.history')">
+              <IconBtn
+                v-bind="props"
+                data-native-sheet-action="mdi-history"
+                :title="t('agentAssistant.history')"
+                :aria-label="t('agentAssistant.history')"
+              >
                 <VIcon icon="mdi-history" />
               </IconBtn>
             </template>
-            <VCard class="agent-assistant-history-menu" elevation="10">
-              <div class="agent-assistant-history-menu__header">
-                <span>{{ t('agentAssistant.history') }}</span>
+            <VCard
+              class="agent-assistant-history-menu"
+              :class="{ 'agent-assistant-history-dialog': nativeSheetActions }"
+              elevation="10"
+            >
+              <div class="agent-assistant-history-menu__header" data-native-dialog-header>
+                <span data-native-dialog-title>{{ t('agentAssistant.history') }}</span>
+                <IconBtn
+                  v-if="nativeSheetActions"
+                  data-native-dialog-close
+                  :title="t('common.close')"
+                  :aria-label="t('common.close')"
+                  @click="historyMenuOpen = false"
+                >
+                  <VIcon icon="mdi-close" />
+                </IconBtn>
               </div>
               <VDivider />
               <div
@@ -3260,9 +3308,10 @@ onScopeDispose(() => {
                 </VInfiniteScroll>
               </div>
             </VCard>
-          </VMenu>
+          </component>
           <IconBtn
             class="agent-assistant-pet-toggle"
+            data-native-sheet-action="mdi-account-convert-outline"
             :title="t('agentAssistant.pet.change')"
             :aria-label="t('agentAssistant.pet.change')"
             :aria-pressed="petPickerOpen"
@@ -3272,6 +3321,7 @@ onScopeDispose(() => {
             <VIcon icon="mdi-account-convert-outline" />
           </IconBtn>
           <IconBtn
+            data-native-sheet-action="mdi-message-plus-outline"
             :disabled="isBusy"
             :title="t('agentAssistant.newChat')"
             :aria-label="t('agentAssistant.newChat')"

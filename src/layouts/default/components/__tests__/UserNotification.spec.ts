@@ -1,15 +1,28 @@
 import UserNotification from '../UserNotification.vue'
 import type { SystemNotification } from '@/api/types'
 import { nativeGlobalActions } from '@/native/registry'
+import { dispatchNativePanel, nativePanelId, projectNativePanel } from '@/native/panel'
 import { renderWithProviders } from '@tests/support/render'
 import { apiJson } from '@tests/support/msw/response'
 import { server } from '@tests/support/msw/server'
 import { fireEvent, screen, waitFor } from '@testing-library/vue'
 import { HttpResponse, http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
+import { nextTick, ref, type Ref } from 'vue'
+import { useGlobalOfflineStatus } from '@/composables/useOfflineStatus'
+import { appActivityLifecycle } from '@/utils/appActivityLifecycle'
 
+const background = vi.hoisted(() => ({
+  receive: undefined as ((event: MessageEvent) => void) | undefined,
+  connected: undefined as Ref<boolean> | undefined,
+}))
 vi.mock('@/composables/useBackground', () => ({
-  useBackground: () => ({ useDelayedSSE: vi.fn() }),
+  useBackground: () => ({
+    useDelayedSSE: (_url: string, receive: (event: MessageEvent) => void) => {
+      background.receive = receive
+      return { isConnected: (background.connected = ref(false)) }
+    },
+  }),
 }))
 vi.mock('vue-toastification', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }))
 
@@ -30,7 +43,206 @@ function deferNotifications() {
 }
 
 describe('UserNotification', () => {
-  it('原生优先投影独立海报，旧版和历史通知兼容网页实际使用的 image 属性', async () => {
+  it.each([
+    { native: true, foreground: true, checks: 1 },
+    { native: true, foreground: false, checks: 0 },
+    { native: false, foreground: true, checks: 0 },
+  ])('通知流中断通过认证探测确认服务状态：%o', async ({ native, foreground, checks }) => {
+    vi.stubGlobal('MoviePilotNative', native ? { transportVersion: 1, postMessage: vi.fn() } : undefined)
+    vi.spyOn(appActivityLifecycle, 'getState').mockReturnValue(foreground ? 'active' : 'suspended')
+    const status = useGlobalOfflineStatus()
+    status.markServerOnline()
+    const start = status.connectionCheckRequestId.value
+    await renderWithProviders(UserNotification)
+    await nextTick()
+    expect(status.connectionCheckRequestId.value).toBe(start)
+    background.connected!.value = true
+    await nextTick()
+    background.connected!.value = false
+    await nextTick()
+    expect(status.connectionCheckRequestId.value - start).toBe(checks)
+  })
+
+  it('连续三页无漏项，回看旧通知仍可展开，重新打开撤销上次会话的回调', async () => {
+    vi.stubGlobal('MoviePilotNative', { transportVersion: 1, panelFeedsVersion: 1, postMessage: vi.fn() })
+    const items = Array.from({ length: 65 }, (_, index) => ({
+      id: index + 1,
+      title: `通知${index + 1}`,
+      text: `正文${index + 1}`.repeat(80),
+      reg_time: new Date(Date.UTC(2026, 9, 24, 12) - index * 1000).toISOString(),
+    }))
+    const requests: number[] = []
+    server.use(
+      http.get('http://localhost/api/v1/message/notification', ({ request }) => {
+        const page = Number(new URL(request.url).searchParams.get('page'))
+        requests.push(page)
+        return apiJson(items.slice((page - 1) * 20, page * 20))
+      }),
+    )
+    await renderWithProviders(UserNotification)
+    const action = nativeGlobalActions.value.get('notifications')!
+    await action.panel!()!.onOpen!()
+    const initial = projectNativePanel(action.panel!()!)
+    const seen = new Set<string>()
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const source = action.panel!()!
+      const current = projectNativePanel(source)
+      expect(current.panel.sections[0].items.some(item => item.id === 'previous')).toBe(false)
+      const messages = current.panel.sections.slice(1).flatMap(section => section.items)
+      expect(messages.length).toBeLessThanOrEqual(3)
+      messages.forEach(item => seen.add(item.id))
+      expect(new TextEncoder().encode(JSON.stringify(current.panel)).length).toBeLessThan(28000)
+      if (!source.hasMore) break
+      await source.onLoadMore!()
+    }
+    expect(seen).toEqual(new Set(items.map(item => nativePanelId('message', `id:${item.id}`))))
+    expect(requests).toEqual([1, 2, 3, 4])
+    const latest = projectNativePanel(action.panel!()!)
+    const firstId = nativePanelId('message', 'id:1')
+    expect(dispatchNativePanel(latest, { panelEvent: 'select', itemId: firstId, value: latest.panel.feed!.id })).toBe(
+      true,
+    )
+    expect(projectNativePanel(action.panel!()!).callbacks.get(firstId)?.subtitle).toContain(items[0].text)
+    const lastId = nativePanelId('message', 'id:65')
+    await action.panel!()!.onOpen!()
+    const reopened = projectNativePanel(action.panel!()!)
+    expect(
+      dispatchNativePanel(reopened, { panelEvent: 'select', itemId: firstId, value: initial.panel.feed!.id }),
+    ).toBe(false)
+    expect(
+      dispatchNativePanel(reopened, { panelEvent: 'select', itemId: lastId, value: reopened.panel.feed!.id }),
+    ).toBe(false)
+  })
+
+  it('单页失败不越过游标，并发触底不重复请求，重试沿用原接口', async () => {
+    vi.stubGlobal('MoviePilotNative', { transportVersion: 1, panelFeedsVersion: 1, postMessage: vi.fn() })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    let release!: () => void
+    const held = new Promise<void>(resolve => {
+      release = resolve
+    })
+    const requests: number[] = []
+    server.use(
+      http.get('http://localhost/api/v1/message/notification', async ({ request }) => {
+        const page = Number(new URL(request.url).searchParams.get('page'))
+        requests.push(page)
+        if (page === 2 && requests.filter(value => value === 2).length === 1) {
+          await held
+          return HttpResponse.json({ detail: 'failed' }, { status: 500 })
+        }
+        return apiJson(
+          Array.from({ length: page === 1 ? 20 : 1 }, (_, index) => ({
+            id: (page - 1) * 20 + index + 1,
+            title: `通知${page}-${index}`,
+            text: `${page}-${index}`,
+          })),
+        )
+      }),
+    )
+    await renderWithProviders(UserNotification)
+    const action = nativeGlobalActions.value.get('notifications')!
+    await action.panel!()!.onOpen!()
+    for (let i = 0; i < 6; i++) await action.panel!()!.onLoadMore!()
+    const pending = action.panel!()!.onLoadMore!()
+    await waitFor(() => expect(requests).toEqual([1, 2]))
+    await action.panel!()!.onLoadMore!()
+    expect(requests).toEqual([1, 2])
+    release()
+    await pending
+    const failed = action.panel!()!
+    expect(failed.loadError).toBeTruthy()
+    expect(failed.hasMore).toBe(true)
+    await failed.onLoadMore!()
+    const retried = action.panel!()!
+    expect(retried.loadError).toBeUndefined()
+    expect(retried.hasMore).toBe(false)
+    expect(
+      retried.sections.flatMap(section => section.items).some(item => item.id === nativePanelId('message', 'id:21')),
+    ).toBe(true)
+    expect(requests).toEqual([1, 2, 2])
+  })
+
+  it('首屏失败重试从第一条开始，不跳过尚未加载的通知', async () => {
+    vi.stubGlobal('MoviePilotNative', { transportVersion: 1, panelFeedsVersion: 1, postMessage: vi.fn() })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    let attempts = 0
+    server.use(
+      http.get('http://localhost/api/v1/message/notification', () => {
+        if (++attempts === 1) return HttpResponse.json({ detail: 'failed' }, { status: 500 })
+        return apiJson(Array.from({ length: 5 }, (_, index) => ({ id: index + 1, title: `通知${index + 1}` })))
+      }),
+    )
+    await renderWithProviders(UserNotification)
+    const action = nativeGlobalActions.value.get('notifications')!
+    await action.panel!()!.onOpen!()
+    expect(action.panel!()!.loadError).toBeTruthy()
+    await action.panel!()!.onLoadMore!()
+    const source = action.panel!()!
+    expect(source.loadError).toBeUndefined()
+    expect(source.feed!.offset).toBe(0)
+    expect(source.sections.slice(1).flatMap(section => section.items.map(item => item.title))).toEqual([
+      '通知1',
+      '通知2',
+      '通知3',
+    ])
+    expect(source.hasMore).toBe(true)
+    expect(attempts).toBe(2)
+  })
+
+  it('SSE新消息补到首片，已展示旧消息继续保留当前业务回调', async () => {
+    vi.stubGlobal('MoviePilotNative', { transportVersion: 1, panelFeedsVersion: 1, postMessage: vi.fn() })
+    const pending = deferNotifications()
+    await renderWithProviders(UserNotification)
+    const action = nativeGlobalActions.value.get('notifications')!
+    const opened = action.panel!()!.onOpen!()
+    pending.resolve(
+      Array.from({ length: 8 }, (_, i) => ({
+        id: i + 1,
+        title: `旧消息${i}`,
+        text: `旧正文${i}`,
+        reg_time: `2026-10-24 12:00:0${8 - i}`,
+      })),
+    )
+    await opened
+    await action.panel!()!.onLoadMore!()
+    background.receive!(
+      new MessageEvent('message', {
+        data: JSON.stringify({ id: 99, title: '实时新消息', text: '新正文', reg_time: '2026-10-25 12:00:00' }),
+      }),
+    )
+    const current = projectNativePanel(action.panel!()!)
+    expect(current.panel.feed!.offset).toBe(0)
+    expect(current.panel.sections.flatMap(section => section.items).some(item => item.title === '实时新消息')).toBe(
+      true,
+    )
+    expect(current.callbacks.has(nativePanelId('message', 'id:6'))).toBe(true)
+  })
+
+  it('三条最长展示正文及图片地址仍全部装入有界分片', async () => {
+    vi.stubGlobal('MoviePilotNative', { transportVersion: 1, panelFeedsVersion: 1, postMessage: vi.fn() })
+    const pending = deferNotifications()
+    await renderWithProviders(UserNotification)
+    const action = nativeGlobalActions.value.get('notifications')!
+    const opened = action.panel!()!.onOpen!()
+    pending.resolve(
+      Array.from({ length: 3 }, (_, i) => ({
+        id: i + 1,
+        title: `${i}${'标题'.repeat(400)}`,
+        text: `${i}${'正文'.repeat(4000)}`,
+        image: `https://image.example/${'a'.repeat(4000)}`,
+      })),
+    )
+    await opened
+    for (const entry of action.panel!()!
+      .sections.slice(1)
+      .flatMap(section => section.items))
+      await entry.invoke!()
+    const projection = projectNativePanel(action.panel!()!)
+    expect(projection.panel.sections.slice(1).flatMap(section => section.items)).toHaveLength(3)
+    expect(new TextEncoder().encode(JSON.stringify(projection.panel)).length).toBeLessThan(28000)
+  })
+
+  it('原生优先投影独立海报，旧消息缺海报时保留原图片供原生竖版裁剪', async () => {
     const pending = deferNotifications()
     await renderWithProviders(UserNotification)
     const action = nativeGlobalActions.value.get('notifications')!
@@ -54,7 +266,31 @@ describe('UserNotification', () => {
     )
   })
 
-  it('普通网页通知继续展示原渠道图片', async () => {
+  it('原生正文保留媒体信息换行，旧容器仍能读取单行副标题，点击展开继续使用原业务状态', async () => {
+    const pending = deferNotifications()
+    await renderWithProviders(UserNotification)
+    const action = nativeGlobalActions.value.get('notifications')!
+    const opened = action.panel!()!.onOpen!()
+    const text = '站点：演示\n质量：WEB-DL 2160p\n大小：13.8 GB\n' + '保留完整长段落。'.repeat(30)
+    pending.resolve([{ id: 84, title: '媒体通知', text, reg_time: '2026-10-24 20:00:00' }])
+    await opened
+    const entry = action.panel!()!
+      .sections.flatMap(section => section.items)
+      .find(item => item.title === '媒体通知')!
+    expect(entry.body).toContain('\n站点：演示\n质量：WEB-DL 2160p\n大小：13.8 GB\n')
+    const projected = projectNativePanel(action.panel!()!)
+      .panel.sections.flatMap(section => section.items)
+      .find(item => item.id === entry.id)!
+    expect(projected.subtitle).not.toContain('\n')
+    expect(projected.body).toContain('\n质量：WEB-DL 2160p\n')
+    await entry.invoke!()
+    const expanded = action.panel!()!
+      .sections.flatMap(section => section.items)
+      .find(item => item.id === entry.id)!
+    expect(expanded.body).toContain(text)
+  })
+
+  it('普通网页通知优先展示独立海报，不改变原渠道图片字段', async () => {
     const pending = deferNotifications()
     const { container } = await renderWithProviders(UserNotification, {
       global: { stubs: { VImg: { props: ['src'], template: '<img :src="src" />' } } },
@@ -71,9 +307,22 @@ describe('UserNotification', () => {
     expect(await screen.findByText('网页媒体通知')).toBeInTheDocument()
     await waitFor(() => {
       expect(document.querySelector('.notification-panel img')?.getAttribute('src')).toBe(
-        'https://images.example.com/backdrop.jpg',
+        'https://images.example.com/poster.jpg',
       )
     })
+  })
+
+  it('网页历史消息没有 poster 时回退 image 并使用竖版 cover 缩略图', async () => {
+    const pending = deferNotifications()
+    const { container } = await renderWithProviders(UserNotification, {
+      global: { stubs: { VImg: { props: ['src'], template: '<img :src="src" />' } } },
+    })
+    await fireEvent.click(container.querySelector('button')!)
+    pending.resolve([{ id: 85, title: '历史媒体消息', image: 'https://images.example.com/backdrop.jpg' }])
+    expect(await screen.findByText('历史媒体消息')).toBeInTheDocument()
+    const media = document.querySelector('.notification-panel .notification-media')!
+    expect(media).toBeInTheDocument()
+    expect(media.querySelector('img')?.getAttribute('src')).toBe('https://images.example.com/backdrop.jpg')
   })
 
   it.each([390, 1440])('在 %ipx 窗口首次打开时显示加载动画，响应后显示消息', async width => {

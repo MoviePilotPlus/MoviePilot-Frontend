@@ -27,8 +27,8 @@ import type { AgentPetDeclaration } from '@/types/agentHost'
 
 const display = useDisplay()
 const theme = useTheme()
+const allowsWallpaper = computed(() => theme.current.value.dark)
 
-const isTransparentTheme = computed(() => theme.name.value === 'transparent')
 const globalSettingsStore = useGlobalSettingsStore()
 
 // 国际化
@@ -1503,7 +1503,7 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                 />
               </VCol>
 
-              <VCol cols="12" md="6">
+              <VCol v-if="allowsWallpaper" cols="12" md="6">
                 <VSelect
                   v-model="SystemSettings.Basic.WALLPAPER"
                   :label="t('setting.system.wallpaper')"
@@ -1514,7 +1514,7 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                 />
               </VCol>
 
-              <VCol v-if="SystemSettings.Basic.WALLPAPER === 'customize'" cols="12" md="6">
+              <VCol v-if="allowsWallpaper && SystemSettings.Basic.WALLPAPER === 'customize'" cols="12" md="6">
                 <VTextField
                   v-model="SystemSettings.Basic.CUSTOMIZE_WALLPAPER_API_URL"
                   :label="t('setting.system.customizeWallpaperApi')"
@@ -1526,7 +1526,7 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                 />
               </VCol>
 
-              <VCol v-if="SystemSettings.Basic.WALLPAPER === 'static'" cols="12" md="6">
+              <VCol v-if="allowsWallpaper && SystemSettings.Basic.WALLPAPER === 'static'" cols="12" md="6">
                 <VTextField
                   v-model="SystemSettings.Basic.WALLPAPER_IMAGE_URL"
                   :label="t('setting.system.wallpaperImageUrl')"
@@ -1538,7 +1538,7 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
                 />
               </VCol>
 
-              <VCol v-if="!['static', ''].includes(SystemSettings.Basic.WALLPAPER)" cols="12" md="6">
+              <VCol v-if="allowsWallpaper && !['static', ''].includes(SystemSettings.Basic.WALLPAPER)" cols="12" md="6">
                 <VSelect
                   v-model="SystemSettings.Basic.WALLPAPER_ROTATION_INTERVAL"
                   :label="t('setting.system.wallpaperRotationInterval')"
@@ -1584,7 +1584,6 @@ watch(currentLlmSnapshotKey, (snapshotKey, previousSnapshotKey) => {
             <CollapsibleSettingCard
               v-model:collapsed="aiAgentSettingsCollapsed"
               class="mt-6"
-              :transparent="isTransparentTheme"
               :title="t('setting.system.aiAgentSectionTitle')"
               :subtitle="t('setting.system.aiAgentSectionDesc')"
               icon="mdi-robot-outline"

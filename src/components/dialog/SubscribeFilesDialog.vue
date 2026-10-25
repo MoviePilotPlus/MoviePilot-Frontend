@@ -405,6 +405,7 @@ onBeforeMount(() => {
 <template>
   <VDialog
     scrollable
+    :aria-label="t('subscribe.fileStatistics')"
     max-width="74rem"
     :height="display.mdAndUp.value ? '90vh' : undefined"
     :fullscreen="!display.mdAndUp.value"
@@ -1392,7 +1393,7 @@ onBeforeMount(() => {
   transform: translateY(0.25rem);
 }
 
-.subscribe-files-dialog.v-theme--light {
+.subscribe-files-dialog[data-glass-color-scheme='light'] {
   --sfd-accent-opacity: 0.08;
   --sfd-border-opacity: 0.11;
   --sfd-dialog-opacity: 0.96;
