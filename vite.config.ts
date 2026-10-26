@@ -14,6 +14,7 @@ import federation from '@originjs/vite-plugin-federation'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import { readFileSync } from 'node:fs'
 import { responsiveInputCoreComponentNames } from './src/plugins/vuetify/responsiveInputNames'
+import { nativePasskeyPage } from './scripts/native-passkey'
 import {
   createDevServiceWorkerCleanupPlugin,
   isPwaDevelopmentEnabled,
@@ -57,8 +58,8 @@ export default defineConfig(({ command, mode, isPreview }) => ({
     vueJsx(),
     vuetify({
       autoImport: {
-        // 这些录入控件由 Vuetify 全局适配器接管，避免模板局部导入绕过移动布局。
-        ignore: [...responsiveInputCoreComponentNames],
+        // 全局适配器保留原控件行为，避免模板局部导入绕过菜单生命周期及移动布局。
+        ignore: ['VMenu', ...responsiveInputCoreComponentNames],
       },
       styles: {
         configFile: 'src/styles/variables/_vuetify.scss',
@@ -238,6 +239,7 @@ export default defineConfig(({ command, mode, isPreview }) => ({
         // The function to generate import names of top-level await promise in each chunk module
         promiseImportName: i => `__mp_tla_${i}`,
       }),
+    nativePasskeyPage(),
   ],
   define: {
     'process.env': {},
@@ -259,6 +261,12 @@ export default defineConfig(({ command, mode, isPreview }) => ({
   },
   build: {
     target: 'esnext',
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        nativePasskey: resolve(__dirname, 'native-passkey.html'),
+      },
+    },
     minify: 'terser',
     terserOptions: {
       compress: {

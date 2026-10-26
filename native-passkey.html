@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'none'; connect-src 'none'; img-src 'none'"
+    />
+    <title>通行密钥登录</title>
+    <style>
+      html,
+      body.native-passkey {
+        margin: 0;
+        min-width: 0;
+        min-height: 100dvh;
+        background: #f2f2f7;
+        color: #1c1c1e;
+        font:
+          17px -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+      }
+      body.native-passkey {
+        display: flex;
+        flex-direction: column;
+      }
+      .native-passkey header {
+        box-sizing: border-box;
+        padding: 16px 24px;
+        text-align: center;
+      }
+      .native-passkey h1 {
+        margin: 0;
+        font:
+          600 17px -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+      }
+      .native-passkey main {
+        display: grid;
+        flex: 1;
+        min-height: 0;
+        /* 系统凭证面板覆盖窗口下半部，图标紧随标题保留在可见区域。 */
+        place-items: start center;
+        padding: 24px 24px max(24px, env(safe-area-inset-bottom));
+      }
+      .native-passkey svg {
+        width: 80px;
+        height: 80px;
+        color: #636366;
+      }
+      /* 状态继续向 VoiceOver 报告，正文只展示图标。 */
+      .native-passkey #message {
+        position: absolute;
+        overflow: hidden;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      @media (prefers-color-scheme: dark) {
+        html,
+        body.native-passkey {
+          background: #0b1322;
+          color: #f2f2f7;
+        }
+        .native-passkey svg {
+          color: #aeaeb2;
+        }
+      }
+    </style>
+  </head>
+  <body class="native-passkey">
+    <header><h1>通行密钥登录</h1></header>
+    <main>
+      <svg viewBox="0 0 24 24" role="img" aria-label="通行密钥">
+        <path
+          fill="currentColor"
+          d="M5.8 10C5.4 8.8 4.3 8 3 8c-1.7 0-3 1.3-3 3s1.3 3 3 3c1.3 0 2.4-.8 2.8-2H7v2h2v-2h2v-2zM3 12c-.6 0-1-.4-1-1s.4-1 1-1s1 .4 1 1s-.4 1-1 1m13-8c-2.2 0-4 1.8-4 4s1.8 4 4 4s4-1.8 4-4s-1.8-4-4-4m0 6.1c-1.2 0-2.1-.9-2.1-2.1s.9-2.1 2.1-2.1s2.1.9 2.1 2.1s-.9 2.1-2.1 2.1m0 2.9c-2.7 0-8 1.3-8 4v3h16v-3c0-2.7-5.3-4-8-4m6.1 5.1H9.9V17c0-.6 3.1-2.1 6.1-2.1s6.1 1.5 6.1 2.1z"
+        />
+      </svg>
+      <p id="message" role="status" aria-live="polite">正在请求通行密钥。</p>
+    </main>
+    <script type="module" src="/src/native-passkey/page.ts"></script>
+  </body>
+</html>

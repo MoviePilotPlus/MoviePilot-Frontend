@@ -268,6 +268,7 @@ export default {
     },
   },
   common: {
+    loadedCount: 'Loaded {count} items',
     confirm: 'Confirm',
     cancel: 'Cancel',
     back: 'Back',
@@ -360,6 +361,7 @@ export default {
     exit: 'Exit',
   },
   systemUpdate: {
+    failedTitle: 'Update failed',
     downloadAllDescription:
       'Check and download the latest application, matching frontend and site resources before confirming a restart.',
     installAllDescription:
@@ -546,6 +548,7 @@ export default {
       primaryColor: 'Primary Color',
       usePrimaryColor: 'Use {color} primary color',
       chooseCustomColor: 'Choose custom primary color',
+      enableGlassEffects: 'Enable glass effects',
 
       radius: 'Corners',
       radiusNone: 'Square',
@@ -5168,6 +5171,8 @@ export default {
       joinTime: 'Join Time',
       trafficHistory: 'Traffic History',
       seedingDistribution: 'Seeding Distribution',
+      historyWindow: 'Showing the latest {count} collected records',
+      sampledPoints: 'Sampled evenly to {count} points',
       volumeTitle: 'Volume',
       countTitle: 'Count:',
       noData: 'None',
@@ -5214,6 +5219,7 @@ export default {
     },
   },
   file: {
+    partialListing: 'Filtering and sorting apply to loaded items',
     details: 'File Details',
     folderDetails: 'Folder Details',
     fileActions: 'File Actions',

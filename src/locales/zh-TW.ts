@@ -258,6 +258,7 @@ export default {
     },
   },
   common: {
+    loadedCount: '已載入 {count} 條',
     confirm: '確認',
     cancel: '取消',
     back: '返回',
@@ -348,6 +349,7 @@ export default {
     exit: '退出',
   },
   systemUpdate: {
+    failedTitle: '更新失敗',
     downloadAllDescription: '檢查並下載最新主程式、配套前端和站點資源，全部驗證完成後再確認重新啟動。',
     installAllDescription: '安裝全部已下載的主程式、配套前端和站點資源，系統只重新啟動一次。',
     applicationAvailableTitle: '發現 MoviePilot 主程式更新',
@@ -521,6 +523,7 @@ export default {
       primaryColor: '色调',
       usePrimaryColor: '使用 {color} 色調',
       chooseCustomColor: '選擇自定義色調',
+      enableGlassEffects: '啟用玻璃特效',
 
       radius: '圓角',
       radiusNone: '無圓角',
@@ -4985,6 +4988,8 @@ export default {
       joinTime: '加入時間',
       trafficHistory: '歷史流量',
       seedingDistribution: '做種分佈',
+      historyWindow: '顯示最近 {count} 條採集記錄',
+      sampledPoints: '已等距抽樣為 {count} 個點',
       volumeTitle: '體積',
       countTitle: '數量：',
       noData: '無',
@@ -5031,6 +5036,7 @@ export default {
     },
   },
   file: {
+    partialListing: '篩選和排序僅作用於已載入內容',
     details: '文件詳情',
     folderDetails: '資料夾詳情',
     fileActions: '文件操作',

@@ -5,6 +5,8 @@ import type { FileSortKey, FileSortOrder } from '@/components/filebrowser/types'
 import i18n from '@/plugins/i18n'
 import { fireEvent, screen, waitFor } from '@testing-library/vue'
 import { renderWithProviders } from '@tests/support/render'
+import { readNativeCardMenu } from '@tests/support/nativeCardMenu'
+import { nativeCardMenus } from '@/native/card'
 import type { AxiosRequestConfig } from 'axios'
 import { defineComponent, nextTick } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -217,6 +219,53 @@ describe('FileList list state', () => {
     mocks.confirm.mockResolvedValue(true)
     mocks.openSharedDialog.mockReturnValue({ close: vi.fn(), id: 1, updateProps: vi.fn() })
     vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  it('loads the next directory batch on demand without replacing the first batch', async () => {
+    const batch = Array.from({ length: 200 }, (_, index) =>
+      createItem({ name: `part-${index}`, path: `/media/${index}` }),
+    )
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(batch)
+      .mockResolvedValueOnce([createItem({ name: 'last-part', path: '/media/last' })])
+    const { axios } = await renderList(request)
+    await screen.findByText('part-0')
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(getRequestConfig(axios, 0).params).toEqual({ page: 1, count: 200 })
+    await fireEvent.click(screen.getByRole('button', { name: '加载更多' }))
+    expect(await screen.findByText('last-part')).toBeInTheDocument()
+    expect(screen.getByText('part-0')).toBeInTheDocument()
+    expect(getRequestConfig(axios, 1).params).toEqual({ page: 2, count: 200 })
+    expect(screen.queryByRole('button', { name: '加载更多' })).not.toBeInTheDocument()
+  })
+
+  it('projects file operations with original callbacks and keeps the mobile details entry separate', async () => {
+    mocks.narrowScreen = true
+    const file = createItem({ name: 'native-card.mkv', path: '/media/native-card.mkv' })
+    const { container } = await renderList(() => Promise.resolve([file]))
+    await screen.findByText(file.name!)
+    const root = container.querySelector('.file-row')!
+    const menu = readNativeCardMenu(root)!
+    expect(menu.items.map(item => item.id)).toEqual([
+      'action-1',
+      'action-2',
+      'action-3',
+      'action-4',
+      'action-5',
+      'action-download',
+    ])
+    expect(root.querySelector('[data-native-card-menu-trigger]')).not.toBeInTheDocument()
+    expect(
+      root.querySelector(`[aria-label="${i18n.global.t('file.actionsFor', { name: file.name })}"]`),
+    ).toBeInTheDocument()
+    expect(await nativeCardMenus.menus.select(menu.presentationId, 'action-3', () => {})).toBe(true)
+    expect(mocks.openSharedDialog).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ item: file }),
+      expect.any(Object),
+      expect.any(Object),
+    )
   })
 
   it('uses the endpoint method, sort URL and current file item payload, then renders directories before files', async () => {

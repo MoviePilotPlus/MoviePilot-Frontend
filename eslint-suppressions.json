@@ -480,11 +480,6 @@
       "count": 1
     }
   },
-  "src/components/input/PathInput.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
   "src/components/misc/DashboardElement.vue": {
     "@typescript-eslint/no-explicit-any": {
       "count": 3

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { NativeStandaloneMenuBinding } from '@/native/standalone'
+import { vNativeCardMenu, nativeCardAction, type NativeCardMenuBinding } from '@/native/card'
 import { debounce } from 'lodash-es'
 import { useToast } from 'vue-toastification'
 import api, { getApiBusinessErrorMessage, isApiBusinessFailure } from '@/api'
@@ -1371,6 +1373,25 @@ async function triggerBatchAiRedo() {
   }
 }
 
+/** 两种响应式记录共用原菜单；清理失败恢复项保持原位置和管理权限。 */
+function nativeHistoryMenu(item: TransferHistory): NativeCardMenuBinding {
+  return {
+    key: item.id,
+    title: getHistoryDisplayTitle(item),
+    available: () => historyViewActive && !mobileBatchMode.value,
+    items: () =>
+      getDropdownItems(item).map(menu =>
+        nativeCardAction(menu.value, {
+          title: menu.title,
+          icon: menu.props.prependIcon,
+          color: menu.props.color,
+          enabled: !menu.props.disabled,
+          invoke: menu.props.click,
+        }),
+      ),
+  }
+}
+
 // 计算下拉菜单
 function getDropdownItems(item: TransferHistory) {
   const items = [
@@ -2081,6 +2102,65 @@ onUnmounted(() => {
   closeProgressDialog()
   aiRedoProgressDialogController?.close()
 })
+/** 桌面状态菜单与移动端既有投影共用原状态枚举和选择方法。 */
+const nativeStatusMenu = computed<NativeStandaloneMenuBinding>(() => ({
+  key: 'history-status',
+  title: t('transferHistory.statusFilter.label'),
+  items: action =>
+    statusFilterItems.value.map(option =>
+      action(option.value, {
+        title: option.title,
+        icon: option.icon,
+        color: option.color,
+        selected: statusFilter.value === option.value,
+        invoke: () => selectStatusFilter(option.value),
+      }),
+    ),
+}))
+
+/** 整理排序沿用字段和方向，保持原菜单选择后展开的行为及分隔条。 */
+const nativeSortMenu = computed<NativeStandaloneMenuBinding>(() => ({
+  key: 'history-sort',
+  title: t('transferHistory.desktop.sort'),
+  items: action => [
+    ...desktopSortOptions.value.map(option =>
+      action(`field:${option.value}`, {
+        title: option.title,
+        selected: (desktopSortBy.value[0]?.key || '') === option.value,
+        keepOpen: true,
+        invoke: () => setDesktopSort(option.value),
+      }),
+    ),
+    { id: 'sort-order', kind: 'separator' },
+    action('order', {
+      title: desktopSortBy.value[0]?.order === 'desc' ? t('common.ascending') : t('common.descending'),
+      icon: desktopSortBy.value[0]?.order === 'desc' ? 'mdi-sort-descending' : 'mdi-sort-ascending',
+      enabled: desktopSortBy.value.length > 0,
+      keepOpen: true,
+      invoke: toggleDesktopSortOrder,
+    }),
+  ],
+}))
+
+/** 视图布局只切换原分组状态，不改变数据查询、选中集合或业务操作。 */
+const nativeGroupingMenu = computed<NativeStandaloneMenuBinding>(() => ({
+  key: 'history-grouping',
+  title: t('transferHistory.groupMode'),
+  items: action => [
+    action('list', {
+      title: t('transferHistory.listMode'),
+      icon: 'mdi-format-list-bulleted',
+      selected: !group.value,
+      invoke: () => setDesktopGrouping(false),
+    }),
+    action('group', {
+      title: t('transferHistory.groupMode'),
+      icon: 'mdi-format-list-group',
+      selected: group.value,
+      invoke: () => setDesktopGrouping(true),
+    }),
+  ],
+}))
 </script>
 
 <template>
@@ -2107,7 +2187,7 @@ onUnmounted(() => {
           hide-details
           clearable
         />
-        <VMenu location="bottom end">
+        <VMenu location="bottom end" :native-menu="nativeStatusMenu">
           <template #activator="{ props }">
             <IconBtn
               v-bind="props"
@@ -2136,7 +2216,7 @@ onUnmounted(() => {
               </VListItem> </VList
           ></VCard>
         </VMenu>
-        <VMenu location="bottom end" :close-on-content-click="false">
+        <VMenu location="bottom end" :close-on-content-click="false" :native-menu="nativeSortMenu">
           <template #activator="{ props }">
             <IconBtn
               v-bind="props"
@@ -2172,7 +2252,7 @@ onUnmounted(() => {
             </VList></VCard
           >
         </VMenu>
-        <VMenu location="bottom end">
+        <VMenu location="bottom end" :native-menu="nativeGroupingMenu">
           <template #activator="{ props }">
             <IconBtn
               v-bind="props"
@@ -2439,6 +2519,7 @@ onUnmounted(() => {
         <tr :ref="itemRef" class="transfer-history-desktop-record-row" :data-history-id="item.id">
           <td :colspan="columns.length">
             <article
+              v-native-card-menu="nativeHistoryMenu(item)"
               class="transfer-history-desktop-record"
               :class="{
                 'transfer-history-desktop-record--child': group,
@@ -2527,6 +2608,7 @@ onUnmounted(() => {
                     </template>
                   </VTooltip>
                   <IconBtn
+                    data-native-card-menu-trigger
                     :aria-label="t('transferHistory.desktop.recordActions', { title: getHistoryDisplayTitle(item) })"
                   >
                     <VIcon icon="mdi-dots-vertical" />
@@ -2701,6 +2783,7 @@ onUnmounted(() => {
       >
         <template #default="{ item }">
           <article
+            v-native-card-menu="nativeHistoryMenu(item)"
             class="transfer-history-mobile-record"
             :class="{
               'transfer-history-mobile-record--batch': mobileBatchMode,
@@ -2767,7 +2850,7 @@ onUnmounted(() => {
                 @update:model-value="checked => toggleHistorySelection(item, checked)"
               />
 
-              <IconBtn v-else class="transfer-history-mobile-record__menu" size="small">
+              <IconBtn v-else data-native-card-menu-trigger class="transfer-history-mobile-record__menu" size="small">
                 <VIcon icon="mdi-dots-vertical" />
                 <VMenu activator="parent" close-on-content-click>
                   <VList>

@@ -2,6 +2,7 @@
 import { useI18n } from 'vue-i18n'
 import { useEventListener } from '@vueuse/core'
 import { openSharedDialog } from '@/composables/useSharedDialog'
+import { useNativePageHeader } from '@/native/page'
 
 const TorrentAllFiltersDialog = defineAsyncComponent(() => import('@/components/dialog/TorrentAllFiltersDialog.vue'))
 const TorrentSingleFilterDialog = defineAsyncComponent(
@@ -69,7 +70,7 @@ const getSelectedFilters = computed(() => {
   return filters
 })
 
-// 给定过滤类型返回不同图标
+/** 给定过滤类型返回原筛选图标。 */
 function getFilterIcon(key: string) {
   const icons: Record<string, string> = {
     site: 'mdi-server-network',
@@ -177,22 +178,22 @@ function toggleFilterMenu(key: string) {
   }
 }
 
-// 处理筛选值变化
+/** 筛选值仍交给原页面受控状态，不在菜单适配层复制过滤逻辑。 */
 function handleFilterChange(key: string, values: string[]) {
   emit('update:filterForm', key, values)
 }
 
-// 全选某个过滤项
+/** 全选沿用原页面事件，原生弹窗中的 HTML 与网页共享同一结果。 */
 function selectAll(key: string) {
   emit('selectAll', key)
 }
 
-// 清除某个过滤项
+/** 清除当前分类，不改变其它分类的已选值。 */
 function clearFilter(key: string) {
   emit('clearFilter', key)
 }
 
-// 清除所有过滤条件
+/** 综合筛选的清空命令沿用原页面事件。 */
 function clearAllFilters() {
   emit('clearAllFilters')
 }
@@ -295,6 +296,43 @@ onUnmounted(() => {
   closeAllFilterDialog()
   closeFilterDialog()
 })
+
+// 排序字段按业务含义选择图标，避免不同选项都退化为排序箭头。
+const sortIcons: Record<string, string> = {
+  default: 'mdi-sort-variant',
+  site: 'mdi-server-network-outline',
+  size: 'mdi-harddisk',
+  seeder: 'mdi-account-group-outline',
+  publishTime: 'mdi-clock-outline',
+}
+
+// 排序属于当前页的系统下拉菜单，原筛选表单仍由 HTML 弹窗处理。
+useNativePageHeader({
+  actions: computed(() => [
+    {
+      title: t('file.sort'),
+      icon: 'mdi-sort-variant',
+      menuItems: [
+        ...(['asc', 'desc'] as const).map(order => ({
+          id: `order-${order}`,
+          title: t(order === 'asc' ? 'common.ascending' : 'common.descending'),
+          icon: order === 'asc' ? 'mdi-sort-ascending' : 'mdi-sort-descending',
+          group: 'direction',
+          selected: props.sortType === order,
+          action: () => emit('update:sortType', order),
+        })),
+        ...Object.entries(props.sortTitles).map(([key, title]) => ({
+          id: `field-${key}`,
+          title,
+          icon: sortIcons[key] || 'mdi-sort-variant',
+          group: 'field',
+          selected: props.sortField === key,
+          action: () => emit('update:sortField', key),
+        })),
+      ],
+    },
+  ]),
+})
 </script>
 
 <template>
@@ -314,7 +352,7 @@ onUnmounted(() => {
             {{ totalFilteredCount }} {{ t('torrent.resources') }}
           </VChip>
 
-          <VBtn variant="text" size="small" class="sort-btn" :color="undefined">
+          <VBtn variant="text" size="small" class="sort-btn" :color="undefined" data-native-page-actions>
             <template #prepend>
               <VIcon :icon="sortType === 'asc' ? 'mdi-sort-ascending' : 'mdi-sort-descending'" class="me-1" />
             </template>
@@ -367,7 +405,7 @@ onUnmounted(() => {
             </VMenu>
           </VBtn>
 
-          <div class="filter-divider"></div>
+          <div class="filter-divider" data-native-page-actions></div>
         </div>
 
         <!-- 滚动区域：筛选条件 -->
@@ -502,7 +540,13 @@ onUnmounted(() => {
           </VChip>
 
           <!-- 排序选择 -->
-          <VBtn variant="text" size="small" class="sort-btn mobile-sort-btn" :color="undefined">
+          <VBtn
+            variant="text"
+            size="small"
+            class="sort-btn mobile-sort-btn"
+            :color="undefined"
+            data-native-page-actions
+          >
             <template #prepend>
               <VIcon :icon="sortType === 'asc' ? 'mdi-sort-ascending' : 'mdi-sort-descending'" class="me-1" />
             </template>

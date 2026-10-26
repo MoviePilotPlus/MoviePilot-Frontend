@@ -10,7 +10,14 @@ export interface NativeAction {
   enabled: boolean
   loading: boolean
   dataAttr?: string
-  menu?: Array<{ actionId: string; title: string; icon: string; enabled: boolean }>
+  menu?: Array<{
+    actionId: string
+    title: string
+    icon: string
+    enabled: boolean
+    selected?: boolean
+    group?: string
+  }>
   panel?: NativePanel
 }
 
@@ -112,6 +119,43 @@ export interface NativeMenuSection {
   items: Array<{ id: string; path: string; title: string; icon: string; subtitle?: string }>
 }
 
+/** 原操作菜单的语义颜色；具体系统展示由宿主适配，不传递 CSS 或网页背景。 */
+export type NativeMenuColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error'
+
+/** 原菜单的状态徽标独立于主标题，不能用整行染色替代启用状态或密钥数量。 */
+export interface NativeMenuBadge {
+  title: string
+  color?: NativeMenuColor
+}
+
+/** 有界操作菜单树保留原顺序、分隔、分组和子菜单，禁止包含业务回调。 */
+export interface NativeOperationItem {
+  id: string
+  kind: 'action' | 'submenu' | 'group' | 'separator'
+  title?: string
+  subtitle?: string
+  /** 使用原图标标识，由宿主做语义映射；不以无关的通用图标补位。 */
+  icon?: string
+  color?: NativeMenuColor
+  badge?: NativeMenuBadge
+  enabled?: boolean
+  selected?: boolean
+  loading?: boolean
+  destructive?: boolean
+  keepOpen?: boolean
+  items?: NativeOperationItem[]
+}
+
+/** 单次菜单声明独立于导航快照，原生返回展示标识和项目标识即可请求选择。 */
+export interface NativeOperationMenu {
+  ownerId: string
+  menuId: string
+  presentationId: string
+  kind: 'card' | 'standalone'
+  title?: string
+  items: NativeOperationItem[]
+}
+
 /** 系统 point 几何；网页通过实际 viewport 宽度换算 CSS 像素。 */
 export interface NativeLayout {
   layoutRevision: number
@@ -154,6 +198,10 @@ export interface NativeTransport {
   widgetsVersion?: 1
   /** 可选内置榜单内存缓存；完成双向协商与导航接管后才生效。 */
   readonlyCacheVersion?: 1
+  /** 可选卡片系统上下文菜单；完成双向协商后才替换卡片原菜单入口。 */
+  cardMenusVersion?: 1
+  /** 可选独立操作菜单；双方协商后由系统有界弹窗代替原 HTML 菜单。 */
+  standaloneMenusVersion?: 1
   /** 非敏感安装标识，仅用于退出当前账号时撤销对应通知绑定。 */
   notificationInstallation?: string
   /** 只发送 JSON 声明，不暴露任意原生方法。 */

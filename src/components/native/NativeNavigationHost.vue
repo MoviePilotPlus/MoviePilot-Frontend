@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { glassAppearancePreference } from '@/utils/themePalette'
 import { computed, nextTick, onScopeDispose, ref, toValue, watch, watchEffect } from 'vue'
+import { NativeCardMenuAdapter } from '@/native/cardInteraction'
+import { NativeStandaloneMenuAdapter } from '@/native/standaloneInteraction'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useTheme } from 'vuetify'
@@ -166,9 +168,21 @@ const model = computed(() => {
   function appendHeaderActions(buttons: DynamicHeaderTabButton[], ownerId: string, source: string) {
     for (const [index, button] of buttons.entries()) {
       if (toValue(button.show) === false || !hasItemPermission(button, permissions.value)) continue
-      if (!button.action) throw new Error('unsupported_header_action')
+      if (!button.action && !button.menuItems?.length) throw new Error('unsupported_header_action')
       const actionId = `r${revision}:${source}:${index}`
       const loading = Boolean(toValue(button.loading))
+      const menu = button.menuItems?.map(item => {
+        const id = `${actionId}:menu:${item.id}`
+        if (!item.disabled) callbacks.set(id, item.action)
+        return {
+          actionId: id,
+          title: item.title,
+          icon: item.icon,
+          enabled: !item.disabled,
+          selected: item.selected,
+          group: item.group,
+        }
+      })
       const panel = button.panel?.()
       const projection = panel
         ? projectNativePanel(
@@ -194,10 +208,11 @@ const model = computed(() => {
         scope: 'page',
         enabled: !loading && !toValue(button.disabled),
         loading,
+        ...(menu?.length ? { menu } : {}),
         ...(projection ? { panel: projection.panel } : {}),
         ...(button.dataAttr ? { dataAttr: button.dataAttr } : {}),
       })
-      callbacks.set(actionId, button.action)
+      if (button.action) callbacks.set(actionId, button.action)
     }
   }
   if (authenticated.value && header && header.routePath === route.path) {
@@ -476,6 +491,14 @@ watch(
   ready => {
     const transport = window.MoviePilotNative
     if (!ready || bridge || transport?.transportVersion !== 1) return
+    const cardMenus =
+      transport.cardMenusVersion === 1
+        ? new NativeCardMenuAdapter((type, payload) => bridge?.postCardMenu(type, payload) ?? false)
+        : undefined
+    const standaloneMenus =
+      transport.standaloneMenusVersion === 1
+        ? new NativeStandaloneMenuAdapter((type, payload) => bridge?.postStandaloneMenu(type, payload) ?? false)
+        : undefined
     bridge = new NativeChromeSession({
       target: window,
       transport,
@@ -502,6 +525,8 @@ watch(
       readonlyCache: active => {
         cacheNegotiated.value = active
       },
+      ...(cardMenus ? { cardMenus } : {}),
+      ...(standaloneMenus ? { standaloneMenus } : {}),
       ...(widgetAdapter ? { widgetRequest: (payload, signal) => widgetAdapter.request(payload, signal) } : {}),
     })
     bridge.start()
