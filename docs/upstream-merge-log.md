@@ -1061,3 +1061,11 @@ architecture 基线四刷新。
 - **冲突**：仅 `eslint-suppressions.json`——上游删除的 MediaInfoDialog/MergeCollectDialog 抑制实为 stale（上游同轮已修源文件），按 linter 指引 `--prune-suppressions` 收敛（保 fork 后 lint 证明不再需要，prune 提交单独落）
 - **验证**：yarn install --immutable + lint 绿（exit 0）；触碰的 39 个 spec 中 36 文件全绿，唯一失败 app-glass-optical-preload=第 57 轮已知 Windows 环境族（纯上游 v3.2.0 树同败）放行
 - **后端**：v3.1.9 已含（后端 v3.2.0 未发布），本轮跳过
+
+## 2026-10-27 第 101 轮：合并 upstream tag v3.2.1（前端，含 v3.2.0 重指增量）
+
+- **合并目标**：tag `v3.2.1` = `208595240f901d9db49922a123b56ce037ab8725`（merge-base f00792a1；含 v3.2.0 重指增量 + v3.2.1 修复；109 文件 +6440 −361）
+- **上游改动主题**：玻璃特效关闭时顶栏实色/页面背景色与透明磨砂系列、通行密钥图标避让系统面板、设置页下载器拖拽崩溃修复、收藏加载限界与日历可见日期优先、原生卡片菜单（native/cardMenus+standalone 系列）
+- **冲突**：零（locale 自动并集，en-US collect 词条 24=上游新增 1 条采集相关文案，fork 词条无丢失）
+- **验证**：install+lint 绿（exit 0）；触碰的 33 个 spec 747 例全绿
+- **后端**：本轮进入 v3.2.0 合并（见后端 log 第 101 轮）
