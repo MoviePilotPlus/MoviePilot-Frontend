@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import api from '@/api'
 import { getApiBusinessErrorMessage, isApiBusinessFailure } from '@/api/client'
+import { getPluginDocumentationUrl, normalizePluginDocumentationUrl } from '@/api/pluginDocumentation'
 import {
   changePluginSource,
   getPluginSourceOptions,
@@ -143,6 +144,16 @@ const sourceNeedsSelection = computed(() =>
 const selectedInstallSource = computed(() =>
   installSourceCandidates.value.find(candidate => candidateSelectionKey(candidate) === selectedInstallSourceKey.value),
 )
+const documentationUrl = ref<string>()
+const documentationRepo = computed(() => {
+  if (!isInstalled.value) return selectedInstallSource.value?.repo_url || props.plugin?.repo_url
+  const trustedSourceKey = sourceOptions.value?.identity?.trusted_source_key
+  return (
+    onlineSourceCandidates.value.find(candidate => candidate.source_key === trustedSourceKey)?.repo_url ||
+    props.plugin?.repo_url
+  )
+})
+
 const selectedChangeSource = computed(() =>
   sourceActionCandidates.value.find(candidate => candidate.source_key === selectedChangeSourceKey.value),
 )
@@ -624,6 +635,37 @@ watch(
   { immediate: true },
 )
 
+// 切换插件或来源后废弃旧查询，避免把另一仓库的说明展示在当前安装按钮旁。
+watch(
+  () =>
+    [
+      visible.value,
+      props.plugin?.source_plugin_id || props.plugin?.id,
+      documentationRepo.value,
+      props.plugin?.plugin_readme,
+    ] as const,
+  async ([isVisible, pluginId, repoUrl, declaredUrl], _previous, onCleanup) => {
+    let active = true
+    onCleanup(() => {
+      active = false
+    })
+    documentationUrl.value = undefined
+    if (!isVisible || !pluginId) return
+    if (repoUrl === props.plugin?.repo_url) {
+      documentationUrl.value = normalizePluginDocumentationUrl(declaredUrl)
+      if (documentationUrl.value) return
+    }
+    if (!repoUrl) return
+    try {
+      const url = await getPluginDocumentationUrl(pluginId, repoUrl)
+      if (active) documentationUrl.value = url
+    } catch {
+      // 说明缺失、网络失败或旧后端均不影响安装和来源选择。
+    }
+  },
+  { immediate: true },
+)
+
 onUnmounted(() => {
   closeInstallProgress()
   versionHistoryDialogController?.close()
@@ -661,6 +703,21 @@ onUnmounted(() => {
               <button type="button" class="plugin-market-detail__author" @click="visitPluginPage">
                 {{ props.plugin?.plugin_author }}
               </button>
+            </dd>
+          </div>
+          <div v-if="documentationUrl" class="plugin-market-detail__metadata-row">
+            <dt>{{ t('plugin.documentation') }}：</dt>
+            <dd>
+              <a
+                class="plugin-market-detail__documentation"
+                :href="documentationUrl"
+                :aria-label="t('plugin.documentation')"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {{ t('plugin.viewDocumentation') }}
+                <VIcon icon="mdi-open-in-new" size="14" aria-hidden="true" />
+              </a>
             </dd>
           </div>
         </dl>
@@ -1184,6 +1241,23 @@ onUnmounted(() => {
 .plugin-market-detail__author:hover,
 .plugin-market-detail__author:focus-visible {
   color: rgb(var(--v-theme-primary));
+  text-decoration: underline;
+}
+
+.plugin-market-detail__documentation {
+  display: inline-flex;
+  max-inline-size: 100%;
+  align-items: center;
+  gap: 0.25rem;
+  padding-block: 0.125rem;
+  color: rgb(var(--v-theme-primary));
+  font-size: 0.875rem;
+  text-decoration: none;
+  text-underline-offset: 0.2em;
+}
+
+.plugin-market-detail__documentation:hover,
+.plugin-market-detail__documentation:focus-visible {
   text-decoration: underline;
 }
 
