@@ -2065,7 +2065,7 @@ export default {
     filterSite: 'Site',
     filterSeason: 'Season',
     filterWebSource: 'Source',
-    filterChineseSubtitle: 'Chinese Subtitles',
+    filterSubtitle: 'Subtitles',
     filterFreeState: 'Free State',
     filterVideoCode: 'Video Code',
     filterEdition: 'Edition',

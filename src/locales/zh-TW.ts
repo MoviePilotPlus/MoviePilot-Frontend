@@ -2032,7 +2032,7 @@ export default {
     filterSite: '站點',
     filterSeason: '季',
     filterWebSource: '源',
-    filterChineseSubtitle: '中字',
+    filterSubtitle: '字幕',
     filterFreeState: '促銷狀態',
     filterVideoCode: '視頻編碼',
     filterEdition: '质量',
