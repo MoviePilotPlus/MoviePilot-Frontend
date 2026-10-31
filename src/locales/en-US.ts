@@ -3093,6 +3093,7 @@ export default {
       active30Days: 'Active 30 Days',
       backendVersionStatistic: 'Backend Versions',
       frontendVersionStatistic: 'Frontend Versions',
+      iosAppVersionStatistic: 'iOS App Versions',
       version: 'Version',
       users: 'Users',
       lastUpdated: 'Updated At',
