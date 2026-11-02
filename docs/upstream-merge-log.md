@@ -1109,3 +1109,11 @@ architecture 基线四刷新。
 - **冲突**：仅 `eslint-suppressions.json`——**两侧冲突块均为字典中部片段（非完整键集），直接解析必炸；正确姿势=从 `git show HEAD:` 与 `git show <tag>:` 取两版完整文件程序化并集（count 信封归一化），fork 176 键全保留后按 linter 指引 --prune-suppressions 收敛（prune 提交单独落）**
 - **验证**：install + lint 绿（exit 0，prune 后）；触碰的 9 个 spec 253 例全绿
 - **后端**：v3.2.3 已含（后端 v3.2.4 未发布），本轮跳过
+
+## 2026-11-03 第 107 轮：合并 upstream tag v3.2.4 重指增量（前端）
+
+- **合并目标**：tag `v3.2.4` 重指后 SHA `4963ab48368499d7248140ed5ab3620e3a18b949`（上轮已合 `049beb39`，upstream 追加原生 App 全局搜索修复系列后重打；32 文件 +889 −117）
+- **上游改动主题**：原生 App 全局搜索系列——独立导航栈与根恢复隔离、站点选择器独立 picker 与选中名摘要、资源结果卡片视图、文件统计头完整圆角内嵌、推荐与发现设置动作命名、搜索诊断弱化
+- **冲突**：仅 `SearchSiteDialog.vue` 一处纯注释（fork 单行注释 vs 上游 JSDoc 化）→ 取上游 docstring 形态；locale fork 词条全在
+- **验证**：install+lint 绿（exit 0）；触碰的 9 个 spec 234 例全绿
+- **后端**：v3.2.3 已含（后端 v3.2.4 未发布），本轮跳过
