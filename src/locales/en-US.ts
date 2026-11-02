@@ -4413,6 +4413,8 @@ export default {
       },
     },
     searchBar: {
+      filmTV: 'Movies & TV',
+      people: 'People',
       search: 'Search',
       searchPlaceholder: 'Search movies, TV shows and more...',
       recentSearches: 'Recent Searches',
