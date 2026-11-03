@@ -1117,3 +1117,11 @@ architecture 基线四刷新。
 - **冲突**：仅 `SearchSiteDialog.vue` 一处纯注释（fork 单行注释 vs 上游 JSDoc 化）→ 取上游 docstring 形态；locale fork 词条全在
 - **验证**：install+lint 绿（exit 0）；触碰的 9 个 spec 234 例全绿
 - **后端**：v3.2.3 已含（后端 v3.2.4 未发布），本轮跳过
+
+## 2026-11-04 第 108 轮：合并 upstream tag v3.2.4 二次重指增量（前端）
+
+- **合并目标**：tag `v3.2.4` 二次重指后 SHA `55db2eaad425406daa6f2ed90b70cd85c6772349`（上轮已合 `4963ab48`，upstream 追加修复系列后重打；64 文件 +4476 −382）
+- **上游改动主题**：浅色玻璃表面进度对话框可读（#912）、插件「关于」打开时强刷市场索引防装回旧版（#910）、版本化前端插件 SDK 与原生能力入口（#909，public/plugin-sdk/v1 + 契约 spec）、原生 iOS 助手动效恢复、订阅卡可操作搜索状态（#908）
+- **冲突**：仅 `eslint-suppressions.json`——按第 106 轮固化姿势（两版完整文件程序化并集+count 信封归一）处理（ours 172 + theirs 115 → 173），并集后 `--prune-suppressions` 收敛（prune 提交单独落）；locale fork 词条全在
+- **验证**：install+lint 绿（exit 0，prune 后）；触碰的 22 个 spec 中 21 绿——唯一失败 plugin-sdk 第二例（ts.createProgram 编译临时 consumer 文件 Windows 路径问题）**纯上游树同败（worktree 下 2F 更差）=环境族放行**；SDK 公开产物经 build-plugin-sdk 重新生成验证与上游内容零差异（仅行尾归一，无需额外提交）
+- **后端**：v3.2.3 已含（后端 v3.2.4 未发布），本轮跳过
