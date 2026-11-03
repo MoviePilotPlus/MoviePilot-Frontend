@@ -1,524 +1,4 @@
 {
-  "examples/plugin-component/src/components/AppPage.vue": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "examples/plugin-component/src/components/AppPageSettings.vue": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/@core/libs/apex-chart/apexCharConfig.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
-  "src/@core/utils/formatters.ts": {
-    "sonarjs/super-linear-regex": {
-      "count": 1
-    }
-  },
-  "src/@core/utils/index.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 5
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/@core/utils/navigator.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
-  "src/@core/utils/workflow.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 5
-    }
-  },
-  "src/@validators/index.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
-  "src/ace-config.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 24
-    },
-    "no-useless-escape": {
-      "count": 4
-    },
-    "sonarjs/empty-string-repetition": {
-      "count": 1
-    },
-    "sonarjs/super-linear-regex": {
-      "count": 9
-    }
-  },
-  "src/api/types.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 38
-    }
-  },
-  "src/components/agent/AgentAssistantEntry.vue": {
-    "sonarjs/super-linear-regex": {
-      "count": 1
-    }
-  },
-  "src/components/agent/AgentAssistantPanel.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 7
-    }
-  },
-  "src/components/cards/CollectCard.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    }
-  },
-  "src/components/cards/DirectoryCard.vue": {
-    "sonarjs/super-linear-regex": {
-      "count": 1
-    },
-    "vue/no-mutating-props": {
-      "count": 26
-    }
-  },
-  "src/components/cards/EpisodeCard.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 12
-    },
-    "vue/no-mutating-props": {
-      "count": 2
-    }
-  },
-  "src/components/cards/FilterRuleCard.vue": {
-    "vue/no-mutating-props": {
-      "count": 1
-    }
-  },
-  "src/components/cards/FilterRuleGroupCard.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/cards/PersonCard.vue": {
-    "no-useless-assignment": {
-      "count": 1
-    }
-  },
-  "src/components/cards/PluginMixedSortCard.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/components/cards/SiteSchemaCard.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    }
-  },
-  "src/components/cards/SubscribeCard.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "vue/no-v-text-v-html-on-component": {
-      "count": 2
-    }
-  },
-  "src/components/cards/TaskCard.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-dupe-else-if": {
-      "count": 1
-    },
-    "sonarjs/no-identical-conditions": {
-      "count": 1
-    },
-    "vue/no-mutating-props": {
-      "count": 2
-    }
-  },
-  "src/components/cards/TaskItem.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
-  "src/components/cards/TaskItemV1.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
-  "src/components/cards/VideoCard.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 5
-    }
-  },
-  "src/components/dialog/AboutDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 8
-    },
-    "vue/no-parsing-error": {
-      "count": 1
-    },
-    "vue/no-v-text-v-html-on-component": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/AddSiteSeedDialog.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "prefer-const": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/AlistConfigDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "vue/no-mutating-props": {
-      "count": 4
-    }
-  },
-  "src/components/dialog/AliyunAuthDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/CollectOperationDialog.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
-    "prefer-const": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/ContentToggleSettingsDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/DownloadTaskInfoDialog.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "vue/no-unused-vars": {
-      "count": 1
-    },
-    "vue/valid-v-for": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/EditFollowDialog.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/FilterRuleGroupInfoDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "prefer-const": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/MergeCollectDialog.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
-  "src/components/dialog/NotificationChannelInfoDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/ProgressInfoDialog.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "vue/no-unused-vars": {
-      "count": 1
-    },
-    "vue/valid-v-for": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/RcloneConfigDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "vue/no-mutating-props": {
-      "count": 4
-    }
-  },
-  "src/components/dialog/ReorganizeDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "sonarjs/super-linear-regex": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/SharedDialogHost.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    }
-  },
-  "src/components/dialog/SiteAddEditDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/SiteCookieUpdateDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/SiteImportDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/SiteSchemaEditDialog.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
-  "src/components/dialog/SiteSchemaImportDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/SiteSearchDialog.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
-  "src/components/dialog/SiteSeedInfoDialog.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/components/dialog/SiteStatisticsDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/SubscribeEditDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/components/dialog/SubscribeHistoryDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "vue/no-v-text-v-html-on-component": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/SubscribeSeasonDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/SubscribeShareStatisticsDialog.vue": {
-    "vue/no-side-effects-in-computed-properties": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/TransferDirDialog.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/U115AuthDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/UserAuthDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/components/dialog/VideoDescInfoDialog.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "sonarjs/super-linear-regex": {
-      "count": 2
-    }
-  },
-  "src/components/dialog/VideoMediaInfoDialog.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/VideoScreenshotDialog.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "sonarjs/no-ignored-exceptions": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/WorkflowActionsDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 17
-    }
-  },
-  "src/components/dialog/WorkflowAddEditDialog.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/dialog/__tests__/SubscribeSeasonDialog.spec.ts": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
-  "src/components/field/CronField.vue": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/components/field/PathField.vue": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/components/filebrowser/FileList.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/misc/DashboardElement.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
-  "src/components/misc/ProgressiveCardGrid.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    }
-  },
-  "src/components/pwa/PWAInstallPrompt.vue": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
-    },
-    "sonarjs/no-ignored-exceptions": {
-      "count": 1
-    }
-  },
-  "src/components/render/DashboardRender.vue": {
-    "vue/no-v-text-v-html-on-component": {
-      "count": 1
-    }
-  },
-  "src/components/render/FormRender.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 17
-    },
-    "sonarjs/code-eval": {
-      "count": 4
-    }
-  },
-  "src/components/render/PageRender.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "vue/no-v-text-v-html-on-component": {
-      "count": 1
-    }
-  },
-  "src/components/slide/SlideViewTitle.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
   "src/components/slide/VirtualSlideView.vue": {
     "@typescript-eslint/no-explicit-any": {
       "count": 4
@@ -527,27 +7,33 @@
       "count": 1
     }
   },
-  "src/components/workflow/AddDownloadAction.vue": {
+  "src/components/cards/PersonCard.vue": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "src/views/system/LoggingView.vue": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "no-control-regex": {
+      "count": 1
+    },
+    "sonarjs/super-linear-regex": {
+      "count": 8
+    }
+  },
+  "src/views/subscribe/SubscribePopularView.vue": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     },
-    "vue/no-mutating-props": {
-      "count": 4
+    "prefer-const": {
+      "count": 1
     }
   },
-  "src/components/workflow/FetchDownloadsAction.vue": {
-    "vue/no-mutating-props": {
-      "count": 2
-    }
-  },
-  "src/components/workflow/FetchMediasAction.vue": {
-    "vue/no-mutating-props": {
-      "count": 3
-    }
-  },
-  "src/components/workflow/FetchRssAction.vue": {
-    "vue/no-mutating-props": {
-      "count": 5
+  "src/utils/permission.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 9
     }
   },
   "src/components/workflow/FetchTorrentsAction.vue": {
@@ -555,69 +41,15 @@
       "count": 7
     }
   },
-  "src/components/workflow/FilterMediasAction.vue": {
-    "@typescript-eslint/no-explicit-any": {
+  "src/views/collect/TaskCardListView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
       "count": 1
     },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "vue/no-mutating-props": {
-      "count": 3
-    }
-  },
-  "src/components/workflow/FilterTorrentsAction.vue": {
-    "vue/no-mutating-props": {
-      "count": 7
-    }
-  },
-  "src/components/workflow/InvokePluginAction.vue": {
-    "vue/no-mutating-props": {
-      "count": 4
-    }
-  },
-  "src/components/workflow/NoteAction.vue": {
-    "vue/no-mutating-props": {
-      "count": 1
-    }
-  },
-  "src/components/workflow/ScanFileAction.vue": {
-    "vue/no-mutating-props": {
-      "count": 2
-    }
-  },
-  "src/components/workflow/SendMessageAction.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "vue/no-mutating-props": {
-      "count": 2
-    }
-  },
-  "src/components/workflow/TransferFileAction.vue": {
-    "vue/no-mutating-props": {
-      "count": 1
-    }
-  },
-  "src/composables/__tests__/useMediaSubscribe.spec.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/composables/useCacheManager.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/composables/useCardAccentColor.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
   },
-  "src/composables/useConfirm.ts": {
+  "src/views/system/CacheView.vue": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
@@ -638,23 +70,13 @@
       "count": 1
     }
   },
-  "src/composables/usePWA.ts": {
-    "no-async-promise-executor": {
-      "count": 1
-    }
-  },
-  "src/composables/usePWAInstall.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/composables/useSharedDialog.ts": {
+  "src/components/dialog/SiteCookieUpdateDialog.vue": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
   },
-  "src/composables/useStateRestore.ts": {
-    "@typescript-eslint/no-explicit-any": {
+  "src/views/collect/FollowView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
       "count": 1
     }
   },
@@ -666,7 +88,748 @@
       "count": 1
     }
   },
+  "src/@validators/index.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "src/components/dialog/SiteSchemaEditDialog.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "src/views/collect/YspView.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 20
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "sonarjs/super-linear-regex": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/UserAuthDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/components/workflow/TransferFileAction.vue": {
+    "vue/no-mutating-props": {
+      "count": 1
+    }
+  },
+  "src/utils/loadingStateManager.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/views/collect/MgtvView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "src/views/system/ModuleTestView.vue": {
+    "vue/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/SiteSchemaImportDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/views/setting/AccountSettingCollect.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    },
+    "no-prototype-builtins": {
+      "count": 1
+    }
+  },
+  "src/utils/themeLogo.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "src/views/discover/PersonCardListView.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/views/dashboard/AnalyticsSpeed.vue": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/components/workflow/SendMessageAction.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "vue/no-mutating-props": {
+      "count": 2
+    }
+  },
+  "src/composables/useCacheManager.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/views/setting/AccountSettingRule.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 8
+    }
+  },
+  "src/components/dialog/DownloadTaskInfoDialog.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "vue/no-unused-vars": {
+      "count": 1
+    },
+    "vue/valid-v-for": {
+      "count": 1
+    }
+  },
+  "src/components/pwa/PWAInstallPrompt.vue": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    },
+    "sonarjs/no-ignored-exceptions": {
+      "count": 1
+    }
+  },
+  "src/utils/backgroundManager.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "src/@core/utils/formatters.ts": {
+    "sonarjs/super-linear-regex": {
+      "count": 1
+    }
+  },
+  "src/service-worker.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    },
+    "no-useless-assignment": {
+      "count": 1
+    },
+    "sonarjs/no-ignored-exceptions": {
+      "count": 2
+    }
+  },
+  "src/api/types.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 38
+    },
+    "@typescript-eslint/no-wrapper-object-types": {
+      "count": 2
+    }
+  },
+  "src/components/dialog/SiteStatisticsDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/views/setting/collect-settings/CollectPtgenCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/SubscribeHistoryDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "vue/no-v-text-v-html-on-component": {
+      "count": 1
+    }
+  },
+  "src/utils/requestOptimizer.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/@core/utils/navigator.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "src/components/misc/DashboardElement.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "src/views/setting/collect-settings/CollectBasicCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "src/utils/appDeepLink.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    },
+    "no-case-declarations": {
+      "count": 1
+    },
+    "no-useless-escape": {
+      "count": 10
+    },
+    "sonarjs/no-dead-store": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/VideoScreenshotDialog.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "sonarjs/no-ignored-exceptions": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/WorkflowAddEditDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/components/render/FormRender.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 17
+    },
+    "sonarjs/code-eval": {
+      "count": 4
+    }
+  },
+  "src/views/setting/AccountSettingSearch.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "src/components/cards/TaskCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "no-dupe-else-if": {
+      "count": 1
+    },
+    "sonarjs/no-identical-conditions": {
+      "count": 1
+    },
+    "vue/no-mutating-props": {
+      "count": 2
+    }
+  },
+  "src/views/collect/TencentMediaListView.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/views/setting/collect-settings/CollectCredentialsCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "src/views/setting/collect-settings/CollectNamingCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/__tests__/SubscribeSeasonDialog.spec.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "src/components/field/CronField.vue": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/views/workflow/WorkflowShareView.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/AlistConfigDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "vue/no-mutating-props": {
+      "count": 4
+    }
+  },
+  "src/composables/useStateRestore.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/plugins/vuetify/AppDialog.ts": {
+    "sonarjs/super-linear-regex": {
+      "count": 1
+    }
+  },
+  "src/composables/usePWAInstall.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/components/dialog/TransferDirDialog.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/composables/usePWA.ts": {
+    "no-async-promise-executor": {
+      "count": 1
+    }
+  },
+  "src/views/subscribe/SubscribeShareView.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "src/components/workflow/FilterMediasAction.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "vue/no-mutating-props": {
+      "count": 3
+    }
+  },
+  "src/pages/downloadtask.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "vue/valid-v-for": {
+      "count": 2
+    }
+  },
+  "src/views/setting/AccountSettingSite.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "src/components/workflow/FetchMediasAction.vue": {
+    "vue/no-mutating-props": {
+      "count": 3
+    }
+  },
+  "src/components/cards/VideoCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 5
+    }
+  },
+  "src/views/collect/TaskCardSlideView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/components/agent/AgentAssistantPanel.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 7
+    }
+  },
+  "src/components/cards/PluginMixedSortCard.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/components/dialog/SiteSeedInfoDialog.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/views/collect/YoukuView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/components/render/DashboardRender.vue": {
+    "vue/no-v-text-v-html-on-component": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/SubscribeSeasonDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/VideoDescInfoDialog.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "sonarjs/super-linear-regex": {
+      "count": 2
+    }
+  },
+  "src/components/dialog/WorkflowActionsDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 17
+    }
+  },
+  "src/views/dashboard/AnalyticsMemory.vue": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/AddSiteSeedDialog.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "src/composables/useConfirm.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/ContentToggleSettingsDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/components/cards/SubscribeCard.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "vue/no-v-text-v-html-on-component": {
+      "count": 2
+    }
+  },
+  "src/components/workflow/FetchRssAction.vue": {
+    "vue/no-mutating-props": {
+      "count": 5
+    }
+  },
+  "src/@core/libs/apex-chart/apexCharConfig.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "src/ace-config.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 24
+    },
+    "no-useless-escape": {
+      "count": 4
+    },
+    "sonarjs/empty-string-repetition": {
+      "count": 1
+    },
+    "sonarjs/super-linear-regex": {
+      "count": 9
+    }
+  },
+  "src/components/workflow/AddDownloadAction.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "vue/no-mutating-props": {
+      "count": 4
+    }
+  },
+  "src/views/collect/PersonDetailView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "src/components/cards/TaskItem.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "src/views/setting/collect-settings/CollectScreenshotCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 7
+    }
+  },
+  "src/components/dialog/EditFollowDialog.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/U115AuthDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/views/setting/AccountSettingDirectory.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
+    "sonarjs/super-linear-regex": {
+      "count": 1
+    }
+  },
+  "src/components/workflow/NoteAction.vue": {
+    "vue/no-mutating-props": {
+      "count": 1
+    }
+  },
+  "src/utils/badge.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    },
+    "sonarjs/no-ignored-exceptions": {
+      "count": 2
+    }
+  },
+  "src/components/dialog/ProgressInfoDialog.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "vue/no-unused-vars": {
+      "count": 1
+    },
+    "vue/valid-v-for": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/VideoMediaInfoDialog.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "src/composables/useSharedDialog.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/utils/agentAssistantBubble.ts": {
+    "@typescript-eslint/no-empty-object-type": {
+      "count": 1
+    }
+  },
+  "src/views/discover/PersonDetailView.vue": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/AliyunAuthDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/components/workflow/InvokePluginAction.vue": {
+    "vue/no-mutating-props": {
+      "count": 4
+    }
+  },
   "src/layouts/default/components/UserNotification.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/views/setting/collect-settings/CollectImageHostingCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 6
+    }
+  },
+  "src/components/field/PathField.vue": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/views/collect/MediaCardListView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
+    }
+  },
+  "src/views/collect/PersonCardSlideView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/components/workflow/FetchDownloadsAction.vue": {
+    "vue/no-mutating-props": {
+      "count": 2
+    }
+  },
+  "vite.config.ts": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "src/components/cards/SiteSchemaCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "src/components/cards/FilterRuleCard.vue": {
+    "vue/no-mutating-props": {
+      "count": 1
+    }
+  },
+  "src/components/workflow/FilterTorrentsAction.vue": {
+    "vue/no-mutating-props": {
+      "count": 7
+    }
+  },
+  "src/views/collect/IQiyiView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 4
+    }
+  },
+  "src/views/collect/MediaSearchView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "src/views/setting/AccountSettingSystem.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/utils/globalSetting.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/views/collect/TaskRowListView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 4
+    }
+  },
+  "src/pages/subscribe/__tests__/index.spec.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/pages/task.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "examples/plugin-component/src/components/AppPageSettings.vue": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/views/collect/CollectDetailView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 8
+    },
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "src/views/setting/collect-settings/CollectSiteSchemaCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
@@ -674,6 +837,101 @@
   "src/pages/cdetail.vue": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 1
+    }
+  },
+  "src/@core/utils/index.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/SubscribeShareStatisticsDialog.vue": {
+    "vue/no-side-effects-in-computed-properties": {
+      "count": 1
+    }
+  },
+  "src/plugins/stateRestore.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/views/collect/BilibiliView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "src/views/collect/VideoDetailView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 11
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    },
+    "sonarjs/no-all-duplicated-branches": {
+      "count": 1
+    }
+  },
+  "src/stores/types.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/components/dialog/SiteImportDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/utils/apexCharts.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/components/dialog/NotificationChannelInfoDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/RcloneConfigDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "vue/no-mutating-props": {
+      "count": 4
+    }
+  },
+  "src/views/collect/TaskListView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "src/components/cards/EpisodeCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 12
+    },
+    "vue/no-mutating-props": {
+      "count": 2
+    }
+  },
+  "src/components/misc/ProgressiveCardGrid.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
     }
   },
   "src/pages/collect-batch-reserve.vue": {
@@ -693,11 +951,83 @@
       "count": 3
     }
   },
-  "src/pages/downloadtask.vue": {
+  "src/components/slide/SlideViewTitle.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/views/discover/MediaCardSlideView.vue": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/components/agent/AgentAssistantEntry.vue": {
+    "sonarjs/super-linear-regex": {
+      "count": 1
+    }
+  },
+  "src/views/setting/collect-settings/CollectTeamCard.vue": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 1
     },
-    "vue/valid-v-for": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "src/pages/discover/credits.vue": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/SubscribeEditDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/components/dialog/MergeCollectDialog.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "src/components/render/PageRender.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "vue/no-v-text-v-html-on-component": {
+      "count": 1
+    },
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "src/views/collect/ExtraSourceView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "src/stores/global.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/components/dialog/SharedDialogHost.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "src/views/system/WordsView.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/components/cards/TaskItemV1.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
       "count": 2
     }
   },
@@ -712,296 +1042,20 @@
       "count": 1
     }
   },
-  "src/pages/subscribe/__tests__/index.spec.ts": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/pages/task.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    }
-  },
-  "src/pages/video.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    }
-  },
-  "src/plugins/i18n.ts": {
+  "src/components/dialog/FilterRuleGroupInfoDialog.vue": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
-    }
-  },
-  "src/plugins/stateRestore.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/plugins/vuetify/AppDialog.ts": {
-    "sonarjs/super-linear-regex": {
-      "count": 1
-    }
-  },
-  "src/plugins/vuetify/icons.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/router/index.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 7
-    }
-  },
-  "src/service-worker.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
     },
-    "@typescript-eslint/no-unused-vars": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "src/views/setting/AccountSettingSubscribe.vue": {
+    "@typescript-eslint/no-explicit-any": {
       "count": 3
-    },
-    "no-useless-assignment": {
-      "count": 1
-    },
-    "sonarjs/no-ignored-exceptions": {
-      "count": 2
-    }
-  },
-  "src/stores/global.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/stores/types.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/utils/agentAssistantBubble.ts": {
-    "@typescript-eslint/no-empty-object-type": {
-      "count": 1
-    }
-  },
-  "src/utils/apexCharts.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/utils/appDeepLink.ts": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
-    },
-    "no-case-declarations": {
-      "count": 1
-    },
-    "no-useless-escape": {
-      "count": 10
-    },
-    "sonarjs/no-dead-store": {
-      "count": 1
-    }
-  },
-  "src/utils/backgroundManager.ts": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
-  "src/utils/badge.ts": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
-    "sonarjs/no-ignored-exceptions": {
-      "count": 2
-    }
-  },
-  "src/utils/globalSetting.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/utils/loadingStateManager.ts": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/utils/permission.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 9
-    }
-  },
-  "src/utils/requestOptimizer.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 5
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/utils/themeLogo.ts": {
-    "no-useless-assignment": {
-      "count": 1
-    }
-  },
-  "src/views/collect/BilibiliView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
-  "src/views/collect/CollectDetailView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 8
-    },
-    "no-useless-assignment": {
-      "count": 1
-    }
-  },
-  "src/views/collect/ExtraSourceView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    }
-  },
-  "src/views/collect/FollowView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    }
-  },
-  "src/views/collect/IQiyiView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    }
-  },
-  "src/views/collect/MediaCardListView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 5
-    }
-  },
-  "src/views/collect/MediaCardSlideView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    }
-  },
-  "src/views/collect/MediaSearchView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    }
-  },
-  "src/views/collect/MgtvView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
-    }
-  },
-  "src/views/collect/PersonCardListView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    }
-  },
-  "src/views/collect/PersonCardSlideView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/views/collect/PersonDetailView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-useless-assignment": {
-      "count": 1
-    }
-  },
-  "src/views/collect/TaskCardListView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/views/collect/TaskCardSlideView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/views/collect/TaskListView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    }
-  },
-  "src/views/collect/TaskRowListView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    }
-  },
-  "src/views/collect/TencentMediaListView.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/views/collect/TencentView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
-    }
-  },
-  "src/views/collect/VideoDetailView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 11
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
-    "sonarjs/no-all-duplicated-branches": {
-      "count": 1
-    }
-  },
-  "src/views/collect/YoukuView.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     }
   },
   "src/views/collect/YspVideoDetailView.vue": {
@@ -1018,136 +1072,38 @@
       "count": 3
     }
   },
-  "src/views/collect/YspView.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 20
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "sonarjs/super-linear-regex": {
-      "count": 1
-    }
-  },
-  "src/views/dashboard/AnalyticsCpu.vue": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/views/dashboard/AnalyticsMemory.vue": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/views/dashboard/AnalyticsSpeed.vue": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/views/discover/MediaCardSlideView.vue": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/views/discover/PersonCardListView.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/views/discover/PersonDetailView.vue": {
-    "no-useless-assignment": {
-      "count": 1
-    }
-  },
-  "src/views/setting/AccountSettingCollect.vue": {
+  "src/views/collect/MediaCardSlideView.vue": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "no-prototype-builtins": {
+    }
+  },
+  "src/components/cards/CollectCard.vue": {
+    "@typescript-eslint/ban-ts-comment": {
       "count": 1
     }
   },
-  "src/views/setting/AccountSettingDirectory.vue": {
+  "src/components/cards/FilterRuleGroupCard.vue": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "sonarjs/super-linear-regex": {
       "count": 1
     }
   },
-  "src/views/setting/AccountSettingRule.vue": {
+  "src/components/dialog/AboutDialog.vue": {
     "@typescript-eslint/no-explicit-any": {
       "count": 8
-    }
-  },
-  "src/views/setting/AccountSettingSearch.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
-  "src/views/setting/AccountSettingSite.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
-  "src/views/setting/AccountSettingSubscribe.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
-  "src/views/setting/AccountSettingSystem.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/views/setting/collect-settings/CollectBasicCard.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    }
-  },
-  "src/views/setting/collect-settings/CollectCredentialsCard.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    }
-  },
-  "src/views/setting/collect-settings/CollectImageHostingCard.vue": {
-    "@typescript-eslint/ban-ts-comment": {
+    },
+    "vue/no-parsing-error": {
       "count": 1
     },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 6
-    }
-  },
-  "src/views/setting/collect-settings/CollectNamingCard.vue": {
-    "@typescript-eslint/ban-ts-comment": {
+    "vue/no-v-text-v-html-on-component": {
       "count": 1
     }
   },
-  "src/views/setting/collect-settings/CollectPtgenCard.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    }
-  },
-  "src/views/setting/collect-settings/CollectScreenshotCard.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
+  "src/router/index.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 7
     }
   },
-  "src/views/setting/collect-settings/CollectSiteSchemaCard.vue": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/views/setting/collect-settings/CollectTeamCard.vue": {
+  "src/views/collect/PersonCardListView.vue": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 1
     },
@@ -1155,49 +1111,113 @@
       "count": 4
     }
   },
-  "src/views/subscribe/SubscribePopularView.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/views/subscribe/SubscribeShareView.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/views/system/CacheView.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/views/system/LoggingView.vue": {
+  "src/views/dashboard/AnalyticsCpu.vue": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
-    },
-    "no-control-regex": {
+    }
+  },
+  "src/components/dialog/SiteSearchDialog.vue": {
+    "@typescript-eslint/ban-ts-comment": {
       "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "src/components/filebrowser/FileList.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/plugins/i18n.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "examples/plugin-component/src/components/AppPage.vue": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/views/collect/TencentView.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "src/plugins/vuetify/icons.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/pages/video.vue": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "src/components/dialog/SiteAddEditDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/composables/useCardAccentColor.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/components/cards/DirectoryCard.vue": {
+    "sonarjs/super-linear-regex": {
+      "count": 1
+    },
+    "vue/no-mutating-props": {
+      "count": 26
+    }
+  },
+  "src/@core/utils/workflow.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
+    }
+  },
+  "src/composables/__tests__/useMediaSubscribe.spec.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/components/workflow/ScanFileAction.vue": {
+    "vue/no-mutating-props": {
+      "count": 2
+    }
+  },
+  "src/components/dialog/ReorganizeDialog.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
     },
     "sonarjs/super-linear-regex": {
-      "count": 8
-    }
-  },
-  "src/views/system/ModuleTestView.vue": {
-    "vue/no-unused-vars": {
       "count": 1
     }
   },
-  "src/views/system/WordsView.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/views/workflow/WorkflowShareView.vue": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "vite.config.ts": {
+  "src/components/dialog/CollectOperationDialog.vue": {
     "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    },
+    "prefer-const": {
       "count": 1
     }
   }
