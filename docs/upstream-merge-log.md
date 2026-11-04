@@ -1125,3 +1125,11 @@ architecture 基线四刷新。
 - **冲突**：仅 `eslint-suppressions.json`——按第 106 轮固化姿势（两版完整文件程序化并集+count 信封归一）处理（ours 172 + theirs 115 → 173），并集后 `--prune-suppressions` 收敛（prune 提交单独落）；locale fork 词条全在
 - **验证**：install+lint 绿（exit 0，prune 后）；触碰的 22 个 spec 中 21 绿——唯一失败 plugin-sdk 第二例（ts.createProgram 编译临时 consumer 文件 Windows 路径问题）**纯上游树同败（worktree 下 2F 更差）=环境族放行**；SDK 公开产物经 build-plugin-sdk 重新生成验证与上游内容零差异（仅行尾归一，无需额外提交）
 - **后端**：v3.2.3 已含（后端 v3.2.4 未发布），本轮跳过
+
+## 2026-11-05 第 109 轮：合并 upstream tag v3.2.4 三次重指增量（前端）
+
+- **合并目标**：tag `v3.2.4` 三次重指后 SHA `c6fc6562fa3ebbe6d3790a8f58ed68879347a49c`（上轮已合 `55db2eaa`，upstream 追加 5 提交后重打；11 文件 +786 −59）
+- **上游改动主题**：插件已安装更新时保留浏览上下文（#925）、Shift 范围选择统一 composable（转移历史/文件浏览器/范围复选框与键盘一致性 #923）、日志流重连时替换重放尾部
+- **冲突**：零；locale fork 词条全在
+- **验证**：install+lint 绿（exit 0）；触碰的 5 个 spec 中 4 绿——唯一失败 TransferHistoryView poster 2:3 用例带 \r\n 指纹=第 89/90 轮已知 CRLF 环境族放行
+- **后端**：本轮进入 v3.2.4 合并（见后端 log 第 109 轮）
