@@ -1133,3 +1133,11 @@ architecture 基线四刷新。
 - **冲突**：零；locale fork 词条全在
 - **验证**：install+lint 绿（exit 0）；触碰的 5 个 spec 中 4 绿——唯一失败 TransferHistoryView poster 2:3 用例带 \r\n 指纹=第 89/90 轮已知 CRLF 环境族放行
 - **后端**：本轮进入 v3.2.4 合并（见后端 log 第 109 轮）
+
+## 2026-11-06 第 110 轮：合并 upstream tag v3.2.4 四次重指增量（前端微轮）
+
+- **合并目标**：tag `v3.2.4` 四次重指后 SHA `f39250447616b586abfc7d7ed278ca277d778ef0`（上轮已合 `c6fc6562`，upstream 追加 1 提交后重打；2 文件 +5 −1）
+- **上游改动主题**：AppPush 通知使用 MoviePilot logo 图标
+- **冲突**：零
+- **验证**：lint 绿（exit 0）；微增量无 spec 面
+- **后端**：v3.2.4 已含，本轮跳过
