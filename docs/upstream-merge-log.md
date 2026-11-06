@@ -1141,3 +1141,11 @@ architecture 基线四刷新。
 - **冲突**：零
 - **验证**：lint 绿（exit 0）；微增量无 spec 面
 - **后端**：v3.2.4 已含，本轮跳过
+
+## 2026-11-07 第 111 轮：合并 upstream tag v3.2.5（前端，含 v3.2.4 五次重指增量）
+
+- **合并目标**：tag `v3.2.5`（merge-base f3925044；含 v3.2.4 五次重指增量 + v3.2.5 两提交；14 文件 +505 −145）
+- **上游改动主题**：官方 @module-federation/vite 替换内联联邦运行时（vite.config 精简 + federationRuntime 新 spec）、浅色玻璃提示可读性修复与 overlay lint
+- **冲突**：零；locale fork 词条全在
+- **验证**：install+lint 绿（exit 0）；触碰的 3 个 spec 58 例全绿
+- **后端**：v3.2.4 已含（后端 v3.2.5 未发布），本轮跳过
