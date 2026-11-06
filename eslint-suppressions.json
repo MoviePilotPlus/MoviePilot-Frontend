@@ -1179,10 +1179,5 @@
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
-  },
-  "vite.config.ts": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    }
   }
 }
