@@ -1149,3 +1149,11 @@ architecture 基线四刷新。
 - **冲突**：零；locale fork 词条全在
 - **验证**：install+lint 绿（exit 0）；触碰的 3 个 spec 58 例全绿
 - **后端**：v3.2.4 已含（后端 v3.2.5 未发布），本轮跳过
+
+## 2026-11-08 第 112 轮：合并 upstream tag v3.2.6（前端）
+
+- **合并目标**：tag `v3.2.6` = `ae956ef259fc3ff17a34c2e5247536829f5eefa1`（merge-base fad61c3e；30 文件 +419 −124）
+- **上游改动主题**：插件评分并发加载与组件原地重试（useRetryableRemoteComponent，#927）、插件与仪表盘请求竞争降低（#928）
+- **冲突**：零；locale fork 词条全在
+- **验证**：install+lint 绿（exit 0）；触碰的 11 个 spec 141 例全绿
+- **后端**：本轮进入 v3.2.5 合并（见后端 log 第 112 轮）
