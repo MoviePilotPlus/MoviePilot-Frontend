@@ -1157,3 +1157,11 @@ architecture 基线四刷新。
 - **冲突**：零；locale fork 词条全在
 - **验证**：install+lint 绿（exit 0）；触碰的 11 个 spec 141 例全绿
 - **后端**：本轮进入 v3.2.5 合并（见后端 log 第 112 轮）
+
+## 2026-11-10 第 113 轮：合并 upstream tag v3.2.6 重指增量（前端）
+
+- **合并目标**：tag `v3.2.6` 重指后 SHA `609ea05eac7efc7c2cb31edcf5364d26c9c592f1`（上轮已合 `ae956ef2`，upstream 追加 1 提交后重打；4 文件 +159 −60）
+- **上游改动主题**：插件评分避免长查询参数（新增 pluginRating API 模块 + spec，#929）
+- **冲突**：零
+- **验证**：lint 绿（exit 0）；触碰的 2 个 spec（pluginRating 新增 + PluginCardListView）80 例全绿
+- **后端**：v3.2.5 已含（后端 v3.2.6 未发布），本轮跳过
