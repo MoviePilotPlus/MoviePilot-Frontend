@@ -1181,3 +1181,11 @@ architecture 基线四刷新。
 - **冲突**：零
 - **验证**：lint 绿（exit 0）；触碰的 10 个 spec 251 例全绿
 - **后端**：本轮进入 v3.2.6 合并（见后端 log 第 115 轮）
+
+## 2026-11-14 第 116 轮：合并 upstream tag v3.2.7（前端）
+
+- **合并目标**：tag `v3.2.7` = `e61ba24d6c46e1760ad6da42af4c7f2c1b38dc44`（merge-base 6422aea3；42 文件 +2416 −624）
+- **上游改动主题**：插件项目链接免全量市场查询（#940）、工作流对比度与日历控件改进、音乐手动对齐与最终目录选项 UI（#939）、设计令牌基座（tokens.scss + DESIGN.md）、公开 AGENTS.md
+- **冲突**：零；locale fork 词条全在
+- **验证**：install+lint 绿（exit 0）；触碰的 11 个 spec 中 10 绿——唯一失败 TransferHistoryView poster 2:3=\r\n 指纹已知 CRLF 环境族放行
+- **后端**：本轮进入 v3.2.6 重指增量合并（见后端 log 第 116 轮）
