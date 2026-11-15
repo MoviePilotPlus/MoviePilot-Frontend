@@ -1493,7 +1493,9 @@ html[data-theme='glass'] {
       background-color: var(--glass-overlay-surface) !important;
     }
 
-    .v-card--link:hover {
+    // 设置项卡片共用悬浮材质，目录等通过内部控件操作的卡片也需要一致的投影。
+    .v-card--link:hover,
+    .app-card-colorful:hover {
       border-color: var(--glass-border-hover) !important;
       box-shadow: var(--glass-shadow-hover) !important;
     }
@@ -2086,6 +2088,12 @@ html[data-theme='glass'][data-glass-color-scheme='light'][data-glass-appearance]
 
 /* 浅色玻璃填充上的文字使用主题前景色，品牌染色与深色主题保持独立。*/
 html[data-theme='glass'][data-glass-color-scheme='light'] body[data-theme='glass'] {
+  // 登录输入区使用浅色控件描边与填充，保留色调叠层和独立的聚焦反馈。
+  .native-login-field:not(:focus-within) {
+    border-color: var(--glass-control-prominent-border);
+    background-color: var(--glass-control-prominent);
+  }
+
   // 工作流整卡会随玻璃材质透亮，前景也要切换，覆盖组件内固定的白色通道。
   .workflow-task-card {
     --workflow-card-header-content-rgb: var(--v-theme-on-surface);
@@ -2096,8 +2104,9 @@ html[data-theme='glass'][data-glass-color-scheme='light'] body[data-theme='glass
     color: rgba(var(--v-theme-on-surface), var(--tw-text-opacity, 1)) !important;
   }
 
+  // tonal 的文字与底层共用 currentColor，保留语义色；只有实心填充需要修正浅色前景。
   .v-btn:is(.bg-primary, .bg-success, .bg-info, .bg-warning, .bg-error),
-  .v-chip:is(.v-chip--variant-elevated, .v-chip--variant-flat, .v-chip--variant-tonal),
+  .v-chip:is(.v-chip--variant-elevated, .v-chip--variant-flat),
   .layout-vertical-nav .nav-link > .router-link-exact-active {
     color: rgb(var(--v-theme-on-surface)) !important;
   }
