@@ -1189,3 +1189,11 @@ architecture 基线四刷新。
 - **冲突**：零；locale fork 词条全在
 - **验证**：install+lint 绿（exit 0）；触碰的 11 个 spec 中 10 绿——唯一失败 TransferHistoryView poster 2:3=\r\n 指纹已知 CRLF 环境族放行
 - **后端**：本轮进入 v3.2.6 重指增量合并（见后端 log 第 116 轮）
+
+## 2026-11-16 第 117 轮：合并 upstream tag v3.2.7 重指增量（前端）
+
+- **合并目标**：tag `v3.2.7` 重指后 SHA `25c76307eed0672f00696e21ab4a70a519564c7d`（上轮已合 `e61ba24d`，upstream 追加媒体详情动作系列后重打；37 文件 +2669 −253）
+- **上游改动主题**：媒体详情动作重排与按钮尺寸稳定（5 连修）、MediaCard UI 修复、iOS 媒体库播放连接、浅色玻璃主题登录输入对比度、转移状态 chips 对齐与记录元数据分离
+- **冲突**：仅 `eslint-suppressions.json`——按固化姿势（两版完整文件程序化并集+count 信封归一，ours 167 + theirs 110 → 168）处理后 `--prune-suppressions` 收敛（prune 提交单独落）；locale fork 词条全在
+- **验证**：install+lint 绿（exit 0，prune 后）；触碰的 12 个 spec 中 11 绿——唯一失败 TransferHistoryView poster 2:3=\r\n 指纹已知 CRLF 环境族放行
+- **后端**：v3.2.6 已含（后端 v3.2.7 未发布），本轮跳过
