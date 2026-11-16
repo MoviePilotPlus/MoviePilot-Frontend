@@ -17,6 +17,17 @@ export enum MediaSource {
 
 export type MediaDataSource = `${MediaSource}` | (string & {})
 
+/** 非 TMDB 来源对应的共享 TMDB 身份；原详情的媒体主身份保持不变。 */
+export interface MediaMapping {
+  media_source: MediaDataSource
+  media_id: string
+  type: 'movie' | 'tv'
+  season: number | null
+  tmdb_id: number
+  tmdb_type: 'movie' | 'tv'
+  tmdb_season: number | null
+}
+
 /** 后端返回的媒体来源注册描述，供各类来源选择器共享。 */
 export interface MediaSourceInfo {
   name: string
@@ -362,10 +373,10 @@ export interface WorkflowShare {
   trigger_type?: string
   // 事件类型（当trigger_type为event时使用）
   event_type?: string
-  // 动作列表
-  actions?: any[]
-  // 动作流
-  flows?: any[]
+  // 动作列表（接口以JSON字符串返回，兼容数组形式）
+  actions?: any[] | string
+  // 动作流（接口以JSON字符串返回，兼容数组形式）
+  flows?: any[] | string
   // 上下文
   context?: string
   // 时间

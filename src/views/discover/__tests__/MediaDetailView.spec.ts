@@ -41,6 +41,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 beforeEach(() => {
   invalidateSharedData()
   server.use(http.post('http://localhost/api/v1/media/status', () => new HttpResponse(null, { status: 404 })))
+  server.use(http.get('http://localhost/api/v1/media/mapping', () => apiJson(null)))
 })
 
 afterEach(() => {
@@ -718,6 +719,7 @@ describe('MediaDetailView detail and actions', () => {
 
   it('selects an available TV episode and sends its media server item to native playback', async () => {
     const media = createSubscribeTv({ media_id: '9301', tmdb_id: 9301, title: '多集电视剧' })
+    const episodeOverview = '阿隆迪尔发现加拉德瑞尔留下的线索，踏上穿越中土世界的旅程。'
     const playbackOpen = vi.fn()
     const adapter = new NativeLayoutAdapter(document, window)
     adapter.setActive(true)
@@ -734,7 +736,15 @@ describe('MediaDetailView detail and actions', () => {
         return apiJson({ 1: { 1: 'episode-1', 3: 'episode-3' }, 2: { 1: 'season-2-episode-1' } })
       }),
       tmdbSeasonEpisodesHandler(9301, 1, [
-        createTmdbEpisode({ episode_number: 1, name: '第一集', season_number: 1, still_path: '/episode-1.jpg' }),
+        createTmdbEpisode({
+          air_date: '2022-09-01',
+          episode_number: 1,
+          name: '第一集',
+          overview: episodeOverview,
+          runtime: 68,
+          season_number: 1,
+          still_path: '/episode-1.jpg',
+        }),
         createTmdbEpisode({ episode_number: 3, name: '第三集', season_number: 1, still_path: '/episode-3.jpg' }),
       ]),
     )
@@ -750,6 +760,13 @@ describe('MediaDetailView detail and actions', () => {
     const picker = screen.getByRole('dialog')
     expect(picker.querySelector('[data-native-dialog-close]')).not.toBeNull()
     expect(picker.querySelector('img[src="https://image.tmdb.example.com/t/p/w500/episode-1.jpg"]')).not.toBeNull()
+    const firstEpisode = picker.querySelector<HTMLElement>('.episode-picker__episode')
+    expect(firstEpisode).not.toBeNull()
+    expect(firstEpisode?.querySelector('.episode-picker__date')).toHaveTextContent('2022-09-01')
+    expect(firstEpisode?.querySelector('.episode-picker__runtime')).toHaveTextContent('68 min')
+    expect(firstEpisode?.querySelector('.episode-picker__overview')).toHaveTextContent(episodeOverview)
+    const episodeWithoutOverview = picker.querySelectorAll<HTMLElement>('.episode-picker__episode')[1]
+    expect(episodeWithoutOverview.querySelector('.episode-picker__overview')).toBeNull()
     expect(screen.queryByText(/S01E02/)).toBeNull()
     await fireEvent.click(screen.getByText('第三集'))
 
@@ -1413,5 +1430,152 @@ describe('MediaDetailView subscriptions, seasons, and episode groups', () => {
 
     expect(screen.queryByText('A 组旧响应')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '1 - B 组第一集' })).toBeInTheDocument()
+  })
+})
+
+describe('共享 TMDB 对应关系', () => {
+  it.each(['douban', 'bangumi', 'anilist'] as const)('为 %s 详情补充精确 TMDB 季链接并保留原身份', async source => {
+    const mappingRequest = vi.fn()
+    const media = createMediaInfo({
+      title: '共享动画详情',
+      media_source: source,
+      media_id: '123',
+      type: '电视剧',
+      season: 1,
+      tmdb_id: undefined,
+      douban_id: source === 'douban' ? '123' : undefined,
+      bangumi_id: source === 'bangumi' ? 123 : undefined,
+      anilist_id: source === 'anilist' ? 123 : undefined,
+    })
+    await renderDetail({
+      media,
+      setupHandlers: () =>
+        server.use(
+          http.get('http://localhost/api/v1/media/mapping', ({ request }) => {
+            mappingRequest(new URL(request.url))
+            return apiJson({
+              media_source: source,
+              media_id: '123',
+              type: 'tv',
+              season: 1,
+              tmdb_id: 456,
+              tmdb_type: 'tv',
+              tmdb_season: 0,
+            })
+          }),
+        ),
+    })
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'TheMovieDb' })).toHaveAttribute(
+        'href',
+        'https://www.themoviedb.org/tv/456/season/0',
+      ),
+    )
+    expect(mappingRequest).toHaveBeenCalledTimes(1)
+    expect(mappingRequest.mock.calls[0][0].searchParams.get('media_source')).toBe(source)
+    expect(mappingRequest.mock.calls[0][0].searchParams.get('media_id')).toBe('123')
+    expect(mappingRequest.mock.calls[0][0].searchParams.get('season')).toBe('1')
+    expect(screen.queryByText('TMDB ID')).not.toBeInTheDocument()
+  })
+
+  it('先显示原详情，关系延迟返回时再补充电影链接', async () => {
+    let resolveMapping!: () => void
+    const pending = new Promise<void>(resolve => {
+      resolveMapping = resolve
+    })
+    await renderDetail({
+      media: createMediaInfo({
+        title: '无需等待中心服务',
+        media_source: 'douban',
+        media_id: '123',
+        tmdb_id: undefined,
+        douban_id: '123',
+        type: '电影',
+      }),
+      setupHandlers: () =>
+        server.use(
+          http.get('http://localhost/api/v1/media/mapping', async () => {
+            await pending
+            return apiJson({
+              media_source: 'douban',
+              media_id: '123',
+              type: 'movie',
+              season: null,
+              tmdb_id: 456,
+              tmdb_type: 'movie',
+              tmdb_season: null,
+            })
+          }),
+        ),
+    })
+    expect(screen.getByRole('heading', { name: /无需等待中心服务/ })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'TheMovieDb' })).not.toBeInTheDocument()
+    resolveMapping()
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'TheMovieDb' })).toHaveAttribute(
+        'href',
+        'https://www.themoviedb.org/movie/456',
+      ),
+    )
+  })
+
+  it.each([404, 503])('中心或旧后端返回 %s 时仍能正常显示原详情', async status => {
+    await renderDetail({
+      media: createMediaInfo({
+        title: '降级详情',
+        media_source: 'douban',
+        media_id: '123',
+        tmdb_id: undefined,
+        douban_id: '123',
+        type: '电影',
+      }),
+      setupHandlers: () =>
+        server.use(http.get('http://localhost/api/v1/media/mapping', () => new HttpResponse(null, { status }))),
+    })
+    await flushPromises()
+    expect(screen.getByRole('heading', { name: /降级详情/ })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'TheMovieDb' })).not.toBeInTheDocument()
+    expect(mocks.toastError).not.toHaveBeenCalled()
+  })
+
+  it('TMDB 原详情不查询共享接口', async () => {
+    const mappingRequest = vi.fn()
+    await renderDetail({
+      setupHandlers: () =>
+        server.use(
+          http.get('http://localhost/api/v1/media/mapping', () => {
+            mappingRequest()
+            return apiJson(null)
+          }),
+        ),
+    })
+    await flushPromises()
+    expect(mappingRequest).not.toHaveBeenCalled()
+  })
+
+  it('共享关系优先于原来源详情的辅助 TMDB ID，并使用共享季号', async () => {
+    await renderDetail({
+      media: createMediaInfo({ media_source: 'anilist', media_id: '123', tmdb_id: 999, type: '电视剧' }),
+      setupHandlers: () =>
+        server.use(
+          http.get('http://localhost/api/v1/media/mapping', () =>
+            apiJson({
+              media_source: 'anilist',
+              media_id: '123',
+              type: 'tv',
+              season: null,
+              tmdb_id: 456,
+              tmdb_type: 'tv',
+              tmdb_season: 2,
+            }),
+          ),
+        ),
+    })
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'TheMovieDb' })).toHaveAttribute(
+        'href',
+        'https://www.themoviedb.org/tv/456/season/2',
+      ),
+    )
   })
 })

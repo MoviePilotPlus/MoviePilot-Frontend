@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { getSharedConfiguration } from '@/api/configuration'
 import { getMediaStatus, getMediaSubscribedSeasons } from '@/api/mediaStatus'
-import { invalidateSharedData } from '@/utils/sharedDataCache'
+import { getSharedData, invalidateSharedData } from '@/utils/sharedDataCache'
 import { useToast } from 'vue-toastification'
 import { nativeChromeActive } from '@/native/layout'
 import { useNativePageHeader } from '@/native/page'
@@ -13,6 +13,7 @@ import { getApiBusinessErrorMessage } from '@/api/client'
 import type {
   MediaDataSource,
   MediaInfo,
+  MediaMapping,
   MediaRelease,
   MediaSeason,
   NotExistMediaInfo,
@@ -70,6 +71,37 @@ const theme = useTheme()
 
 // 媒体详情
 const mediaDetail = ref<MediaInfo>({} as MediaInfo)
+
+// 共享关系只补充外链，避免辅助 TMDB ID 改变原来源的季集、订阅和搜索行为。
+const sharedTmdbMapping = ref<MediaMapping | null>(null)
+let mappingRequestId = 0
+
+/** 独立查询已有关系；中心不可用或旧后端没有接口时继续显示原详情。 */
+async function querySharedTmdbMapping() {
+  const requestId = ++mappingRequestId
+  const identity = getMediaSubscribeIdentity(mediaDetail.value)
+  if (!identity || identity.source === 'themoviedb' || !['电影', '电视剧'].includes(mediaDetail.value.type ?? ''))
+    return
+  const params = {
+    media_source: identity.source,
+    media_id: identity.mediaId,
+    type: mediaDetail.value.type === '电影' ? 'movie' : 'tv',
+    season: mediaDetail.value.type === '电视剧' ? (mediaDetail.value.season ?? undefined) : undefined,
+  }
+  try {
+    const mapping = await getSharedData<MediaMapping | null>(`media-mapping:${JSON.stringify(params)}`, () =>
+      api.get('media/mapping', { params, timeout: 1500, feedback: 'silent', skipConnectionTracking: true }),
+    )
+    if (
+      requestId === mappingRequestId &&
+      mapping?.media_source === identity.source &&
+      mapping.media_id === identity.mediaId
+    )
+      sharedTmdbMapping.value = mapping
+  } catch {
+    // 此入口仅补充可选外链；无共享关系时不触发名称匹配或打断详情页。
+  }
+}
 
 // 本地是否存在，存在则包括Item信息
 const existsItemId = ref('')
@@ -243,6 +275,8 @@ function getSubscribeStatusKey(season: number | null = mediaDetail.value?.season
 
 // 调用API查询详情
 async function getMediaDetail() {
+  mappingRequestId++
+  sharedTmdbMapping.value = null
   if (!mediaProps.mediaSource || !mediaProps.mediaId || !mediaProps.type) {
     mediaDetail.value = {} as MediaInfo
     detailLoadFailed.value = false
@@ -260,6 +294,7 @@ async function getMediaDetail() {
       },
     })
     if (!hasMediaIdentity()) return
+    void querySharedTmdbMapping()
 
     const supportsEpisodeGroups = getMediaSubscribeIdentity(mediaDetail.value)?.source === 'themoviedb'
     selectedEpisodeGroup.value = supportsEpisodeGroups ? mediaDetail.value.episode_group || '' : ''
@@ -579,8 +614,13 @@ function getGenresName(genres: Array<string | { name: string }>) {
   return genres.map(genre => (typeof genre === 'string' ? genre : genre.name)).join('、')
 }
 
-// 拼装TheMovieDb地址
+/** 拼装原详情或共享关系的 TheMovieDb 链接，保留共享的第零季等精确季号。 */
 function getTheMovieDbLink() {
+  if (sharedTmdbMapping.value) {
+    const mapping = sharedTmdbMapping.value
+    const season = mapping.tmdb_type === 'tv' && mapping.tmdb_season !== null ? `/season/${mapping.tmdb_season}` : ''
+    return `https://www.themoviedb.org/${mapping.tmdb_type}/${mapping.tmdb_id}${season}`
+  }
   const mtype = mediaProps.type === '电影' ? 'movie' : 'tv'
   return `https://www.themoviedb.org/${mtype}/${mediaDetail.value.tmdb_id}`
 }
@@ -924,6 +964,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  mappingRequestId++
   window.removeEventListener('resize', updateEpisodeGroupScrollState)
 })
 useNativePageHeader({
@@ -1079,10 +1120,11 @@ useNativePageHeader({
           </ul>
           <div class="mt-6">
             <a
-              v-if="mediaDetail.tmdb_id"
+              v-if="mediaDetail.tmdb_id || sharedTmdbMapping"
               class="mb-2 mr-2 inline-flex last:mr-0"
               :href="getTheMovieDbLink()"
               target="_blank"
+              rel="noopener noreferrer"
             >
               <div
                 class="media-source-link-chip inline-flex cursor-pointer items-center rounded-full bg-gray-600 px-2 py-1 text-sm text-gray-200 ring-1 ring-gray-500 transition hover:bg-gray-700"
@@ -1570,7 +1612,7 @@ useNativePageHeader({
         <VAlert v-else-if="playEpisodeIdsFailed" class="mt-5" type="info" variant="tonal">
           {{ t('media.playback.noPlayableEpisodes') }}
         </VAlert>
-        <VList v-else class="episode-picker__episodes" lines="two">
+        <VList v-else class="episode-picker__episodes" lines="three">
           <VListItem
             v-for="item in playEpisodeOptions"
             :key="item.episode"
@@ -1590,19 +1632,21 @@ useNativePageHeader({
                 <VIcon icon="mdi-filmstrip-box" />
               </div>
             </template>
-            <VListItemTitle>
-              <span class="episode-picker__number"
-                >S{{ String(playEpisodeSeason || 0).padStart(2, '0') }}E{{
-                  String(item.episode).padStart(2, '0')
-                }}</span
-              >
-              <span v-if="item.name" class="episode-picker__name">{{ item.name }}</span>
-            </VListItemTitle>
-            <VListItemSubtitle v-if="item.overview || item.airDate || item.runtime" class="episode-picker__metadata">
-              <span v-if="item.airDate">{{ item.airDate }}</span>
-              <span v-if="item.runtime">{{ item.runtime }} min</span>
-              <span v-if="item.overview" class="episode-picker__overview">{{ item.overview }}</span>
-            </VListItemSubtitle>
+            <div class="episode-picker__details">
+              <VListItemTitle class="episode-picker__title">
+                <span class="episode-picker__number"
+                  >S{{ String(playEpisodeSeason || 0).padStart(2, '0') }}E{{
+                    String(item.episode).padStart(2, '0')
+                  }}</span
+                >
+                <span v-if="item.name" class="episode-picker__name">{{ item.name }}</span>
+              </VListItemTitle>
+              <VListItemSubtitle v-if="item.airDate || item.runtime" class="episode-picker__metadata">
+                <span v-if="item.airDate" class="episode-picker__date">{{ item.airDate }}</span>
+                <span v-if="item.runtime" class="episode-picker__runtime">{{ item.runtime }} min</span>
+              </VListItemSubtitle>
+            </div>
+            <p v-if="item.overview" class="episode-picker__overview">{{ item.overview }}</p>
             <template #append>
               <VIcon icon="mdi-play-circle-outline" color="success" size="24" />
             </template>
@@ -1649,7 +1693,18 @@ useNativePageHeader({
 }
 
 .episode-picker {
+  display: flex;
+  flex-direction: column;
+  block-size: min(88vh, 760px);
+  max-block-size: calc(100vh - 24px);
   overflow: hidden;
+}
+
+@supports (height: 100dvh) {
+  .episode-picker {
+    block-size: min(88dvh, 760px);
+    max-block-size: calc(100dvh - 24px);
+  }
 }
 
 .episode-picker__header {
@@ -1675,6 +1730,10 @@ useNativePageHeader({
 }
 
 .episode-picker__content {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 16px 18px 20px;
 }
 
@@ -1698,15 +1757,32 @@ useNativePageHeader({
 }
 
 .episode-picker__episodes {
-  max-block-size: min(58vh, 560px);
-  overflow-y: auto;
+  flex: 0 0 auto;
+  overflow: visible;
   padding: 0;
 }
 
 .episode-picker__episode {
-  min-block-size: 84px;
+  align-items: flex-start;
+  min-block-size: 0;
   margin-block: 4px;
+  padding-block: 10px;
   border-radius: 6px;
+}
+
+.episode-picker__episode :deep(.v-list-item__content) {
+  min-inline-size: 0;
+  align-self: flex-start;
+}
+
+.episode-picker__episode.v-list-item :deep(.v-list-item__prepend) {
+  align-self: flex-start;
+  padding-block-start: 0;
+}
+
+.episode-picker__episode :deep(.v-list-item__append) {
+  align-self: flex-start;
+  margin-block-start: 2px;
 }
 
 .episode-picker__thumbnail {
@@ -1727,27 +1803,67 @@ useNativePageHeader({
 }
 
 .episode-picker__number {
+  flex: 0 0 auto;
   font-size: 0.8rem;
   font-weight: 600;
   white-space: nowrap;
 }
 
-.episode-picker__name {
-  margin-inline-start: 8px;
-  font-weight: 500;
+.episode-picker__details {
+  min-inline-size: 0;
 }
 
-.episode-picker__metadata {
+.episode-picker__title {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px 0;
+  min-inline-size: 0;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.episode-picker__name {
+  min-inline-size: 0;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.episode-picker__episode :deep(.v-list-item-subtitle.episode-picker__metadata) {
+  display: grid;
+  grid-template-columns: 11ch minmax(0, 1fr);
+  align-items: start;
+  gap: 4px 8px;
+  min-inline-size: 0;
   margin-block-start: 4px;
+  overflow: visible;
+  white-space: normal;
+  -webkit-line-clamp: unset;
+  -webkit-box-orient: unset;
+  line-height: 1.4;
+}
+
+.episode-picker__date,
+.episode-picker__runtime {
+  white-space: nowrap;
+}
+
+.episode-picker__date {
+  grid-column: 1;
+}
+
+.episode-picker__runtime {
+  grid-column: 2;
+  font-size: 0.75rem;
 }
 
 .episode-picker__overview {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
+  min-inline-size: 0;
+  margin-block: 4px 0;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  font-size: 0.875rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 600px) {
@@ -1761,7 +1877,66 @@ useNativePageHeader({
   }
 
   .episode-picker__episode {
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr) 28px;
+    column-gap: 12px;
     padding-inline: 8px;
+  }
+
+  .episode-picker__episode :deep(.v-list-item__prepend) {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: flex-start;
+  }
+
+  .episode-picker__episode :deep(.v-list-item__content) {
+    display: contents;
+  }
+
+  .episode-picker__episode :deep(.v-list-item__append) {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: flex-start;
+  }
+
+  .episode-picker__episode :deep(.v-list-item__spacer) {
+    display: none;
+  }
+
+  .episode-picker__details {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: flex-start;
+  }
+
+  .episode-picker__date {
+    display: none;
+  }
+
+  .episode-picker__episode :deep(.v-list-item-subtitle.episode-picker__metadata) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .episode-picker__runtime {
+    grid-column: 1;
+  }
+
+  .episode-picker__overview {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-block-start: 8px;
+  }
+}
+
+@media (max-width: 360px) {
+  .episode-picker__episode {
+    grid-template-columns: 72px minmax(0, 1fr) 24px;
+    column-gap: 10px;
+  }
+
+  .episode-picker__thumbnail {
+    inline-size: 72px;
+    block-size: 46px;
   }
 }
 
