@@ -1197,3 +1197,11 @@ architecture 基线四刷新。
 - **冲突**：仅 `eslint-suppressions.json`——按固化姿势（两版完整文件程序化并集+count 信封归一，ours 167 + theirs 110 → 168）处理后 `--prune-suppressions` 收敛（prune 提交单独落）；locale fork 词条全在
 - **验证**：install+lint 绿（exit 0，prune 后）；触碰的 12 个 spec 中 11 绿——唯一失败 TransferHistoryView poster 2:3=\r\n 指纹已知 CRLF 环境族放行
 - **后端**：v3.2.6 已含（后端 v3.2.7 未发布），本轮跳过
+
+## 2026-11-17 第 118 轮：合并 upstream tag v3.2.7 二次重指增量（前端）
+
+- **合并目标**：tag `v3.2.7` 二次重指后 SHA `e4b9affc4935052859a41335379827ee9a271a22`（上轮已合 `25c76307`，upstream 追加 UI 修复系列后重打；18 文件 +1896 −506）
+- **上游改动主题**：媒体源详情链接到共享 TMDB 匹配（#943）、搜索隐藏不适用的规则提示（#942）、剧集详情 UI 六连修（元数据列约束/缺失行折叠/移动端描述展开/选择器对齐）、工作流预览按卡片宽度（useWorkflowPreview 新 composable）
+- **冲突**：零
+- **验证**：lint 绿（exit 0）；触碰的 7 个 spec 211 例全绿
+- **后端**：v3.2.6 已含（后端 v3.2.7 未发布），本轮跳过
