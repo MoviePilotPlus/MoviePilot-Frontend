@@ -1205,3 +1205,11 @@ architecture 基线四刷新。
 - **冲突**：零
 - **验证**：lint 绿（exit 0）；触碰的 7 个 spec 211 例全绿
 - **后端**：v3.2.6 已含（后端 v3.2.7 未发布），本轮跳过
+
+## 2026-11-18 第 119 轮：合并 upstream tag v3.2.8（前端，含 v3.2.7 三次重指增量）
+
+- **合并目标**：tag `v3.2.8` = `0c9ca24d`（merge-base e4b9affc；含 v3.2.7 三次重指增量 + v3.2.8 提交；39 文件 +2347 −586）
+- **上游改动主题**：iOS 原生系列——搜索过滤与剧集 sheet 统一（#948）、原生媒体流代理保留公共 host、原生卡片菜单与授权图标对齐、长按卡片几何稳定（#946）、搜索诊断列对齐
+- **冲突**：仅 `eslint-suppressions.json`——固化并集姿势（ours 166 + theirs 109 → 167）+ prune 收敛（prune 提交单独落）；locale fork 词条全在
+- **验证**：install+lint 绿（exit 0，prune 后）；触碰的 10 个 spec 中 9 绿——唯一失败 proxy-contract（上游 #1d084c48 改 proxy 流行为）**纯上游树同败=Windows node --test 环境族放行**
+- **后端**：本轮进入 v3.2.7 合并（见后端 log 第 119 轮）
