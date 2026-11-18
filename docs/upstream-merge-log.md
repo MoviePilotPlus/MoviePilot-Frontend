@@ -1213,3 +1213,11 @@ architecture 基线四刷新。
 - **冲突**：仅 `eslint-suppressions.json`——固化并集姿势（ours 166 + theirs 109 → 167）+ prune 收敛（prune 提交单独落）；locale fork 词条全在
 - **验证**：install+lint 绿（exit 0，prune 后）；触碰的 10 个 spec 中 9 绿——唯一失败 proxy-contract（上游 #1d084c48 改 proxy 流行为）**纯上游树同败=Windows node --test 环境族放行**
 - **后端**：本轮进入 v3.2.7 合并（见后端 log 第 119 轮）
+
+## 2026-11-19 第 120 轮：合并 upstream tag v3.2.8 二次重指（tag 门禁，前端小轮）
+
+- **合并目标**：tag `v3.2.8` 二次重指后 SHA `de8b049a96b61cb0bc7f91d9dbf7df1d1fd46b98`（上轮已合 `a4b9aff`，+7 提交 / 29 文件 +1120 −419：轻主题色修正、共享表格主题圆角两连修、插件横向操作常显、多实例服务类型保留 #949、Agent 面板 visual viewport 高度 #947、通知渠道授权搜索简化）
+- **冲突仅 1 文件**：eslint-suppressions.json 程序化并集——**保留 `{count: N}` 信封格式**（首轮误把 count 信封归一成裸 int 导致 prune 爆 677 假错，重写并集脚本修复；对照法=合并前树 prune rc=0）；并集后 --prune-suppressions 收敛（−11 条），lint 绿
+- **spec 定性（worktree 合并前基线对照，零真回归）**：7 失败文件全部旧树同败或同族——TransferHistoryView 2:3 cover frame / app-glass-optical-preload / UserProfile modal handoff×2 / proxy-contract（node --test 环境族）/ format-changed×4（git symlink 权限族）/ plugin-sdk（ts.createProgram Windows 找不到临时 consumer=坑 93 环境族）全部 IDENTICAL；唯一新增用例 "keeps one outer glass container" 与存量 2:3 同族=**CRLF 读源断言假败**（readFileSync 检出 CRLF，toContain 用 \n needle；index blob 是 LF，Linux CI 检出必绿，needle 在上游 blob 与暂存 blob 均实证存在）
+- **过程坑（本轮独有，已固化）**：①worktree 对照须先 junction node_modules（否则 eslint 找不到=无效对照）；②worktree 清理的空壳 node_modules 残留会令主仓依赖失效（rmdir 后 yarn install --immutable 重装）；③**merge 进行中严禁 git stash**（本轮误操作消耗 MERGE_HEAD，stash pop 后 index 部分文件回到 HEAD 版）——恢复法：git add -A 提交为普通 commit，再跑一次同目标 merge 重建祖先关系（内容零差异实证后 conclude，最终 merge commit c3b6149b 与内容 commit bad67ef3 树完全一致）
+- **提交**：bad67ef3（内容）+ c3b6149b（merge 祖先重建），已推 origin/v3_plus
