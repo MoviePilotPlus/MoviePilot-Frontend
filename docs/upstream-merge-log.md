@@ -1221,3 +1221,10 @@ architecture 基线四刷新。
 - **spec 定性（worktree 合并前基线对照，零真回归）**：7 失败文件全部旧树同败或同族——TransferHistoryView 2:3 cover frame / app-glass-optical-preload / UserProfile modal handoff×2 / proxy-contract（node --test 环境族）/ format-changed×4（git symlink 权限族）/ plugin-sdk（ts.createProgram Windows 找不到临时 consumer=坑 93 环境族）全部 IDENTICAL；唯一新增用例 "keeps one outer glass container" 与存量 2:3 同族=**CRLF 读源断言假败**（readFileSync 检出 CRLF，toContain 用 \n needle；index blob 是 LF，Linux CI 检出必绿，needle 在上游 blob 与暂存 blob 均实证存在）
 - **过程坑（本轮独有，已固化）**：①worktree 对照须先 junction node_modules（否则 eslint 找不到=无效对照）；②worktree 清理的空壳 node_modules 残留会令主仓依赖失效（rmdir 后 yarn install --immutable 重装）；③**merge 进行中严禁 git stash**（本轮误操作消耗 MERGE_HEAD，stash pop 后 index 部分文件回到 HEAD 版）——恢复法：git add -A 提交为普通 commit，再跑一次同目标 merge 重建祖先关系（内容零差异实证后 conclude，最终 merge commit c3b6149b 与内容 commit bad67ef3 树完全一致）
 - **提交**：bad67ef3（内容）+ c3b6149b（merge 祖先重建），已推 origin/v3_plus
+
+## 2026-11-20 第 121 轮：合并 upstream tag v3.2.9（tag 门禁，前端小轮）
+
+- **合并目标**：tag `v3.2.9` = `db17d9cb349e1024e3f9190c0e888704cb62c8ab`（17 提交 / 44 文件 +2530 −1392：中央知识库开关（实验室组+旧后端兼容）、原生音乐队列与封面 #954、仪表盘原生媒体卡操作、玻璃明暗可读性精修并 bump 3.2.9、播放保留服务器源 #952、订阅对话框 UI、站点连通性测试范围展示 #951）
+- **冲突 0 文件**：package.json/locales×3 潜在冲突面全部自动合并成功（版本行与词条两侧无行级交集）
+- **验证**：yarn install --immutable ✓ / lint ✓ / suppressions prune ✓（零变更）；spec 全量 111 文件——失败集 7 用例与第 120 轮定性**完全一致零新面孔**（format-changed×4=Windows 临时目录路径族、TransferHistory×2=CRLF 读源族（blob 实证 LF needle 在）、plugin-sdk×1=ts.createProgram 环境族、app-glass×1+UserProfile×2+proxy-contract×1=旧树同败族）——零真回归
+- **提交**：c249352c 已推 origin/v3_plus
