@@ -1228,3 +1228,10 @@ architecture 基线四刷新。
 - **冲突 0 文件**：package.json/locales×3 潜在冲突面全部自动合并成功（版本行与词条两侧无行级交集）
 - **验证**：yarn install --immutable ✓ / lint ✓ / suppressions prune ✓（零变更）；spec 全量 111 文件——失败集 7 用例与第 120 轮定性**完全一致零新面孔**（format-changed×4=Windows 临时目录路径族、TransferHistory×2=CRLF 读源族（blob 实证 LF needle 在）、plugin-sdk×1=ts.createProgram 环境族、app-glass×1+UserProfile×2+proxy-contract×1=旧树同败族）——零真回归
 - **提交**：c249352c 已推 origin/v3_plus
+
+## 2026-11-21 第 123 轮：合并 upstream tag v3.2.9 重指（tag 门禁，前端小轮）
+
+- **合并目标**：tag `v3.2.9` 重指后 SHA `e6a30ad4b6091859999f3bbbe7cffbcce782edf1`（上轮已合 `db17d9cb`，+5 提交 / 16 文件 +922 −32：MusicBrainz 发行版预览前选择 #958、音乐搜索拒因解释 #959/#7497、详情页按需查找 TMDB 链接 #957、横向搜索允许收窄 #955）
+- **冲突 0 文件**：locales×3 潜在冲突面全部自动合并成功
+- **验证**：install --immutable ✓ / lint ✓ / prune ✓（零变更）；spec 全量 111 文件——失败集 11 用例与 120/121 轮**完全一致零新面孔**（format-changed×4/TransferHistory×2=CRLF 读源族（blob 实证 LF needle 在）/plugin-sdk×1/app-glass×1/UserProfile×2/proxy-contract×1=环境族）——零真回归
+- **提交**：04f4144e 已推 origin/v3_plus
